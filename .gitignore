@@ -1,0 +1,22 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependencies / build output
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Env
+.env
+
+# 데이터 파이프라인 원본 캐시 (용량이 커서 커밋하지 않음, scripts/data/README.md 참고)
+scripts/data/.cache/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store

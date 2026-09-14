@@ -1,0 +1,90 @@
+import { Link, useParams } from "react-router-dom";
+import { findWordById } from "../lib/dictionary";
+import { useWordbookStore } from "../stores/wordbookStore";
+import { useGamificationStore } from "../stores/gamificationStore";
+import { XP_REWARDS } from "../lib/xpRewards";
+
+function WordDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const entry = id ? findWordById(id) : undefined;
+  const inWordbook = useWordbookStore((s) => (id ? Boolean(s.entries[id]) : false));
+  const toggleWord = useWordbookStore((s) => s.toggleWord);
+  const recordProgress = useGamificationStore((s) => s.recordProgress);
+
+  function handleToggleWordbook() {
+    if (!entry) return;
+    if (!inWordbook) recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
+    toggleWord(entry.id);
+  }
+
+  if (!entry) {
+    return (
+      <div className="p-6">
+        <Link to="/dictionary" className="text-info">
+          ← 사전으로
+        </Link>
+        <p className="mt-4 text-gray-400">단어를 찾을 수 없습니다 (id: {id}).</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <Link to="/dictionary" className="text-info">
+        ← 사전으로
+      </Link>
+
+      <div className="mt-3 flex items-baseline gap-3">
+        <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
+          {entry.jlptLevel}
+        </span>
+        {entry.common && <span className="text-xs text-gray-400">자주 쓰는 단어</span>}
+      </div>
+
+      <h2 className="mt-2 font-ja text-4xl">{entry.word}</h2>
+      <p className="mt-1 font-ja text-xl text-gray-500">{entry.reading}</p>
+
+      {entry.furigana && entry.furigana.length > 0 && (
+        <p className="mt-1 font-ja text-sm text-gray-400">
+          {entry.furigana.map((f) => `${f.ruby}(${f.rt})`).join(" ")}
+        </p>
+      )}
+
+      <ol className="mt-5 flex flex-col gap-3">
+        {entry.senses.map((sense, i) => (
+          <li key={i}>
+            <div className="flex flex-wrap gap-1">
+              {sense.pos.map((p) => (
+                <span key={p} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                  {p}
+                </span>
+              ))}
+            </div>
+            <p className="mt-1 text-gray-700">
+              {i + 1}. {sense.glosses.join("; ")}
+            </p>
+          </li>
+        ))}
+      </ol>
+
+      <button
+        onClick={handleToggleWordbook}
+        className={`btn-press mt-6 w-full rounded-2xl py-3 font-bold text-white ${
+          inWordbook ? "bg-gray-300" : "bg-primary"
+        }`}
+        style={
+          { "--btn-shadow": inWordbook ? "rgb(0 0 0 / 0.15)" : "#3d9401" } as React.CSSProperties
+        }
+      >
+        {inWordbook ? "✓ 단어장에 있음 (탭하여 제거)" : "🗂️ 단어장에 추가"}
+      </button>
+
+      <div className="mt-4 flex flex-col gap-2 rounded-2xl bg-gray-50 p-4 text-sm text-gray-400">
+        <p>다음 기능은 구현 예정입니다:</p>
+        <p>· 동사 て형 표시 · LLM 예문 생성</p>
+      </div>
+    </div>
+  );
+}
+
+export default WordDetailPage;

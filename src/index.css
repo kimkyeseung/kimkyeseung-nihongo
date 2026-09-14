@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  /* 디자인 가이드 컬러 팔레트 (japanese_app_prompt_1.md 참고) */
+  --color-primary: #58cc02;
+  --color-info: #1cb0f6;
+  --color-warning: #ffc800;
+  --color-accent: #ff9600;
+  --color-danger: #ff4b4b;
+
+  --font-sans: "Jua", system-ui, sans-serif;
+  --font-ja: "Kosugi Maru", system-ui, sans-serif;
+
+  --animate-pop: pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-shake: shake 0.4s ease-in-out;
+
+  @keyframes pop {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.08);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-6px);
+    }
+    75% {
+      transform: translateX(6px);
+    }
+  }
+}
+
+body {
+  margin: 0;
+  color-scheme: light;
+  background: #ffffff;
+}
+
+/* 버튼의 "눌리는" 3D 느낌: 하단 두꺼운 그림자 + 클릭 시 눌림 */
+.btn-press {
+  box-shadow: 0 4px 0 0 var(--btn-shadow, rgb(0 0 0 / 0.2));
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.btn-press:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 0 var(--btn-shadow, rgb(0 0 0 / 0.2));
+}

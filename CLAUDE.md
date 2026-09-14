@@ -1,0 +1,235 @@
+# 김계승 일본어 — 프로젝트 가이드
+
+Chrome Canary의 온디바이스 AI(Prompt API, `window.LanguageModel`)를 활용한 개인용 일본어 학습 웹앱.
+서버 없이 순수 프론트엔드로 동작한다. 전체 스펙은 [japanese_app_prompt_1.md](japanese_app_prompt_1.md) 참고.
+
+## 기술 스택
+- React + TypeScript + Tailwind CSS, 빌드 도구는 Vite
+- 라우팅: react-router-dom
+- 상태 관리: Zustand 또는 Context API — localStorage/IndexedDB와 동기화하는 커스텀 훅으로 감싸서 사용
+- 애니메이션: Framer Motion (페이지 전환, 카드 스와이프, confetti 등)
+- 로마자→히라가나: `wanakana` 패키지
+- 패키지 매니저: npm
+
+## 개발 순서
+1. 변경 사항 작성
+2. 타입체크: `npm run typecheck` (또는 `tsc --noEmit`)
+3. 빌드: `npm run build`
+4. 브라우저(Chrome Canary, `chrome://flags`에서 Prompt API 활성화)에서 직접 동작 확인
+
+## 핵심 규칙 (이 프로젝트 고유)
+- **LLM은 생성형 작업에만 사용한다**: 회화 응답, 예문 생성, 작문 첨삭. 사전 뜻풀이·읽기·
+  JLPT 급수·한자 정보처럼 "정답이 정해진 정보"는 절대 LLM으로 생성하지 말고
+  `src/data/`의 정적 JSON(JMDict/KANJIDIC/KanjiVG 가공본)에서 조회한다.
+- 동사 て형 등 규칙 기반 활용형은 LLM이 아니라 직접 구현한 변환 함수로 계산한다.
+- `window.LanguageModel` 사용 전 반드시 `'LanguageModel' in window`로 가드하고,
+  미지원 시 안내 화면을 보여준다.
+- LLM 세션은 커스텀 훅(`useLanguageModel`)으로 생성/재사용/`destroy()`를 관리하고,
+  불필요한 세션은 즉시 destroy한다. 스트리밍이 가능하면 `promptStreaming()`을 우선 사용한다.
+- 외부 데이터셋(JMDict, KANJIDIC2, KanjiVG, Tatoeba)은 전부 CC BY-SA/CC-BY 라이선스이므로
+  정보 페이지와 README에 출처를 표기해야 한다.
+- 대용량 사전 데이터는 IndexedDB, 가벼운 사용자 상태(단어장, 스트릭/XP)는 localStorage에 저장한다.
+
+## 타입 컨벤션
+- `interface`보다 필요한 곳엔 명시적 타입 사용 (예: `WordEntry`, `KanjiEntry`)
+- JLPT 급수처럼 값이 고정된 경우 `enum` 대신 문자열 리터럴 유니온 사용
+  (예: `'N5' | 'N4' | 'N3' | 'N2' | 'N1'`)
+
+## 디자인 톤
+듀오링고 스타일 카툰풍, 아동 친화적(큰 글씨/큰 터치 영역/둥근 모서리). 컬러는
+`--color-primary` 등 CSS 변수로 관리. 상세 가이드는 스펙 문서의 "디자인/UI 스타일 가이드" 참고.
+
+## 프로젝트 구조
+```
+src/router.tsx     react-router-dom 라우트 정의 (완료)
+src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 GamificationBar 포함),
+                     KanjiStrokeOrder, KanjiDetailSheet, WordbookCard, FuriganaText, WritingDiff,
+                     BadgeSheet, BadgeWatcher(뱃지 신규 획득 감지), Confetti, LoadingMascot,
+                     PromptApiUnsupportedNotice(LLM 페이지 공용 안내 화면)
+src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
+                     + AboutPage(정보/출처, 하단 네비게이션 밖)
+src/hooks/         useJapaneseSpeech, useDebouncedValue, useLanguageModel 완료
+src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, srs.ts) +
+                     furigana.ts(LLM 응답에 사전 후리가나 오버레이) + diff.ts(문자 단위 LCS diff) +
+                     conversationPrompts.ts + writingCorrection.ts(첨삭 프롬프트/응답 파싱) +
+                     xpRewards.ts(행동별 XP 값) + badges.ts(뱃지 정의)
+src/stores/        Zustand 스토어:
+                     kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore
+                     (전부 localStorage persist) · confettiStore(휘발성, persist 안 함)
+src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json) — 완료
+src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입 등 — 완료
+scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립트 (완료, scripts/data/README.md 참고)
+```
+
+하단 네비게이션 경로 7개 전부 완료: `/gojuon`(기본) · `/dictionary`(+`/dictionary/:id`) · `/kanji` ·
+`/wordbook` · `/conversation` · `/writing`. 스펙 문서(japanese_app_prompt_1.md)의 페이지 구성은
+전부 최소 기능으로 구현됨. 추가로 `/about`(정보/출처 페이지, 헤더의 ⓘ 아이콘으로 진입,
+하단 네비게이션에는 없음) 완료. 남은 건 다듬기(번들 최적화 등)와 QA.
+
+## 정보/출처 페이지 (`/about`) 구현 노트
+- 스펙의 "정보 페이지 및 README에 데이터 출처/라이선스 명시" 요구사항을 [AboutPage.tsx](src/pages/AboutPage.tsx)와
+  루트 [README.md](README.md) 양쪽에 구현했다 — 내용은 같은 출처 목록이지만 표현 방식만 다름
+  (앱 안 카드 UI vs 마크다운 표). 출처가 하나라도 바뀌면 **양쪽 다** 갱신할 것, 그리고
+  `scripts/data/README.md`(가공 스크립트 문서)까지 셋이 같은 출처 정보를 담고 있으니 함께 확인할 것.
+- `/about`은 하단 네비게이션 7개 항목에 포함되지 않는다 — 스펙에 없는 페이지라 헤더에 작은
+  ⓘ 아이콘 링크로만 노출했다. 비슷하게 "설정"처럼 주요 학습 흐름이 아닌 페이지를 추가할 땐
+  하단 네비게이션에 욱여넣지 말고 헤더 아이콘 패턴을 따를 것.
+
+## 게이미피케이션 구현 노트
+- `useGamificationStore.recordProgress(xp)` 하나로 XP 지급과 스트릭(연속 학습일) 갱신을 같이
+  처리한다. 날짜는 로컬 타임존 기준 `YYYY-MM-DD` 문자열로 비교하며, 같은 날 여러 번 호출해도
+  스트릭은 하루에 한 번만 올라간다(오늘 처음 호출 시 +1, 이미 오늘 기록했으면 유지, 하루 이상
+  건너뛰면 1로 리셋). XP는 호출할 때마다 계속 쌓인다.
+- XP 지급 시점은 "명확한 학습 완료 행동"에만 건다 — 토글을 껐다 켰다 하며 중복 지급되지
+  않도록 항상 "아직 안 된 상태 → 되는 상태로 바뀔 때"만 지급한다(예: 한자 학습완료 토글,
+  단어장 추가 토글 모두 off→on 전환 시에만 `recordProgress` 호출, on→off에는 호출 안 함).
+  새로운 토글형 액션에 XP를 달 때도 이 규칙을 따를 것.
+- 행동별 XP 값은 `src/lib/xpRewards.ts` 한 곳에 모아뒀다 — 밸런스 조정 시 여기만 고치면 된다.
+- 뱃지(`src/lib/badges.ts`)는 "unlocked" 여부를 별도로 저장하지 않고, xp/스트릭/단어장
+  개수/한자 학습 개수로부터 매번 즉석에서 계산한다(`BadgeSheet.tsx`). 조건이 전부 "누적치
+  ≥ 기준값"이라 되돌아갈 일이 없어 이 방식이 저장소 동기화 걱정 없이 가장 단순하다.
+  뱃지를 추가할 땐 `BadgeContext`에 새 필드를 늘리기보다, 최대한 기존 4개 지표(xp/streak/
+  wordbookCount/kanjiLearnedCount)로 표현할 수 있는지 먼저 고민할 것.
+- 상단바(`Layout.tsx`)의 `GamificationBar`를 탭하면 `BadgeSheet`가 열린다 — 스펙의 "상단바에
+  표시"를 스트릭/XP 숫자로, 뱃지는 탭해서 보는 상세 뷰로 구현했다.
+
+## 회화 페이지 구현 노트
+- `useLanguageModel(systemPrompt)` 훅이 `window.LanguageModel` 전체를 감싼다: 마운트 시
+  `'LanguageModel' in window`로 동기 가드 후 `availability()` 확인, 세션은 첫 프롬프트 때
+  지연 생성, `systemPrompt`가 바뀌면(시나리오/레벨 변경) 이전 세션을 destroy. `monitor`의
+  `downloadprogress`로 모델 다운로드 진행률을 노출한다. 새 LLM 기능(작문 첨삭 등)에서도
+  이 훅을 그대로 재사용할 것 — `window.LanguageModel`을 직접 호출하지 말 것.
+- "문법 교정 보기"는 회화용 세션과 별도로 `useLanguageModel("")`를 하나 더 띄워, 사용자의
+  마지막 입력만 담은 프롬프트(`buildCorrectionPrompt`)를 단발성 `prompt()`로 보낸다 —
+  회화 세션의 롤플레이 맥락을 오염시키지 않기 위해 세션을 분리했다.
+- 후리가나는 LLM에게 만들게 하지 않는다. `src/lib/furigana.ts`의 `annotateFurigana`가
+  `dictionary.json`에 이미 있는 단어만 그리디 최장일치로 찾아 후리가나를 입힌다
+  (사전에 없는 단어/표현은 그냥 원문 그대로 — 이 프로젝트의 "사전적 사실은 LLM이 지어내지
+  않는다" 규칙과 동일한 이유). `FuriganaText` 컴포넌트로 렌더링.
+- **테스트 환경 참고**: 이 브라우저(미리보기)에는 실제로 `window.LanguageModel`이 존재하지만,
+  실제 온디바이스 모델이 아니라 입력을 그대로 되돌려주는 스텁이다("On-device model is not
+  available in Chromium, this API is just echoing back the input: ..."). 덕분에 실제 세션
+  생성·스트리밍·후리가나 오버레이·문법 교정 흐름을 콘솔 에러 없이 end-to-end로 검증할 수
+  있었지만, 실제 자연스러운 응답 품질은 Chrome Canary에서 별도로 확인해야 한다.
+
+## 작문 첨삭 페이지 구현 노트
+- `useLanguageModel`을 그대로 재사용(회화 페이지와 동일 패턴). 모델에게 항상 고정된
+  형식(`### 수정문` / `### 격식체` / `### 설명`)으로만 답하도록 프롬프트에 명시하고,
+  `src/lib/writingCorrection.ts`의 `parseCorrectionResponse`가 정규식으로 각 섹션을 뽑는다.
+  모델이 형식을 안 지켜도(예: 구형 모델, 스텁) 안 깨지도록 매치 실패 시 원문/전체 텍스트로
+  폴백한다 — 새로 LLM에게 "정해진 형식으로 답하라"고 시키는 기능을 또 만들 때 이 폴백 패턴을
+  따를 것.
+- 원문/수정문 하이라이트는 LLM이 하지 않고 `src/lib/diff.ts`의 `diffChars`(문자 단위 LCS)로
+  클라이언트에서 직접 계산한다 — 일본어는 띄어쓰기가 없어 단어 단위 대신 문자 단위로 diff한다.
+- 브라우저 미지원 안내 화면은 `PromptApiUnsupportedNotice` 컴포넌트로 공용화했다 (회화
+  페이지에서 추출). LLM을 쓰는 새 화면을 또 만들 때 이 컴포넌트를 재사용할 것 — 새로 만들지 말 것.
+
+## WanaKana + React 통합 주의사항 (실제로 겪은 버그)
+`bind(inputRef.current, { IMEMode: "toHiragana" })`로 로마자→히라가나 변환을 붙인 input에
+**React의 `onChange` prop을 쓰면 안 된다.** WanaKana가 변환 후 발생시키는 `input` 이벤트를
+React의 합성 이벤트 시스템이 IME 조합(composition) 관련 내부 처리 때문에 간헐적으로 놓친다
+(재현 조건이 불규칙해서 콘솔 에러 없이 그냥 상태가 갱신 안 됨 — 디버깅 어려움).
+반드시 `useEffect`에서 `inputRef.current.addEventListener("input", handler)`로 네이티브
+리스너를 직접 붙이고 `e.target.value`를 읽어 state를 갱신할 것 (`DictionaryPage.tsx` 참고).
+이후 wanakana를 쓰는 다른 입력(작문 페이지 등)에도 동일 패턴을 적용할 것.
+
+## Framer Motion 드래그(스와이프 카드) 주의사항 (실제로 겪은 버그)
+`drag="x"` + `onDragEnd`로 스와이프를 구현할 때, **같은 스와이프 제스처에 대해 `onDragEnd`가
+두세 번 연달아 호출되는 경우가 있다** (환경에 따라 다름 — 트랙패드/일부 입력 장치에서 재현).
+`onDragEnd` 핸들러 안에서 store 변경(추가/삭제)이나 `setState`를 그냥 실행하면, 중복 호출 때문에
+같은 카드가 여러 번 처리되어 상태가 꼬인다 (예: 되돌리기용 스냅샷이 두 번째 호출에서 덮어써져
+`null`이 되는 바람에 "실행 취소"가 항상 조용히 실패했던 버그가 있었음 — 콘솔 에러 없음).
+**반드시 `useRef`로 "마지막으로 처리한 카드 id"를 기록해 같은 id의 중복 호출을 무시할 것**
+(`WordbookPage.tsx`의 `lastHandledRef` 패턴 참고). state가 아니라 ref를 쓰는 이유는 배치/재렌더
+타이밍과 무관하게 즉시 반영되어야 하기 때문.
+
+## 폼 제출(Enter) 주의사항 (실제로 겪은 버그)
+`<form onSubmit>` + Enter로 암묵적 제출에 의존하는 방식이 이 프로젝트 환경에서 간헐적으로
+동작하지 않았다(그룹 이름 추가 인풋에서 재현). **`<form onSubmit>` 대신 인풋에 직접
+`onKeyDown`을 붙여 `e.key === "Enter"`를 확인하는 방식을 표준으로 쓴다** (DictionaryPage의
+검색창, WordbookPage의 그룹 추가 인풋 참고). 새 텍스트 인풋을 추가할 때도 이 패턴을 따를 것.
+
+## React state 리셋 시점 주의사항 (실제로 겪은 버그)
+그룹 필터가 바뀔 때만 복습 큐를 새로 만들고 싶은데, `useEffect`의 의존성 배열에 `entries`
+(store에서 파생된 배열)를 넣으면 **스와이프해서 store가 바뀔 때마다도 큐가 리셋**되어 진행 중이던
+복습 세션이 매번 날아가는 버그가 있었다. "prop이 바뀔 때만 로컬 상태를 초기화"하고 싶으면
+`useEffect` + `setState` 조합보다 **`key` prop으로 컴포넌트를 통째로 리마운트시키고
+`useState(() => ...)` lazy initializer로 마운트 시점 스냅샷을 만드는 패턴**이 더 안전하고
+oxlint의 `react-hooks/exhaustive-deps` 경고도 피할 수 있다 (`ReviewDeck`을
+`<ReviewDeck key={activeGroup} .../>`로 리마운트시키는 방식 참고).
+
+## 헤더/하단 네비게이션 레이아웃 주의사항 (실제로 겪은 버그, 중요)
+`Layout.tsx`의 루트를 `min-h-svh flex flex-col`로 하고 가운데 `<main>`을
+`flex-1 overflow-y-auto`로만 주면, 콘텐츠가 뷰포트보다 긴 페이지(오십음도, 한자 목록 등)에서
+**`main`이 내부 스크롤되지 않고 콘텐츠 높이만큼 계속 늘어나 버려서, 결과적으로 body 전체가
+스크롤되며 하단 네비게이션 바가 화면 밖으로 밀려나 사라지는** 버그가 있었다(콘솔 에러 없이
+조용히 발생 — 짧은 페이지에서는 안 보이다가 긴 페이지에서만 나타나서 발견이 늦었음).
+flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-height: auto`라 `flex-1`을 줘도
+내용물보다 작아지지 않는다. **고정 방법: 루트는 `min-h-svh`가 아니라 `h-svh`(고정 높이)로,
+스크롤 영역인 `<main>`에는 `flex-1 overflow-y-auto`에 `min-h-0`을 반드시 추가한다.**
+새로 풀스크린 레이아웃(헤더+스크롤 영역+하단바 구조)을 만들 때마다 이 패턴을 그대로 쓸 것.
+
+## 애니메이션 디테일 구현 노트
+스펙의 "애니메이션/트랜지션 (전반적으로 풍부하게 적용)" 요구사항을 아래처럼 구현했다:
+- **페이지 전환**: `Layout.tsx`의 `AnimatedOutlet`이 `useOutlet()` + `useLocation().pathname`을
+  키로 쓴 `motion.div`를 `AnimatePresence mode="wait"`로 감싼다. `<Outlet/>`을 직접 키잉하면
+  안 되는 이유는 주석 참고 — react-router + framer-motion 조합의 정석 패턴.
+- **confetti(정답/축하 효과)**: `useConfettiStore.celebrate()` 한 번 호출로 전역 confetti가
+  터진다 (`Confetti.tsx`, `Layout.tsx`에 한 번만 마운트). 한자 학습완료, 단어장 "아는 단어"
+  스와이프, 작문 첨삭 결과가 "수정할 부분 없음"일 때, 그리고 뱃지 신규 획득 시 호출한다.
+  새로운 "정답/완료" 이벤트를 추가할 때도 `celebrate()`를 그대로 재사용할 것 — 새 confetti
+  컴포넌트를 만들지 말 것.
+- **오답/미흡 피드백(살짝 흔들림)**: CSS `animate-shake` 클래스(정적 엘리먼트용, 예: 작문
+  첨삭 결과 카드)와, framer-motion으로 컨트롤되는 `x`/`rotate` 같은 모션값이 이미 걸려있는
+  엘리먼트(예: `WordbookCard`)는 서로 방식이 다르다. **모션값이 이미 걸린 엘리먼트에는
+  CSS 애니메이션 클래스를 섞어 쓰면 안 된다** (같은 `transform` 속성을 두 시스템이 동시에
+  건드려서 깨진다) — 대신 `animate()` 함수(컴포넌트 prop이 아니라 `framer-motion`의 standalone
+  함수)로 그 모션값 자체를 시퀀스로 움직인다 (`WordbookCard.tsx`의 왼쪽 스와이프 처리 참고).
+- **뱃지 획득 연출**: `BadgeWatcher.tsx`가 항상 마운트되어 xp/스트릭/단어장/한자 학습 수를
+  지켜보다가, 이전에 없던 뱃지 id가 생기면 `celebrate()` + 상단 토스트를 띄운다. `BadgeSheet`가
+  열려있지 않아도 동작해야 하므로 `Layout.tsx`에 항상 마운트해둔 것 — 뱃지 관련 컴포넌트를
+  조건부로만 마운트하지 말 것.
+- **로딩 마스코트**: `LoadingMascot.tsx`(🗻가 위아래로 통통 튀는 애니메이션)를 회화 응답 대기,
+  작문 첨삭 대기에 사용한다. LLM 응답을 기다리는 새 화면에서도 이걸 재사용할 것.
+- 버튼 "눌리는" 3D 피드백은 새로 만들지 않고 기존 `.btn-press` CSS 클래스(index.css)를 계속
+  쓴다 — 개별 버튼마다 framer-motion whileTap을 추가할 필요 없음.
+
+## 번들 최적화 구현 노트
+정적 데이터(dictionary.json 2.9MB, kanjivg.json 1.9MB, kanji.json 391KB)를 그냥 `import`하면
+전부 하나의 진입 JS에 번들링돼서 `npm run build`가 5.7MB(gzip 1.6MB)짜리 단일 청크를
+만들었다. 두 단계로 줄였다:
+1. **라우트 단위 코드 스플리팅**: `router.tsx`에서 모든 페이지를 `lazy(() => import(...))`로
+   불러온다. 특정 페이지에서만 쓰는 데이터(dictionary.ts, kanji.ts 등)는 그 페이지가 실제로
+   방문되기 전까지 자동으로 다운로드되지 않는다 — 진입 청크가 445KB(gzip 142KB)로 줄었다
+   (약 10배). `Layout.tsx`의 `AnimatedOutlet`이 lazy 컴포넌트를 렌더링하므로 반드시
+   `<Suspense fallback={...}>`로 감싸야 한다(이미 되어 있음, `LoadingMascot` 재사용).
+2. **kanjivg.json 자체를 한 번 더 지연 로드**: KanjiPage 청크만 해도 2.3MB(kanjivg 포함)라
+   커서, `src/lib/kanjivg.ts`가 정적 import 대신 `import("../data/kanjivg.json")`을 모듈
+   레벨 Promise로 캐싱하고 React 19의 `use()`로 읽는다(`useStrokes` 훅). 그 결과 한자
+   그리드(KanjiPage, kanji.json만 필요)는 397KB로 가벼워지고, 획순 데이터(1.9MB)는 실제로
+   `KanjiStrokeOrder`를 렌더링할 때만(=한자 상세를 열 때만) 로드된다. 호출부(`KanjiDetailSheet`)는
+   `<Suspense>`로 감싸 로딩 중엔 `LoadingMascot`을 보여준다.
+
+같은 패턴(정적 import 대신 동적 import + `use()` + Suspense)을 나중에 dictionary.json에도
+적용할 수 있다 — 지금은 사전/단어장/회화/단어상세 여러 페이지가 공유해서 쓰다 보니 이미
+하나의 공유 청크(2.9MB)로 자동 분리되어 있고, 그 이상 쪼개는 건 아직 안 했다. 정말 더 줄이고
+싶어지면 dictionary.ts도 kanjivg.ts와 같은 방식으로 바꿀 것.
+
+## 한자 페이지 구현 노트
+- 획순 애니메이션은 `KanjiStrokeOrder`가 `kanjivg.json`의 path를 Framer Motion `motion.path`의
+  `pathLength` 애니메이션으로 순서대로 그린다. 다시보기는 `key`를 바꿔 강제 리마운트하는 방식.
+  KanjiVG 데이터가 없는 한자는 문자만 정적으로 표시하는 폴백이 있다.
+  이 방식이 프로젝트 표준이므로, 나중에 사전 상세 페이지 등에서 획순을 다시 보여줄 때도
+  `useStrokes`/`KanjiStrokeOrder`를 재사용할 것 — 새로 만들지 말 것 (`useStrokes`는 내부적으로
+  kanjivg.json을 동적 import로 지연 로드하므로 반드시 `<Suspense>`로 감싼 곳에서만 쓸 것).
+- "활용 단어"는 `src/lib/dictionary.ts`의 `findWordsContainingKanji`가 `dictionary.json`을
+  한자 단위로 인덱싱해 조회한다(런타임 1회 인덱스 빌드, 이후 캐시).
+- 학습 완료 상태는 `useKanjiProgressStore`(zustand `persist` 미들웨어)로 localStorage에 저장한다.
+  단어장의 스와이프/마스터 상태도 같은 패턴(zustand persist)으로 만들 것.
+
+## 데이터 파이프라인 (완료됨)
+`src/data/`의 사전/한자/획순 JSON은 이미 생성되어 있다. 원본을 다시 받거나 갱신하려면:
+```bash
+bash scripts/data/download.sh && bash scripts/data/build-all.sh
+```
+각 파일의 스키마와 출처/라이선스는 [scripts/data/README.md](scripts/data/README.md)에 정리되어 있다.
