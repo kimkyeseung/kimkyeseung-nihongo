@@ -55,6 +55,9 @@ function main() {
       frequency: c.misc?.frequency ?? null,
       onyomi: readings.filter((r) => r.type === "ja_on").map((r) => r.value),
       kunyomi: readings.filter((r) => r.type === "ja_kun").map((r) => r.value),
+      // korean_h = KANJIDIC2의 한글 표기 한자음(예: 水 -> "수"). 언어와 무관하게
+      // kanjidic2-en.json에도 포함되어 있어 별도 한국어판 다운로드 없이 바로 쓸 수 있다.
+      koreanReading: readings.filter((r) => r.type === "korean_h").map((r) => r.value),
       meaning: group?.meanings?.filter((m) => m.lang === "en").map((m) => m.value) ?? [],
     });
   }

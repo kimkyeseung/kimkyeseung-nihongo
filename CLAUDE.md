@@ -241,6 +241,22 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   한자 단위로 인덱싱해 조회한다(런타임 1회 인덱스 빌드, 이후 캐시).
 - 학습 완료 상태는 `useKanjiProgressStore`(zustand `persist` 미들웨어)로 localStorage에 저장한다.
   단어장의 스와이프/마스터 상태도 같은 패턴(zustand persist)으로 만들 것.
+- **한국 한자음 표기**: KANJIDIC2의 `korean_h`(한글 표기 한자음, 예: 水 → "수") 리딩을
+  `koreanReading: string[]`로 `kanji.json`에 포함해뒀다 — 언어별로 파일이 나뉘는 건 KANJIDIC2의
+  "뜻(meaning)"뿐이고 "읽기(reading)"는 `kanjidic2-en.json` 하나에 한국어/중국어/베트남어 표기가
+  전부 들어있어서 별도 한국어판 데이터셋을 새로 받을 필요가 없었다(`scripts/data/build-kanji.mjs`
+  참고). `KanjiDetailSheet`에서 음독/훈독 옆에 표시한다. 새로 한자 관련 다국어 표기가 필요해지면
+  `readingMeaning.groups[0].readings`에서 `type`으로 먼저 걸러지는지 확인할 것(예: `pinyin`,
+  `vietnam`도 이미 캐시에 있다).
+- **학습 미완료 한자 테스트**: `KanjiPage`의 "미완료 한자 테스트" 버튼이 현재 급수에서 아직
+  학습 완료로 표시하지 않은 한자만 모아 `KanjiQuizSheet`(4지선다 읽기 퀴즈)를 연다. 문제/오답
+  보기는 `src/lib/kanjiQuiz.ts`의 `buildKanjiQuiz`가 전부 정적 데이터(`kanjiList`)에서만
+  뽑는다 — 이 프로젝트 규칙상 사전적 사실(읽기)은 LLM이 지어내면 안 되기 때문에 퀴즈 문제
+  생성에도 LLM을 쓰지 않는다. 버튼을 누를 때마다 문제를 새로 섞고 싶어서, `WordbookPage`의
+  리마운트 패턴처럼 클릭할 때마다 증가하는 `quizSessionId`를 `KanjiQuizSheet`의 `key`로 써서
+  내부 `useState(() => buildKanjiQuiz(pool))` lazy initializer가 매번 새로 실행되게 했다(같은
+  pool이어도 매번 다시 섞임). 퀴즈 "완료" 시점(문제 하나하나가 아니라 전체 완주)에만
+  `XP_REWARDS.kanjiQuizCompleted`를 지급한다 — 정답 여부와 무관하게 완주 자체를 보상한다.
 
 ## 데이터 파이프라인 (완료됨)
 `src/data/`의 사전/한자/획순 JSON은 이미 생성되어 있다. 원본을 다시 받거나 갱신하려면:

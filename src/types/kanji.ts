@@ -8,5 +8,6 @@ export interface KanjiEntry {
   frequency: number | null;
   onyomi: string[];
   kunyomi: string[];
+  koreanReading: string[];
   meaning: string[];
 }

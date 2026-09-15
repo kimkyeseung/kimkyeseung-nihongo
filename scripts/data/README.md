@@ -68,6 +68,7 @@ interface KanjiEntry {
   frequency: number | null;   // 사용 빈도 순위 (낮을수록 흔함)
   onyomi: string[];
   kunyomi: string[];
+  koreanReading: string[];    // 한글 표기 한자음 (KANJIDIC2 korean_h, 예: "수")
   meaning: string[];          // 영문 뜻
 }
 ```

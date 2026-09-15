@@ -3,17 +3,31 @@ import { motion } from "framer-motion";
 import { getKanjiByLevel } from "../lib/kanji";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
 import KanjiDetailSheet from "../components/KanjiDetailSheet";
+import KanjiQuizSheet from "../components/KanjiQuizSheet";
 import { JLPT_LEVELS, type JlptLevel } from "../types/jlpt";
 import type { KanjiEntry } from "../types/kanji";
 
 function KanjiPage() {
   const [level, setLevel] = useState<JlptLevel>("N5");
   const [selected, setSelected] = useState<KanjiEntry | null>(null);
+  // 테스트를 열 때마다 문제를 새로 섞고 싶어서, "테스트" 버튼을 누를 때마다
+  // quizSessionId를 올려 KanjiQuizSheet 내부 컴포넌트를 리마운트시키는 트리거로 쓴다.
+  const [quizSessionId, setQuizSessionId] = useState(0);
+  const [quizPool, setQuizPool] = useState<KanjiEntry[] | null>(null);
   const learned = useKanjiProgressStore((s) => s.learned);
   const learnedSet = useMemo(() => new Set(learned), [learned]);
 
   const levelKanji = useMemo(() => getKanjiByLevel(level), [level]);
-  const learnedCount = levelKanji.filter((k) => learnedSet.has(k.kanji)).length;
+  const unlearnedKanji = useMemo(
+    () => levelKanji.filter((k) => !learnedSet.has(k.kanji)),
+    [levelKanji, learnedSet]
+  );
+  const learnedCount = levelKanji.length - unlearnedKanji.length;
+
+  function handleStartQuiz() {
+    setQuizSessionId((id) => id + 1);
+    setQuizPool(unlearnedKanji);
+  }
 
   return (
     <div className="p-4 sm:p-6">
@@ -33,9 +47,19 @@ function KanjiPage() {
         ))}
       </div>
 
-      <p className="mt-3 text-sm text-gray-400">
-        {learnedCount} / {levelKanji.length}자 학습 완료
-      </p>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <p className="text-sm text-gray-400">
+          {learnedCount} / {levelKanji.length}자 학습 완료
+        </p>
+        <button
+          onClick={handleStartQuiz}
+          disabled={unlearnedKanji.length === 0}
+          className="btn-press rounded-2xl bg-info px-4 py-1.5 text-sm font-bold text-white disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
+          style={{ "--btn-shadow": "#1290c7" } as React.CSSProperties}
+        >
+          ✏️ 미완료 한자 테스트
+        </button>
+      </div>
 
       <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-6">
         {levelKanji.map((k) => (
@@ -58,6 +82,7 @@ function KanjiPage() {
       </div>
 
       <KanjiDetailSheet entry={selected} onClose={() => setSelected(null)} />
+      <KanjiQuizSheet key={quizSessionId} pool={quizPool} onClose={() => setQuizPool(null)} />
     </div>
   );
 }

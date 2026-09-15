@@ -77,6 +77,10 @@ function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClos
                 <p className="text-gray-400">훈독</p>
                 <p className="font-ja text-lg">{entry.kunyomi.join("、") || "-"}</p>
               </div>
+              <div className="col-span-2">
+                <p className="text-gray-400">한국 한자음</p>
+                <p className="text-lg">{entry.koreanReading.join("、") || "-"}</p>
+              </div>
             </div>
 
             <p className="mt-3 text-gray-600">{entry.meaning.join(", ")}</p>
