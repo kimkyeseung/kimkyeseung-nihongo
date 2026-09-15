@@ -10,35 +10,48 @@ import type { WordEntry } from "../types/dictionary";
 function ClickableSentence({
   text,
   onWordClick,
+  excludeWord,
 }: {
   text: string;
   onWordClick: (word: WordEntry) => void;
+  /** 지금 보고 있는 단어와 같은 표제어는 예문 안에서 또 눌러도 의미가 없으니 클릭 불가로 둔다. */
+  excludeWord?: string;
 }) {
   const segments = useMemo(() => segmentSentenceIntoWords(text), [text]);
 
   return (
     <>
-      {segments.map((seg, i) =>
-        seg.word ? (
+      {segments.map((seg, i) => {
+        if (!seg.word) return <Fragment key={i}>{seg.text}</Fragment>;
+
+        const content = seg.word.furigana
+          ? seg.word.furigana.map((f, j) => (
+              <ruby key={j}>
+                {f.ruby}
+                <rt>{f.rt}</rt>
+              </ruby>
+            ))
+          : seg.text;
+
+        if (seg.word.word === excludeWord) {
+          return (
+            <span key={i} className="px-0.5">
+              {content}
+            </span>
+          );
+        }
+
+        return (
           <button
             key={i}
             type="button"
             onClick={() => onWordClick(seg.word!)}
             className="rounded px-0.5 underline decoration-dotted decoration-gray-300 underline-offset-4 hover:bg-primary/10 active:bg-primary/20"
           >
-            {seg.word.furigana
-              ? seg.word.furigana.map((f, j) => (
-                  <ruby key={j}>
-                    {f.ruby}
-                    <rt>{f.rt}</rt>
-                  </ruby>
-                ))
-              : seg.text}
+            {content}
           </button>
-        ) : (
-          <Fragment key={i}>{seg.text}</Fragment>
-        )
-      )}
+        );
+      })}
     </>
   );
 }

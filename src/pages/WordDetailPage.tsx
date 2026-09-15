@@ -97,7 +97,11 @@ function WordExamples({ entry }: { entry: WordEntry }) {
           {examples.map((ex, i) => (
             <li key={i} className="rounded-2xl bg-gray-50 p-3">
               <p className="font-ja text-lg">
-                <ClickableSentence text={ex.japanese} onWordClick={setSelectedWord} />
+                <ClickableSentence
+                  text={ex.japanese}
+                  onWordClick={setSelectedWord}
+                  excludeWord={entry.word}
+                />
               </p>
               {ex.korean && <p className="mt-1 text-sm text-gray-500">{ex.korean}</p>}
             </li>
