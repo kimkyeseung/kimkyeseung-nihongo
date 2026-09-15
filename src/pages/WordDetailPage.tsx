@@ -240,7 +240,10 @@ function WordDetailPage() {
       {verbTeForm && (
         <div className="mt-4 rounded-2xl bg-gray-50 p-4">
           <p className="text-sm text-gray-400">て형</p>
-          <p className="mt-1 font-ja text-2xl text-gray-700">{verbTeForm}</p>
+          <p className="mt-1 font-ja text-2xl text-gray-700">{verbTeForm.kanji}</p>
+          {verbTeForm.reading && (
+            <p className="mt-0.5 font-ja text-base text-gray-400">{verbTeForm.reading}</p>
+          )}
         </div>
       )}
 
