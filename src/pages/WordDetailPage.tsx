@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { findWordById } from "../lib/dictionary";
+import { getKoreanReadingForWord } from "../lib/kanji";
 import { useWordbookStore } from "../stores/wordbookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -10,6 +11,7 @@ function WordDetailPage() {
   const inWordbook = useWordbookStore((s) => (id ? Boolean(s.entries[id]) : false));
   const toggleWord = useWordbookStore((s) => s.toggleWord);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
+  const koreanReading = entry ? getKoreanReadingForWord(entry.word) : null;
 
   function handleToggleWordbook() {
     if (!entry) return;
@@ -42,7 +44,10 @@ function WordDetailPage() {
       </div>
 
       <h2 className="mt-2 font-ja text-4xl">{entry.word}</h2>
-      <p className="mt-1 font-ja text-xl text-gray-500">{entry.reading}</p>
+      <p className="mt-1 font-ja text-xl text-gray-500">
+        {entry.reading}
+        {koreanReading && <span className="ml-2 text-base text-gray-400">({koreanReading})</span>}
+      </p>
 
       {entry.furigana && entry.furigana.length > 0 && (
         <p className="mt-1 font-ja text-sm text-gray-400">

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import KanjiStrokeOrder from "./KanjiStrokeOrder";
 import LoadingMascot from "./LoadingMascot";
 import { findWordsContainingKanji } from "../lib/dictionary";
+import { getKoreanReadingForWord } from "../lib/kanji";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
@@ -91,15 +92,21 @@ function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClos
                 <p className="text-sm text-gray-300">예시 단어 없음</p>
               ) : (
                 <ul className="flex flex-col gap-1.5">
-                  {examples.map((w) => (
-                    <li key={w.id}>
-                      <Link to={`/dictionary/${w.id}`} onClick={onClose} className="text-info">
-                        <span className="font-ja">{w.word}</span>
-                        <span className="ml-1 text-xs text-gray-400">{w.reading}</span>
-                        <span className="ml-2 text-xs text-gray-500">{w.meaning}</span>
-                      </Link>
-                    </li>
-                  ))}
+                  {examples.map((w) => {
+                    const koreanReading = getKoreanReadingForWord(w.word);
+                    return (
+                      <li key={w.id}>
+                        <Link to={`/dictionary/${w.id}`} onClick={onClose} className="text-info">
+                          <span className="font-ja">{w.word}</span>
+                          <span className="ml-1 text-xs text-gray-400">{w.reading}</span>
+                          {koreanReading && (
+                            <span className="ml-1 text-xs text-gray-400">({koreanReading})</span>
+                          )}
+                          <span className="ml-2 text-xs text-gray-500">{w.meaning}</span>
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
