@@ -5,6 +5,7 @@ import GamificationBar from "./GamificationBar";
 import Confetti from "./Confetti";
 import BadgeWatcher from "./BadgeWatcher";
 import LoadingMascot from "./LoadingMascot";
+import PromptApiOnboardingDialog from "./PromptApiOnboardingDialog";
 
 const NAV_ITEMS = [
   { to: "/gojuon", label: "오십음도", icon: "あ" },
@@ -95,6 +96,7 @@ function Layout() {
 
       <Confetti />
       <BadgeWatcher />
+      <PromptApiOnboardingDialog />
     </div>
   );
 }

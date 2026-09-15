@@ -4,6 +4,7 @@ import type {
   LanguageModelDownloadProgressEvent,
   LanguageModelSession,
 } from "../types/languageModel";
+import { isPromptApiSupported } from "../lib/languageModel";
 
 export type LanguageModelStatus = "checking" | "unsupported" | LanguageModelAvailability;
 
@@ -16,7 +17,7 @@ export function useLanguageModel(systemPrompt: string) {
   // 브라우저 지원 여부는 마운트 시점에 동기적으로 알 수 있으므로 lazy initializer로
   // 바로 결정한다 — effect 안에서 setState를 동기 호출하면 불필요한 재렌더가 한 번 더 생긴다.
   const [status, setStatus] = useState<LanguageModelStatus>(() =>
-    "LanguageModel" in window && window.LanguageModel ? "checking" : "unsupported"
+    isPromptApiSupported() ? "checking" : "unsupported"
   );
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const sessionRef = useRef<LanguageModelSession | null>(null);

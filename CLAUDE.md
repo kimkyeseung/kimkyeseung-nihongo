@@ -45,7 +45,8 @@ src/router.tsx     react-router-dom 라우트 정의 (완료)
 src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 GamificationBar 포함),
                      KanjiStrokeOrder, KanjiDetailSheet, WordbookCard, FuriganaText, WritingDiff,
                      BadgeSheet, BadgeWatcher(뱃지 신규 획득 감지), Confetti, LoadingMascot,
-                     PromptApiUnsupportedNotice(LLM 페이지 공용 안내 화면)
+                     PromptApiUnsupportedNotice(LLM 페이지 공용 안내 화면),
+                     PromptApiOnboardingDialog(첫 접속 시 1회 안내 모달)
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + AboutPage(정보/출처, 하단 네비게이션 밖)
 src/hooks/         useJapaneseSpeech, useDebouncedValue, useLanguageModel 완료
@@ -110,7 +111,21 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   실제 온디바이스 모델이 아니라 입력을 그대로 되돌려주는 스텁이다("On-device model is not
   available in Chromium, this API is just echoing back the input: ..."). 덕분에 실제 세션
   생성·스트리밍·후리가나 오버레이·문법 교정 흐름을 콘솔 에러 없이 end-to-end로 검증할 수
-  있었지만, 실제 자연스러운 응답 품질은 Chrome Canary에서 별도로 확인해야 한다.
+  있었지만, 실제 자연스러운 응답 품질은 Chrome Canary에서 별도로 확인해야 한다. 이 환경에
+  `window.LanguageModel`이 있다 보니 아래 온보딩 다이얼로그도 정상적으로는 안 뜬다 —
+  검증할 땐 `PromptApiOnboardingDialog.tsx`의 `show` 계산식을 잠깐 `true ||`로 강제한 뒤
+  꼭 원복할 것 (실제로 이렇게 확인했음).
+
+## Chrome 미지원 안내 다이얼로그 (`PromptApiOnboardingDialog`)
+- 첫 접속 시 `window.LanguageModel` 자체가 없으면(=Prompt API 미지원 브라우저) 모달로
+  Chrome Canary 다운로드 링크(`https://www.google.com/chrome/canary/`)와 안내를 보여준다.
+  `localStorage`(`promptApiNoticeDismissed`)로 한 번 닫으면 다시 안 뜬다 — 회화/작문
+  페이지에 항상 보이는 `PromptApiUnsupportedNotice`(인라인 안내)와는 역할이 다르다:
+  이 다이얼로그는 "앱 켜자마자 한 번" 알려주는 용도, 인라인 안내는 "그 페이지에 실제로
+  들어갈 때마다" 보여주는 용도라 **둘 다 유지할 것, 하나로 합치지 말 것**.
+- 지원 여부 판단은 `src/lib/languageModel.ts`의 `isPromptApiSupported()` 하나로 통일했다
+  (`useLanguageModel` 훅과 이 다이얼로그가 같이 씀) — 새로 지원 여부를 확인하는 코드가
+  필요하면 이 함수를 재사용할 것, `'LanguageModel' in window`를 여기저기서 새로 쓰지 말 것.
 
 ## 작문 첨삭 페이지 구현 노트
 - `useLanguageModel`을 그대로 재사용(회화 페이지와 동일 패턴). 모델에게 항상 고정된
