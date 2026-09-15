@@ -38,8 +38,12 @@ function WordExamples({ entry }: { entry: WordEntry }) {
         acc += chunk;
         setRawResponse(acc);
       }
-    } catch {
-      setRawResponse("### 예문\n예문 생성 중 오류가 발생했습니다. 다시 시도해주세요.\n### 번역\n");
+    } catch (err) {
+      console.error("[WordExamples] 예문 생성 실패", err);
+      const detail = err instanceof Error ? err.message : String(err);
+      setRawResponse(
+        `### 예문\n예문 생성 중 오류가 발생했습니다. 다시 시도해주세요.\n### 번역\n(${detail})`
+      );
     } finally {
       setIsLoading(false);
     }
