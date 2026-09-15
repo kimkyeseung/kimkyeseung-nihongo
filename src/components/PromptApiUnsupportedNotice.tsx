@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import ChromeLink from "./ChromeLink";
 
 function PromptApiUnsupportedNotice({ feature }: { feature: string }) {
   return (
@@ -10,8 +11,7 @@ function PromptApiUnsupportedNotice({ feature }: { feature: string }) {
       <ul className="mt-1 list-disc pl-5">
         <li>Chrome Canary (또는 Prompt API를 지원하는 최신 Chrome)</li>
         <li>
-          <code className="rounded bg-white px-1">chrome://flags</code>에서 관련 플래그 활성화 후
-          재시작
+          <ChromeLink path="flags" />에서 관련 플래그 활성화 후 재시작
         </li>
       </ul>
       <p className="mt-2 text-gray-400">

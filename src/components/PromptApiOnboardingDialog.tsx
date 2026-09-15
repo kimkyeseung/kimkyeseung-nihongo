@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import ChromeLink from "./ChromeLink";
 import { isPromptApiSupported } from "../lib/languageModel";
 
 const STORAGE_KEY = "promptApiNoticeDismissed";
@@ -58,8 +59,7 @@ function PromptApiOnboardingDialog() {
             <ol className="mt-3 list-decimal space-y-1 pl-5 text-left text-sm text-gray-600">
               <li>아래 버튼으로 Chrome Canary 설치</li>
               <li>
-                <code className="rounded bg-gray-100 px-1">chrome://flags</code>에서 관련 플래그를
-                켠 뒤 재시작
+                <ChromeLink path="flags" />에서 관련 플래그를 켠 뒤 재시작
               </li>
             </ol>
             <a

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import ChromeLink from "../components/ChromeLink";
 import LoadingMascot from "../components/LoadingMascot";
+import { renderWithChromeLinks } from "../lib/chromeLinks";
 import {
   runLanguageModelDiagnostics,
   runSessionCreationTrial,
@@ -70,7 +72,9 @@ function PromptApiDiagnosticsPage() {
               <p className="font-bold">
                 <StatusBadge status={step.status} /> {step.title}
               </p>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{step.detail}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">
+                {renderWithChromeLinks(step.detail)}
+              </p>
             </li>
           ))}
         </ul>
@@ -95,7 +99,9 @@ function PromptApiDiagnosticsPage() {
           {trial && (
             <p className="mt-3 text-sm">
               <StatusBadge status={trial.status} />{" "}
-              <span className="whitespace-pre-wrap text-gray-600">{trial.detail}</span>
+              <span className="whitespace-pre-wrap text-gray-600">
+                {renderWithChromeLinks(trial.detail)}
+              </span>
             </p>
           )}
         </div>
@@ -112,21 +118,19 @@ function PromptApiDiagnosticsPage() {
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>Chrome Canary 등 진짜 Chrome을 최신 버전으로 사용하세요.</li>
           <li>
-            <code className="rounded bg-white px-1">chrome://flags/#optimization-guide-on-device-model</code>을{" "}
+            <ChromeLink path="flags/#optimization-guide-on-device-model" />을{" "}
             <b>Enabled BypassPerfRequirement</b>로 설정
           </li>
           <li>
-            <code className="rounded bg-white px-1">chrome://flags/#prompt-api-for-gemini-nano</code>을{" "}
-            <b>Enabled</b>로 설정
+            <ChromeLink path="flags/#prompt-api-for-gemini-nano" />을 <b>Enabled</b>로 설정
           </li>
           <li>Chrome을 완전히 재시작</li>
           <li>
-            <code className="rounded bg-white px-1">chrome://components</code>에서 "Optimization Guide On
-            Device Model" 업데이트 확인 (버전이 0.0.0.0이면 아직 다운로드 전)
+            <ChromeLink path="components" />에서 "Optimization Guide On Device Model" 업데이트 확인
+            (버전이 0.0.0.0이면 아직 다운로드 전)
           </li>
           <li>
-            그래도 안 되면 <code className="rounded bg-white px-1">chrome://on-device-internals</code>에서
-            상세 상태 확인
+            그래도 안 되면 <ChromeLink path="on-device-internals" />에서 상세 상태 확인
           </li>
         </ol>
       </div>
