@@ -257,6 +257,12 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   내부 `useState(() => buildKanjiQuiz(pool))` lazy initializer가 매번 새로 실행되게 했다(같은
   pool이어도 매번 다시 섞임). 퀴즈 "완료" 시점(문제 하나하나가 아니라 전체 완주)에만
   `XP_REWARDS.kanjiQuizCompleted`를 지급한다 — 정답 여부와 무관하게 완주 자체를 보상한다.
+  정답을 맞혔을 때만(`isCorrect`) "다음 문제"/"결과 보기" 버튼 옆에 "완료" 체크박스가 뜬다 —
+  체크한 채로 다음으로 넘어가면 그 문제의 한자를 `useKanjiProgressStore.toggleLearned`로
+  학습 완료 처리한다. 이때도 게이미피케이션 규칙(off→on 전환시에만 지급)을 그대로 따라
+  `learned.includes(...)`를 먼저 확인한 뒤 `XP_REWARDS.kanjiLearned` + `celebrate()`를 호출한다
+  (`KanjiDetailSheet`의 학습완료 토글과 동일 패턴). 체크박스 상태는 문제가 바뀔 때마다
+  `handleNext`에서 리셋한다.
 - **퀴즈 정답 읽기 선정 (실제로 겪은 버그, 2,135자 전수 검사로 확정)**: 처음엔 `kunyomi[0]`을
   그냥 정답으로 썼는데, 食의 첫 훈독이 KANJIDIC2 편집 순서상 "く.う"라서 훨씬 더 잘 알려진
   "た.べる"(食べる)가 보기에서 통째로 빠져 사용자가 "정답이 이상하다"고 보고했다 —

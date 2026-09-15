@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { buildKanjiQuiz } from "../lib/kanjiQuiz";
 import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import type { KanjiEntry } from "../types/kanji";
 
@@ -18,11 +19,15 @@ function QuizContent({ pool, onClose }: { pool: KanjiEntry[]; onClose: () => voi
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [score, setScore] = useState(0);
+  const [markComplete, setMarkComplete] = useState(false);
   const celebrate = useConfettiStore((s) => s.celebrate);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
+  const learned = useKanjiProgressStore((s) => s.learned);
+  const toggleLearned = useKanjiProgressStore((s) => s.toggleLearned);
 
   const done = index >= questions.length;
   const current = questions[index];
+  const isCorrect = selected !== null && current && selected === current.answerIndex;
 
   function handleSelect(choiceIndex: number) {
     if (selected !== null) return;
@@ -34,10 +39,17 @@ function QuizContent({ pool, onClose }: { pool: KanjiEntry[]; onClose: () => voi
   }
 
   function handleNext() {
+    // 학습완료 토글과 동일하게, 아직 미완료 상태일 때만(off->on) XP 지급 + 축하 효과
+    if (markComplete && !learned.includes(current.kanji.kanji)) {
+      toggleLearned(current.kanji.kanji);
+      recordProgress(XP_REWARDS.kanjiLearned);
+      celebrate();
+    }
     if (index + 1 >= questions.length) {
       // 시험 완료라는 명확한 학습 행동에만 한 번 지급 (문제 하나하나가 아니라 완료 시점)
       recordProgress(XP_REWARDS.kanjiQuizCompleted);
     }
+    setMarkComplete(false);
     setSelected(null);
     setIndex((i) => i + 1);
   }
@@ -116,13 +128,26 @@ function QuizContent({ pool, onClose }: { pool: KanjiEntry[]; onClose: () => voi
             </div>
 
             {selected !== null && (
-              <button
-                onClick={handleNext}
-                className="btn-press mt-5 w-full rounded-2xl bg-primary py-3 font-bold text-white"
-                style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
-              >
-                {index + 1 >= questions.length ? "결과 보기" : "다음 문제"}
-              </button>
+              <div className="mt-5 flex items-center gap-3">
+                {isCorrect && (
+                  <label className="flex shrink-0 items-center gap-1.5 text-sm text-gray-500">
+                    <input
+                      type="checkbox"
+                      checked={markComplete}
+                      onChange={(e) => setMarkComplete(e.target.checked)}
+                      className="h-5 w-5 accent-primary"
+                    />
+                    완료
+                  </label>
+                )}
+                <button
+                  onClick={handleNext}
+                  className="btn-press flex-1 rounded-2xl bg-primary py-3 font-bold text-white"
+                  style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
+                >
+                  {index + 1 >= questions.length ? "결과 보기" : "다음 문제"}
+                </button>
+              </div>
             )}
           </div>
         )}
