@@ -14,6 +14,7 @@ const WordbookPage = lazy(() => import("./pages/WordbookPage"));
 const KanjiPage = lazy(() => import("./pages/KanjiPage"));
 const WritingPage = lazy(() => import("./pages/WritingPage"));
 const AboutPage = lazy(() => import("./pages/AboutPage"));
+const PromptApiDiagnosticsPage = lazy(() => import("./pages/PromptApiDiagnosticsPage"));
 
 export const router = createBrowserRouter([
   {
@@ -29,6 +30,7 @@ export const router = createBrowserRouter([
       { path: "kanji", element: <KanjiPage /> },
       { path: "writing", element: <WritingPage /> },
       { path: "about", element: <AboutPage /> },
+      { path: "diagnostics", element: <PromptApiDiagnosticsPage /> },
     ],
   },
 ]);

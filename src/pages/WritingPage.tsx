@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import LoadingMascot from "../components/LoadingMascot";
+import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import WritingDiff from "../components/WritingDiff";
 import { useLanguageModel } from "../hooks/useLanguageModel";
+import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { buildWritingCorrectionPrompt, parseCorrectionResponse } from "../lib/writingCorrection";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
@@ -12,6 +14,7 @@ function WritingPage() {
   const model = useLanguageModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const celebrate = useConfettiStore((s) => s.celebrate);
+  const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   const [input, setInput] = useState("");
   const [submittedText, setSubmittedText] = useState<string | null>(null);
   const [rawResponse, setRawResponse] = useState("");
@@ -45,12 +48,13 @@ function WritingPage() {
         setShake(true);
         setTimeout(() => setShake(false), 500);
       }
-    } catch {
-      setRawResponse("### 설명\n첨삭 중 오류가 발생했습니다. 다시 시도해주세요.");
+    } catch (err) {
+      setSubmittedText(null);
+      reportError(err);
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, model, recordProgress, celebrate]);
+  }, [input, isLoading, model, recordProgress, celebrate, reportError]);
 
   function handleReset() {
     setInput("");
@@ -137,6 +141,8 @@ function WritingPage() {
           )}
         </div>
       )}
+
+      <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
     </div>
   );
 }

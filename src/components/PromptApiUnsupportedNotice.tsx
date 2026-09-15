@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 function PromptApiUnsupportedNotice({ feature }: { feature: string }) {
   return (
     <div className="m-4 rounded-2xl bg-warning/10 p-5 text-sm text-gray-700">
@@ -15,6 +17,9 @@ function PromptApiUnsupportedNotice({ feature }: { feature: string }) {
       <p className="mt-2 text-gray-400">
         그 동안 오십음도·사전·한자·단어장 등 다른 기능은 그대로 사용할 수 있습니다.
       </p>
+      <Link to="/diagnostics" className="mt-3 inline-block text-info">
+        🩺 자가진단 페이지에서 원인 자세히 확인하기 →
+      </Link>
     </div>
   );
 }

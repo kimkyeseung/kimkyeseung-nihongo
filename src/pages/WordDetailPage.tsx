@@ -2,8 +2,10 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import FuriganaText from "../components/FuriganaText";
 import LoadingMascot from "../components/LoadingMascot";
+import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import { useLanguageModel } from "../hooks/useLanguageModel";
+import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { findWordById } from "../lib/dictionary";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import { buildExamplePrompt, parseExampleResponse } from "../lib/wordExamples";
@@ -17,6 +19,7 @@ import type { WordEntry } from "../types/dictionary";
 function WordExamples({ entry }: { entry: WordEntry }) {
   const model = useLanguageModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
+  const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   const [rawResponse, setRawResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
@@ -39,15 +42,12 @@ function WordExamples({ entry }: { entry: WordEntry }) {
         setRawResponse(acc);
       }
     } catch (err) {
-      console.error("[WordExamples] 예문 생성 실패", err);
-      const detail = err instanceof Error ? err.message : String(err);
-      setRawResponse(
-        `### 예문\n예문 생성 중 오류가 발생했습니다. 다시 시도해주세요.\n### 번역\n(${detail})`
-      );
+      setHasGenerated(false);
+      reportError(err);
     } finally {
       setIsLoading(false);
     }
-  }, [entry, isLoading, model, recordProgress]);
+  }, [entry, isLoading, model, recordProgress, reportError]);
 
   if (model.status === "checking") return null;
 
@@ -102,6 +102,8 @@ function WordExamples({ entry }: { entry: WordEntry }) {
           ))}
         </ul>
       )}
+
+      <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
     </div>
   );
 }

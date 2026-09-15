@@ -3,8 +3,10 @@ import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import FuriganaText from "../components/FuriganaText";
 import LoadingMascot from "../components/LoadingMascot";
+import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import { useLanguageModel } from "../hooks/useLanguageModel";
+import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import {
@@ -93,6 +95,7 @@ function ConversationPage() {
   const chatModel = useLanguageModel(systemPrompt);
   const correctionModel = useLanguageModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
+  const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   const listEndRef = useRef<HTMLDivElement>(null);
 
   const handleStart = useCallback((s: Scenario, l: Level) => {
@@ -123,12 +126,13 @@ function ConversationPage() {
         const snapshot = acc;
         setMessages((m) => m.map((msg) => (msg.id === assistantMsgId ? { ...msg, text: snapshot } : msg)));
       }
-    } catch {
+    } catch (err) {
       setMessages((m) =>
         m.map((msg) =>
           msg.id === assistantMsgId ? { ...msg, text: "(응답 생성 중 오류가 발생했습니다)" } : msg
         )
       );
+      reportError(err);
     } finally {
       setIsStreaming(false);
       listEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -141,11 +145,12 @@ function ConversationPage() {
         setMessages((m) =>
           m.map((msg) => (msg.id === userMsgId ? { ...msg, correction, correctionLoading: false } : msg))
         );
-      } catch {
+      } catch (err) {
         setMessages((m) => m.map((msg) => (msg.id === userMsgId ? { ...msg, correctionLoading: false } : msg)));
+        reportError(err);
       }
     }
-  }, [input, isStreaming, chatModel, correctionModel, showCorrection, recordProgress]);
+  }, [input, isStreaming, chatModel, correctionModel, showCorrection, recordProgress, reportError]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
@@ -276,6 +281,8 @@ function ConversationPage() {
           전송
         </button>
       </div>
+
+      <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
     </div>
   );
 }
