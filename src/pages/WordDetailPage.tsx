@@ -9,7 +9,7 @@ import { useLanguageModel } from "../hooks/useLanguageModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { findWordById } from "../lib/dictionary";
 import { getKoreanReadingForWord } from "../lib/kanji";
-import { buildExamplePrompt, parseExampleResponse } from "../lib/wordExamples";
+import { buildExamplePrompt, parseExampleResponse, type ExampleDifficulty, type WordExample } from "../lib/wordExamples";
 import { useWordbookStore } from "../stores/wordbookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -21,35 +21,39 @@ function WordExamples({ entry }: { entry: WordEntry }) {
   const model = useLanguageModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
-  const [rawResponse, setRawResponse] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasGenerated, setHasGenerated] = useState(false);
+  const [examples, setExamples] = useState<WordExample[]>([]);
+  // null = 생성 중이 아님. 문자열이면 지금 스트리밍 중인 배치의 원문(완료되면 examples에 합쳐짐).
+  const [streamingRaw, setStreamingRaw] = useState<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<WordEntry | null>(null);
 
-  const examples = useMemo(
-    () => (hasGenerated ? parseExampleResponse(rawResponse) : []),
-    [rawResponse, hasGenerated]
+  const isLoading = streamingRaw !== null;
+  const streamingExamples = useMemo(
+    () => (streamingRaw !== null ? parseExampleResponse(streamingRaw) : []),
+    [streamingRaw]
   );
+  // 새로 생성된 예문은 기존 예문 아래로 쌓인다 — 스트리밍 중엔 그 미리보기도 맨 아래 덧붙여 보여준다.
+  const displayExamples = isLoading ? [...examples, ...streamingExamples] : examples;
 
-  const handleGenerate = useCallback(async () => {
-    if (isLoading) return;
-    setIsLoading(true);
-    setHasGenerated(true);
-    setRawResponse("");
-    recordProgress(XP_REWARDS.exampleGenerated);
-    try {
-      let acc = "";
-      for await (const chunk of model.promptStreaming(buildExamplePrompt(entry))) {
-        acc += chunk;
-        setRawResponse(acc);
+  const handleGenerate = useCallback(
+    async (difficulty?: ExampleDifficulty) => {
+      if (isLoading) return;
+      setStreamingRaw("");
+      recordProgress(XP_REWARDS.exampleGenerated);
+      try {
+        let acc = "";
+        for await (const chunk of model.promptStreaming(buildExamplePrompt(entry, difficulty))) {
+          acc += chunk;
+          setStreamingRaw(acc);
+        }
+        setExamples((prev) => [...prev, ...parseExampleResponse(acc)]);
+      } catch (err) {
+        reportError(err);
+      } finally {
+        setStreamingRaw(null);
       }
-    } catch (err) {
-      setHasGenerated(false);
-      reportError(err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [entry, isLoading, model, recordProgress, reportError]);
+    },
+    [entry, isLoading, model, recordProgress, reportError]
+  );
 
   if (model.status === "checking") return null;
 
@@ -65,14 +69,16 @@ function WordExamples({ entry }: { entry: WordEntry }) {
     <div className="mt-6">
       <p className="text-sm text-gray-400">예문</p>
 
-      <button
-        onClick={handleGenerate}
-        disabled={isLoading}
-        className="btn-press mt-2 w-full rounded-2xl bg-primary py-3 font-bold text-white disabled:bg-gray-200"
-        style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
-      >
-        {isLoading ? "생성 중..." : hasGenerated ? "↻ 다시 생성" : "✨ 예문 생성"}
-      </button>
+      {examples.length === 0 && (
+        <button
+          onClick={() => handleGenerate()}
+          disabled={isLoading}
+          className="btn-press mt-2 w-full rounded-2xl bg-primary py-3 font-bold text-white disabled:bg-gray-200"
+          style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
+        >
+          {isLoading ? "생성 중..." : "✨ 예문 생성"}
+        </button>
+      )}
 
       {model.downloadProgress !== null && (
         <div className="mt-2 text-xs text-gray-400">
@@ -86,15 +92,15 @@ function WordExamples({ entry }: { entry: WordEntry }) {
         </div>
       )}
 
-      {isLoading && examples.length === 0 && (
+      {isLoading && displayExamples.length === examples.length && (
         <div className="mt-3">
           <LoadingMascot label="예문 만드는 중..." />
         </div>
       )}
 
-      {examples.length > 0 && (
+      {displayExamples.length > 0 && (
         <ul className="mt-3 flex flex-col gap-3">
-          {examples.map((ex, i) => (
+          {displayExamples.map((ex, i) => (
             <li key={i} className="rounded-2xl bg-gray-50 p-3">
               <p className="font-ja text-lg">
                 <ClickableSentence
@@ -107,6 +113,27 @@ function WordExamples({ entry }: { entry: WordEntry }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {examples.length > 0 && (
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => handleGenerate("easier")}
+            disabled={isLoading}
+            className="btn-press flex-1 rounded-2xl bg-warning py-3 text-sm font-bold text-white disabled:bg-gray-200"
+            style={{ "--btn-shadow": "#c99a00" } as React.CSSProperties}
+          >
+            🟡 더 쉬운 예문
+          </button>
+          <button
+            onClick={() => handleGenerate("harder")}
+            disabled={isLoading}
+            className="btn-press flex-1 rounded-2xl bg-info py-3 text-sm font-bold text-white disabled:bg-gray-200"
+            style={{ "--btn-shadow": "#0e86c4" } as React.CSSProperties}
+          >
+            🔵 더 어려운 예문
+          </button>
+        </div>
       )}
 
       <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
