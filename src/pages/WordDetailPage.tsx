@@ -61,16 +61,16 @@ function WordExamples({ entry }: { entry: WordEntry }) {
 
   return (
     <div className="mt-6">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-400">예문</p>
-        <button
-          onClick={handleGenerate}
-          disabled={isLoading}
-          className="text-xs font-bold text-info disabled:text-gray-300"
-        >
-          {hasGenerated ? "↻ 다시 생성" : "✨ 예문 생성"}
-        </button>
-      </div>
+      <p className="text-sm text-gray-400">예문</p>
+
+      <button
+        onClick={handleGenerate}
+        disabled={isLoading}
+        className="btn-press mt-2 w-full rounded-2xl bg-primary py-3 font-bold text-white disabled:bg-gray-200"
+        style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
+      >
+        {isLoading ? "생성 중..." : hasGenerated ? "↻ 다시 생성" : "✨ 예문 생성"}
+      </button>
 
       {model.downloadProgress !== null && (
         <div className="mt-2 text-xs text-gray-400">
