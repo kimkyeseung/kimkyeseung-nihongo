@@ -53,14 +53,14 @@ function WordExamples({ entry }: { entry: WordEntry }) {
 
   if (model.status === "unsupported") {
     return (
-      <div className="mt-4">
+      <div className="mt-6">
         <PromptApiUnsupportedNotice feature="LLM 예문 생성" />
       </div>
     );
   }
 
   return (
-    <div className="mt-4">
+    <div className="mt-6">
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-400">예문</p>
         <button
@@ -139,11 +139,26 @@ function WordDetailPage() {
         ← 사전으로
       </Link>
 
-      <div className="mt-3 flex items-baseline gap-3">
-        <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
-          {entry.jlptLevel}
-        </span>
-        {entry.common && <span className="text-xs text-gray-400">자주 쓰는 단어</span>}
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
+            {entry.jlptLevel}
+          </span>
+          {entry.common && <span className="text-xs text-gray-400">자주 쓰는 단어</span>}
+        </div>
+
+        <button
+          onClick={handleToggleWordbook}
+          aria-label={inWordbook ? "단어장에서 제거" : "단어장에 추가"}
+          className={`btn-press flex h-10 w-10 items-center justify-center rounded-full text-lg ${
+            inWordbook ? "bg-gray-100 text-gray-400" : "bg-primary text-white"
+          }`}
+          style={
+            { "--btn-shadow": inWordbook ? "rgb(0 0 0 / 0.15)" : "#3d9401" } as React.CSSProperties
+          }
+        >
+          {inWordbook ? "✓" : "🗂️"}
+        </button>
       </div>
 
       <h2 className="mt-2 font-ja text-4xl">{entry.word}</h2>
@@ -174,18 +189,6 @@ function WordDetailPage() {
           </li>
         ))}
       </ol>
-
-      <button
-        onClick={handleToggleWordbook}
-        className={`btn-press mt-6 w-full rounded-2xl py-3 font-bold text-white ${
-          inWordbook ? "bg-gray-300" : "bg-primary"
-        }`}
-        style={
-          { "--btn-shadow": inWordbook ? "rgb(0 0 0 / 0.15)" : "#3d9401" } as React.CSSProperties
-        }
-      >
-        {inWordbook ? "✓ 단어장에 있음 (탭하여 제거)" : "🗂️ 단어장에 추가"}
-      </button>
 
       <WordExamples entry={entry} />
 
