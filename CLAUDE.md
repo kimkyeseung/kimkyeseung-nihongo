@@ -257,6 +257,18 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   내부 `useState(() => buildKanjiQuiz(pool))` lazy initializer가 매번 새로 실행되게 했다(같은
   pool이어도 매번 다시 섞임). 퀴즈 "완료" 시점(문제 하나하나가 아니라 전체 완주)에만
   `XP_REWARDS.kanjiQuizCompleted`를 지급한다 — 정답 여부와 무관하게 완주 자체를 보상한다.
+- **퀴즈 정답 읽기 선정 (실제로 겪은 버그)**: 처음엔 `kunyomi[0]`을 그냥 정답으로 썼는데,
+  食의 첫 훈독이 KANJIDIC2 편집 순서상 "く.う"라서 훨씬 더 잘 알려진 "た.べる"(食べる)가
+  보기에서 통째로 빠져 사용자가 "정답이 이상하다"고 보고했다 — **KANJIDIC2의 onyomi/kunyomi
+  배열 순서는 사전 편집 순서일 뿐 "가장 흔한 읽기" 순이 아니다.** 이제 `kanjiQuiz.ts`의
+  `primaryReading`은 `dictionary.json`의 `furigana`(JMDict_Extended가 실제 단어에서 이
+  한자가 정확히 어떤 음으로 읽히는지 이미 분리해둔 필드, 예: "食べる" -> `[{ruby:"食",
+  rt:"た"}, ...]`)를 근거로 정답을 고른다: 이 한자로 시작하고 나머지가 전부 히라가나인
+  단어(`isPureForm` — 단독 명사 "人"나 오쿠리가나 붙은 동사 "食べる"처럼 이 한자 자체의
+  읽기를 보여주기 좋은 형태, "外国人"/"食堂"처럼 다른 한자가 섞인 복합어는 후순위)를 먼저
+  거르고, 그다음 JLPT 급수가 낮은(기초 어휘) 단어를 우선한다. 새로 "이 한자의 대표 읽기"가
+  필요한 기능을 또 만들 때도 KANJIDIC2 배열 순서를 그대로 신뢰하지 말고 이 방식(또는
+  `kanjiQuiz.ts`의 `primaryReading`/`wordsContaining` 재사용)을 쓸 것.
 
 ## 데이터 파이프라인 (완료됨)
 `src/data/`의 사전/한자/획순 JSON은 이미 생성되어 있다. 원본을 다시 받거나 갱신하려면:
