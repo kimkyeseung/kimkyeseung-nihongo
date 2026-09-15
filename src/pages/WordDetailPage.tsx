@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import ClickableSentence from "../components/ClickableSentence";
+import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
@@ -14,6 +15,7 @@ import { useWordbookStore } from "../stores/wordbookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import type { WordEntry } from "../types/dictionary";
+import type { KanjiEntry } from "../types/kanji";
 
 /** LLM으로 단어 활용 예문을 생성한다. 예문은 생성형 작업이라 LLM을 쓰지만, 후리가나는
  * FuriganaText가 사전 데이터에서만 가져와 오버레이한다(LLM이 읽기를 지어내지 않도록). */
@@ -25,6 +27,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
   // null = 생성 중이 아님. 문자열이면 지금 스트리밍 중인 배치의 원문(완료되면 examples에 합쳐짐).
   const [streamingRaw, setStreamingRaw] = useState<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<WordEntry | null>(null);
+  const [selectedKanji, setSelectedKanji] = useState<KanjiEntry | null>(null);
 
   const isLoading = streamingRaw !== null;
   const streamingExamples = useMemo(
@@ -106,6 +109,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
                 <ClickableSentence
                   text={ex.japanese}
                   onWordClick={setSelectedWord}
+                  onKanjiClick={setSelectedKanji}
                   excludeWord={entry.word}
                 />
               </p>
@@ -138,6 +142,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
 
       <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
       <WordMeaningDialog word={selectedWord} onClose={() => setSelectedWord(null)} />
+      <KanjiDetailSheet entry={selectedKanji} onClose={() => setSelectedKanji(null)} />
     </div>
   );
 }
