@@ -1,4 +1,4 @@
-// JMDict_Extended(사전+JLPT급수+후리가나)에서 JLPT 태그가 붙은 항목만 추출해
+// JMDict_Extended(사전+JLPT급수+후리가나)에서 JLPT 태그가 붙은 항목(+예외적으로 조사)만 추출해
 // src/data/dictionary.json (경량 서브셋) 과 src/data/pos-tags.json (품사 코드 설명)을 만든다.
 //
 // 입력: scripts/data/.cache/jmdictExtended.json (download.sh로 준비)
@@ -44,11 +44,20 @@ function main() {
     const level =
       kanjiForms.find((k) => k.jlptLevel)?.jlptLevel ??
       kanaForms.find((k) => k.jlptLevel)?.jlptLevel;
-    if (!level) continue; // JLPT 급수 태그 없는 항목은 제외 (용량 절감)
+
+    // は/が/を/に 같은 조사는 원본 JMDict_Extended에 JLPT 태그가 거의 안 붙어있어(전수 조사 결과
+    // 138개) level만으로 거르면 예문/회화 문장에서 조사를 전혀 조회할 수 없다. 품사(prt)로
+    // 예외적으로 포함시키고, 실제로 가장 기초 문법이므로 N5로 간주한다.
+    const isParticle = (w.sense ?? []).some((s) => s.partOfSpeech?.includes("prt"));
+    if (!level && !isParticle) continue; // 그 외 JLPT 급수 태그 없는 항목은 제외 (용량 절감)
 
     const primaryKanji = pickPrimary(kanjiForms);
     const primaryKana = pickPrimary(kanaForms);
-    const word = primaryKanji?.text ?? primaryKana?.text;
+    // 조사(の 등)는 乃/之처럼 JMDict에 딸려있는 희귀/고어 한자 표기가 있어도 실제로는
+    // 항상 가나로만 쓰므로, word 선택에서 한자보다 가나를 우선한다(일반 단어는 기존 로직 유지).
+    const word = isParticle
+      ? (primaryKana?.text ?? primaryKanji?.text)
+      : (primaryKanji?.text ?? primaryKana?.text);
     const reading = primaryKana?.text ?? primaryKanji?.text;
     if (!word || !reading) continue;
 
@@ -67,9 +76,9 @@ function main() {
       id: w.id,
       word,
       reading,
-      jlptLevel: JLPT_LABELS[level],
+      jlptLevel: level ? JLPT_LABELS[level] : "N5",
       common: Boolean(primaryKanji?.common || primaryKana?.common),
-      furigana: primaryKanji?.furigana ?? null,
+      furigana: word === primaryKanji?.text ? (primaryKanji?.furigana ?? null) : null,
       pos: senses[0].pos,
       meaning: senses[0].glosses[0],
       senses,

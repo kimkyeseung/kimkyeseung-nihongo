@@ -33,7 +33,7 @@ export function findWordById(id: string): WordEntry | undefined {
 
 /**
  * 한자/가나/로마자(변환된 히라가나 기준)/영문 뜻으로 검색한다.
- * dictionary.json이 8,267개 단어로 크지 않아 매 검색마다 전체를 훑어도 충분히 빠르므로
+ * dictionary.json이 (2026-09 기준 8,405개 단어로) 크지 않아 매 검색마다 전체를 훑어도 충분히 빠르므로
  * 별도 인덱스 없이 배열 스캔으로 구현한다 (IndexedDB는 훨씬 큰 원본 데이터를 다룰 때를 위한 것).
  */
 export function searchDictionary(query: string, limit = 8): WordEntry[] {

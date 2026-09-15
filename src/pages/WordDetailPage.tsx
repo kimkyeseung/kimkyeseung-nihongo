@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import FuriganaText from "../components/FuriganaText";
+import ClickableSentence from "../components/ClickableSentence";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
+import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useLanguageModel } from "../hooks/useLanguageModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { findWordById } from "../lib/dictionary";
@@ -23,6 +24,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
   const [rawResponse, setRawResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
+  const [selectedWord, setSelectedWord] = useState<WordEntry | null>(null);
 
   const examples = useMemo(
     () => (hasGenerated ? parseExampleResponse(rawResponse) : []),
@@ -95,7 +97,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
           {examples.map((ex, i) => (
             <li key={i} className="rounded-2xl bg-gray-50 p-3">
               <p className="font-ja text-lg">
-                <FuriganaText text={ex.japanese} show />
+                <ClickableSentence text={ex.japanese} onWordClick={setSelectedWord} />
               </p>
               {ex.korean && <p className="mt-1 text-sm text-gray-500">{ex.korean}</p>}
             </li>
@@ -104,6 +106,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
       )}
 
       <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
+      <WordMeaningDialog word={selectedWord} onClose={() => setSelectedWord(null)} />
     </div>
   );
 }

@@ -41,7 +41,7 @@ node scripts/data/build-kanjivg.mjs   # build-kanji.mjs 이후에 실행할 것 
 
 ## 출력 스키마
 
-### `dictionary.json` — JLPT 태그가 있는 단어만 (총 8,267개)
+### `dictionary.json` — JLPT 태그가 있는 단어 + 조사(품사 `prt`, JLPT 태그 없어도 포함) (총 8,405개)
 
 ```ts
 interface WordEntry {
