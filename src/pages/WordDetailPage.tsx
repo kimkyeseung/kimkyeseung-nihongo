@@ -150,14 +150,14 @@ function WordDetailPage() {
         <button
           onClick={handleToggleWordbook}
           aria-label={inWordbook ? "단어장에서 제거" : "단어장에 추가"}
-          className={`btn-press flex h-10 w-10 items-center justify-center rounded-full text-lg ${
+          className={`btn-press flex items-center gap-1 rounded-full px-3 py-2 text-sm font-bold ${
             inWordbook ? "bg-gray-100 text-gray-400" : "bg-primary text-white"
           }`}
           style={
             { "--btn-shadow": inWordbook ? "rgb(0 0 0 / 0.15)" : "#3d9401" } as React.CSSProperties
           }
         >
-          {inWordbook ? "✓" : "🗂️"}
+          {inWordbook ? "✓" : "🗂️"} 단어장
         </button>
       </div>
 
