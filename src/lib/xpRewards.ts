@@ -7,4 +7,5 @@ export const XP_REWARDS = {
   wordReviewed: 5,
   conversationMessage: 5,
   writingCorrection: 10,
+  exampleGenerated: 5,
 } as const;
