@@ -12,6 +12,7 @@ import { findWordById } from "../lib/dictionary";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import { buildExamplePrompt, parseExampleResponse, type ExampleDifficulty, type WordExample } from "../lib/wordExamples";
 import { detectAdjectiveType, getVerbTeForm } from "../lib/verbConjugation";
+import { translatePos } from "../lib/posTags";
 import { useWordbookStore } from "../stores/wordbookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -226,7 +227,7 @@ function WordDetailPage() {
             <div className="flex flex-wrap gap-1">
               {sense.pos.map((p) => (
                 <span key={p} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                  {p}
+                  {translatePos(p)}
                 </span>
               ))}
             </div>
