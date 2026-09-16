@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
+import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import WritingDiff from "../components/WritingDiff";
+import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useLanguageModel } from "../hooks/useLanguageModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { buildWritingCorrectionPrompt, parseCorrectionResponse } from "../lib/writingCorrection";
@@ -15,7 +17,7 @@ function WritingPage() {
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const celebrate = useConfettiStore((s) => s.celebrate);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
-  const [input, setInput] = useState("");
+  const japaneseInput = useJapaneseInput<HTMLTextAreaElement>();
   const [submittedText, setSubmittedText] = useState<string | null>(null);
   const [rawResponse, setRawResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -27,7 +29,7 @@ function WritingPage() {
   );
 
   const handleSubmit = useCallback(async () => {
-    const text = input.trim();
+    const text = japaneseInput.value.trim();
     if (!text || isLoading) return;
     setSubmittedText(text);
     setRawResponse("");
@@ -54,10 +56,10 @@ function WritingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, model, recordProgress, celebrate, reportError]);
+  }, [japaneseInput.value, isLoading, model, recordProgress, celebrate, reportError]);
 
   function handleReset() {
-    setInput("");
+    japaneseInput.setValue("");
     setSubmittedText(null);
     setRawResponse("");
   }
@@ -80,13 +82,25 @@ function WritingPage() {
       <h2 className="text-xl text-primary">✏️ 작문 첨삭</h2>
       <p className="mt-1 text-sm text-gray-400">일본어 문장을 쓰면 문법과 표현을 첨삭해드려요.</p>
 
-      <textarea
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="ここに日本語で文章を書いてください..."
-        rows={4}
-        className="mt-4 w-full resize-none rounded-2xl border-2 border-gray-100 p-3 font-ja text-lg focus:border-primary/40 focus:outline-none"
-      />
+      <div className="relative mt-4">
+        <textarea
+          ref={japaneseInput.ref}
+          defaultValue=""
+          onFocus={() => japaneseInput.setShowSuggestions(true)}
+          onBlur={() => setTimeout(() => japaneseInput.setShowSuggestions(false), 150)}
+          onKeyDown={(e) => japaneseInput.handleSuggestionKeyDown(e)}
+          placeholder="ここに日本語で文章を書いてください..."
+          rows={4}
+          className="w-full resize-none rounded-2xl border-2 border-gray-100 p-3 font-ja text-lg focus:border-primary/40 focus:outline-none"
+        />
+        {japaneseInput.showSuggestions && (
+          <JapaneseSuggestionList
+            suggestions={japaneseInput.suggestions}
+            activeIndex={japaneseInput.activeIndex}
+            onSelect={japaneseInput.selectSuggestion}
+          />
+        )}
+      </div>
 
       {model.downloadProgress !== null && (
         <div className="mt-2 text-xs text-gray-400">
@@ -103,7 +117,7 @@ function WritingPage() {
       <div className="mt-3 flex gap-2">
         <button
           onClick={handleSubmit}
-          disabled={!input.trim() || isLoading}
+          disabled={!japaneseInput.value.trim() || isLoading}
           className="btn-press flex-1 rounded-2xl bg-primary py-3 font-bold text-white disabled:bg-gray-200"
           style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
         >

@@ -2,9 +2,11 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import FuriganaText from "../components/FuriganaText";
+import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
+import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useLanguageModel } from "../hooks/useLanguageModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useGamificationStore } from "../stores/gamificationStore";
@@ -83,7 +85,7 @@ function ConversationPage() {
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [level, setLevel] = useState<Level | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
+  const japaneseInput = useJapaneseInput<HTMLInputElement>();
   const [isStreaming, setIsStreaming] = useState(false);
   const [showFurigana, setShowFurigana] = useState(true);
   const [showCorrection, setShowCorrection] = useState(false);
@@ -105,9 +107,9 @@ function ConversationPage() {
   }, []);
 
   const handleSend = useCallback(async () => {
-    const userText = input.trim();
+    const userText = japaneseInput.value.trim();
     if (!userText || isStreaming) return;
-    setInput("");
+    japaneseInput.setValue("");
 
     const userMsgId = crypto.randomUUID();
     const assistantMsgId = crypto.randomUUID();
@@ -150,9 +152,19 @@ function ConversationPage() {
         reportError(err);
       }
     }
-  }, [input, isStreaming, chatModel, correctionModel, showCorrection, recordProgress, reportError]);
+  }, [
+    japaneseInput.value,
+    japaneseInput.setValue,
+    isStreaming,
+    chatModel,
+    correctionModel,
+    showCorrection,
+    recordProgress,
+    reportError,
+  ]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (japaneseInput.handleSuggestionKeyDown(e)) return;
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
@@ -266,16 +278,27 @@ function ConversationPage() {
       </div>
 
       <div className="flex gap-2 border-t border-gray-100 p-3">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="日本語でメッセージを入力..."
-          className="flex-1 rounded-2xl border-2 border-gray-100 px-4 py-2 font-ja focus:border-primary/40 focus:outline-none"
-        />
+        <div className="relative flex-1">
+          <input
+            ref={japaneseInput.ref}
+            defaultValue=""
+            onFocus={() => japaneseInput.setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => japaneseInput.setShowSuggestions(false), 150)}
+            onKeyDown={handleKeyDown}
+            placeholder="日本語でメッセージを入力..."
+            className="w-full rounded-2xl border-2 border-gray-100 px-4 py-2 font-ja focus:border-primary/40 focus:outline-none"
+          />
+          {japaneseInput.showSuggestions && (
+            <JapaneseSuggestionList
+              suggestions={japaneseInput.suggestions}
+              activeIndex={japaneseInput.activeIndex}
+              onSelect={japaneseInput.selectSuggestion}
+            />
+          )}
+        </div>
         <button
           onClick={handleSend}
-          disabled={!input.trim() || isStreaming}
+          disabled={!japaneseInput.value.trim() || isStreaming}
           className="rounded-2xl bg-primary px-5 py-2 font-bold text-white disabled:bg-gray-200"
         >
           전송
