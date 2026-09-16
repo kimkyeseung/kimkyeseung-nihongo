@@ -163,6 +163,19 @@ function WritingPage() {
               {result.explanation}
             </p>
           )}
+
+          {result.grammarPoints.length > 0 && (
+            <div className="mt-3 rounded-xl bg-info/5 p-3">
+              <p className="text-xs font-bold text-info">💡 문법 포인트</p>
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {result.grammarPoints.map((point, i) => (
+                  <li key={i} className="font-ja text-sm text-gray-600">
+                    {point}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
