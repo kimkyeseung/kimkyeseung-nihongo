@@ -1,35 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import FuriganaText from "../components/FuriganaText";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
-import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
-import { useLanguageModel } from "../hooks/useLanguageModel";
-import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
-import { useGamificationStore } from "../stores/gamificationStore";
 import { useUserProfileStore } from "../stores/userProfileStore";
-import { XP_REWARDS } from "../lib/xpRewards";
-import {
-  GRAMMAR_CORRECTION_SYSTEM_PROMPT,
-  LEVELS,
-  OPENING_TRIGGER,
-  SCENARIOS,
-  buildGrammarCorrectionUserPrompt,
-  buildSystemPrompt,
-  type Level,
-  type Scenario,
-} from "../lib/conversationPrompts";
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  correction?: string;
-  correctionLoading?: boolean;
-}
+import { useConversationSessionStore } from "../stores/conversationSessionStore";
+import { LEVELS, SCENARIOS, type Level, type Scenario } from "../lib/conversationPrompts";
 
 function ScenarioPicker({
   onStart,
@@ -96,109 +75,36 @@ function ScenarioPicker({
 }
 
 function ConversationPage() {
-  const [scenario, setScenario] = useState<Scenario | null>(null);
-  const [level, setLevel] = useState<Level | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // 실제 LLM 세션/스트리밍은 Layout에 항상 마운트되는 ConversationSessionController가
+  // 관리한다 — 이 페이지는 탭 전환으로 unmount돼도 대화가 끊기지 않도록 store를 구독하고
+  // 액션을 호출만 하는 얇은 뷰다.
+  const scenario = useConversationSessionStore((s) => s.scenario);
+  const level = useConversationSessionStore((s) => s.level);
+  const messages = useConversationSessionStore((s) => s.messages);
+  const showFurigana = useConversationSessionStore((s) => s.showFurigana);
+  const setShowFurigana = useConversationSessionStore((s) => s.setShowFurigana);
+  const showCorrection = useConversationSessionStore((s) => s.showCorrection);
+  const setShowCorrection = useConversationSessionStore((s) => s.setShowCorrection);
+  const isStreaming = useConversationSessionStore((s) => s.isStreaming);
+  const chatStatus = useConversationSessionStore((s) => s.chatStatus);
+  const chatDownloadProgress = useConversationSessionStore((s) => s.chatDownloadProgress);
+  const startConversation = useConversationSessionStore((s) => s.startConversation);
+  const resetConversation = useConversationSessionStore((s) => s.resetConversation);
+  const sendMessage = useConversationSessionStore((s) => s.sendMessage);
+
   const japaneseInput = useJapaneseInput<HTMLInputElement>();
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [showFurigana, setShowFurigana] = useState(true);
-  const [showCorrection, setShowCorrection] = useState(false);
-  const userName = useUserProfileStore((s) => s.name);
-
-  const systemPrompt = useMemo(
-    () => (scenario && level ? buildSystemPrompt(scenario, level, userName || undefined) : ""),
-    [scenario, level, userName]
-  );
-  const chatModel = useLanguageModel(systemPrompt);
-  const correctionModel = useLanguageModel(GRAMMAR_CORRECTION_SYSTEM_PROMPT);
-  const recordProgress = useGamificationStore((s) => s.recordProgress);
-  const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   const listEndRef = useRef<HTMLDivElement>(null);
-  // 시나리오/레벨이 바뀔 때마다 한 번만 AI가 먼저 말을 걸도록 막는 플래그. handleStart에서
-  // 새 대화를 시작할 때 다시 false로 리셋한다.
-  const hasSentOpeningRef = useRef(false);
 
-  const streamAssistantReply = useCallback(
-    async (assistantMsgId: string, input: string) => {
-      setIsStreaming(true);
-      try {
-        let acc = "";
-        for await (const chunk of chatModel.promptStreaming(input)) {
-          acc += chunk;
-          const snapshot = acc;
-          setMessages((m) => m.map((msg) => (msg.id === assistantMsgId ? { ...msg, text: snapshot } : msg)));
-        }
-      } catch (err) {
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.id === assistantMsgId ? { ...msg, text: "(응답 생성 중 오류가 발생했습니다)" } : msg
-          )
-        );
-        reportError(err);
-      } finally {
-        setIsStreaming(false);
-        listEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }
-    },
-    [chatModel, reportError]
-  );
-
-  const handleStart = useCallback((s: Scenario, l: Level) => {
-    hasSentOpeningRef.current = false;
-    setScenario(s);
-    setLevel(l);
-    setMessages([]);
-  }, []);
-
-  // 회화 시작 직후 AI가 먼저 말을 걸게 한다 — OPENING_TRIGGER는 실제 학습자 발화가 아니므로
-  // 대화 로그(messages)에는 남기지 않고, 그걸 보내서 받은 응답만 assistant 메시지로 추가한다.
   useEffect(() => {
-    if (!scenario || !level || hasSentOpeningRef.current) return;
-    hasSentOpeningRef.current = true;
+    listEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-    const assistantMsgId = crypto.randomUUID();
-    setMessages([{ id: assistantMsgId, role: "assistant", text: "" }]);
-    streamAssistantReply(assistantMsgId, OPENING_TRIGGER);
-  }, [scenario, level, streamAssistantReply]);
-
-  const handleSend = useCallback(async () => {
+  const handleSend = useCallback(() => {
     const userText = japaneseInput.value.trim();
     if (!userText || isStreaming) return;
     japaneseInput.setValue("");
-
-    const userMsgId = crypto.randomUUID();
-    const assistantMsgId = crypto.randomUUID();
-    setMessages((m) => [
-      ...m,
-      { id: userMsgId, role: "user", text: userText },
-      { id: assistantMsgId, role: "assistant", text: "" },
-    ]);
-    recordProgress(XP_REWARDS.conversationMessage);
-
-    await streamAssistantReply(assistantMsgId, userText);
-
-    if (showCorrection) {
-      setMessages((m) => m.map((msg) => (msg.id === userMsgId ? { ...msg, correctionLoading: true } : msg)));
-      try {
-        const correction = await correctionModel.prompt(buildGrammarCorrectionUserPrompt(userText));
-        setMessages((m) =>
-          m.map((msg) => (msg.id === userMsgId ? { ...msg, correction, correctionLoading: false } : msg))
-        );
-      } catch (err) {
-        setMessages((m) => m.map((msg) => (msg.id === userMsgId ? { ...msg, correctionLoading: false } : msg)));
-        reportError(err);
-      }
-    }
-  }, [
-    japaneseInput.value,
-    japaneseInput.setValue,
-    isStreaming,
-    streamAssistantReply,
-    correctionModel,
-    showCorrection,
-    recordProgress,
-    reportError,
-  ]);
+    sendMessage(userText);
+  }, [japaneseInput.value, japaneseInput.setValue, isStreaming, sendMessage]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (japaneseInput.handleSuggestionKeyDown(e)) return;
@@ -208,11 +114,11 @@ function ConversationPage() {
     }
   }
 
-  if (chatModel.status === "checking") {
+  if (chatStatus === "checking") {
     return <p className="p-6 text-gray-400">Prompt API 지원 여부 확인 중...</p>;
   }
 
-  if (chatModel.status === "unsupported") {
+  if (chatStatus === "unsupported") {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
@@ -225,7 +131,7 @@ function ConversationPage() {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
-        <ScenarioPicker onStart={handleStart} />
+        <ScenarioPicker onStart={startConversation} />
       </div>
     );
   }
@@ -239,13 +145,7 @@ function ConversationPage() {
           </span>
           <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-500">{level.label}</span>
         </div>
-        <button
-          onClick={() => {
-            setScenario(null);
-            setLevel(null);
-          }}
-          className="text-xs text-gray-400"
-        >
+        <button onClick={resetConversation} className="text-xs text-gray-400">
           다시 선택
         </button>
       </div>
@@ -269,13 +169,13 @@ function ConversationPage() {
         </label>
       </div>
 
-      {chatModel.downloadProgress !== null && (
+      {chatDownloadProgress !== null && (
         <div className="p-3 text-xs text-gray-400">
-          모델 다운로드 중... {Math.round(chatModel.downloadProgress * 100)}%
+          모델 다운로드 중... {Math.round(chatDownloadProgress * 100)}%
           <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
             <div
               className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${chatModel.downloadProgress * 100}%` }}
+              style={{ width: `${chatDownloadProgress * 100}%` }}
             />
           </div>
         </div>
@@ -341,8 +241,6 @@ function ConversationPage() {
           전송
         </button>
       </div>
-
-      <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
     </div>
   );
 }
