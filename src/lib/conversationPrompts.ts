@@ -41,6 +41,10 @@ export function buildSystemPrompt(scenario: Scenario, level: Level, userName?: s
   ].join(" ");
 }
 
+// 회화 시작 직후 AI가 먼저 말을 거는 데 쓰는 트리거. 실제 대화 로그에는 남기지 않고
+// (메시지 목록엔 이걸 보내서 받은 응답만 assistant 메시지로 추가한다) 세션을 여는 용도로만 쓴다.
+export const OPENING_TRIGGER = "(대화를 먼저 시작하세요. 위 상황에 맞는 자연스러운 첫 인사나 첫 대사를 건네세요.)";
+
 // 문법 교정은 고정 지시문(시스템 프롬프트)과 학습자 입력(매 턴 prompt())을 분리한다 —
 // 지시문+데이터를 한 문자열로 합치면 학습자 문장에 섞인 지시문을 모델이 명령으로 착각하기
 // 쉬워진다("프롬프트 인젝션"). useLanguageModel(GRAMMAR_CORRECTION_SYSTEM_PROMPT)로 세션을
