@@ -16,6 +16,29 @@ import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 
+function OptionChip({
+  label,
+  active,
+  onToggle,
+}: {
+  label: string;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={`rounded-full border-2 px-4 py-2 text-sm font-bold sm:text-base ${
+        active ? "border-primary bg-primary/10 text-primary" : "border-gray-100 bg-white text-gray-400"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function WritingPage() {
   const model = useLanguageModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
@@ -107,7 +130,35 @@ function WritingPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <h2 className="text-xl text-primary">✏️ 작문 첨삭</h2>
+      <div className="flex flex-wrap gap-2">
+        <OptionChip
+          label="한자 변환 제안 받지 않기"
+          active={keepKanaChoice}
+          onToggle={() => setKeepKanaChoice((v) => !v)}
+        />
+        <OptionChip
+          label="비슷한 문장"
+          active={showSimilarSentences}
+          onToggle={() => setShowSimilarSentences((v) => !v)}
+        />
+        <OptionChip
+          label="응용 표현"
+          active={showAppliedExpressions}
+          onToggle={() => setShowAppliedExpressions((v) => !v)}
+        />
+        <OptionChip
+          label="더 정중한 표현"
+          active={showMorePolite}
+          onToggle={() => setShowMorePolite((v) => !v)}
+        />
+        <OptionChip
+          label="더 친근한 표현"
+          active={showMoreCasual}
+          onToggle={() => setShowMoreCasual((v) => !v)}
+        />
+      </div>
+
+      <h2 className="mt-4 text-xl text-primary">✏️ 작문 첨삭</h2>
       <p className="mt-1 text-sm text-gray-400">일본어 문장을 쓰면 문법과 표현을 첨삭해드려요.</p>
 
       <div className="relative mt-4">
@@ -128,49 +179,6 @@ function WritingPage() {
             onSelect={japaneseInput.selectSuggestion}
           />
         )}
-      </div>
-
-      <div className="mt-2 flex flex-col gap-1 text-xs text-gray-500">
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={keepKanaChoice}
-            onChange={(e) => setKeepKanaChoice(e.target.checked)}
-          />
-          한자 변환 제안 받지 않기 (가나 표기 그대로 유지)
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={showSimilarSentences}
-            onChange={(e) => setShowSimilarSentences(e.target.checked)}
-          />
-          비슷한 문장 보기
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={showAppliedExpressions}
-            onChange={(e) => setShowAppliedExpressions(e.target.checked)}
-          />
-          응용 표현 보기
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={showMorePolite}
-            onChange={(e) => setShowMorePolite(e.target.checked)}
-          />
-          더 정중한 표현 보기
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={showMoreCasual}
-            onChange={(e) => setShowMoreCasual(e.target.checked)}
-          />
-          더 친근한 표현 보기
-        </label>
       </div>
 
       {model.downloadProgress !== null && (
