@@ -10,6 +10,7 @@ import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useLanguageModel } from "../hooks/useLanguageModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { useUserProfileStore } from "../stores/userProfileStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import {
   LEVELS,
@@ -35,10 +36,21 @@ function ScenarioPicker({
 }) {
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [level, setLevel] = useState<Level | null>(null);
+  const name = useUserProfileStore((s) => s.name);
+  const setName = useUserProfileStore((s) => s.setName);
 
   return (
     <div className="p-4 sm:p-6">
-      <h3 className="text-sm text-gray-400">시나리오 선택</h3>
+      <h3 className="text-sm text-gray-400">이름 (선택)</h3>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="이름을 입력하면 AI가 자기소개 등에서 불러줘요"
+        className="mt-2 w-full rounded-2xl border-2 border-gray-100 px-4 py-3 text-lg shadow-sm focus:border-primary/40 focus:outline-none"
+      />
+
+      <h3 className="mt-6 text-sm text-gray-400">시나리오 선택</h3>
       <div className="mt-2 grid grid-cols-2 gap-3">
         {SCENARIOS.map((s) => (
           <button
@@ -89,10 +101,11 @@ function ConversationPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [showFurigana, setShowFurigana] = useState(true);
   const [showCorrection, setShowCorrection] = useState(false);
+  const userName = useUserProfileStore((s) => s.name);
 
   const systemPrompt = useMemo(
-    () => (scenario && level ? buildSystemPrompt(scenario, level) : ""),
-    [scenario, level]
+    () => (scenario && level ? buildSystemPrompt(scenario, level, userName || undefined) : ""),
+    [scenario, level, userName]
   );
   const chatModel = useLanguageModel(systemPrompt);
   const correctionModel = useLanguageModel("");

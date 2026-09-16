@@ -24,11 +24,14 @@ export const LEVELS: Level[] = [
   { id: "advanced", label: "고급", guide: "JLPT N1 수준을 포함한 폭넓은 어휘와 관용 표현" },
 ];
 
-export function buildSystemPrompt(scenario: Scenario, level: Level): string {
+export function buildSystemPrompt(scenario: Scenario, level: Level, userName?: string): string {
   return [
     "당신은 일본어 회화 연습 상대 역할을 맡은 AI입니다.",
     `상황: ${scenario.situation}.`,
     `학습자 수준: ${level.guide}. 이 수준에 맞는 어휘와 문장 길이를 사용하세요.`,
+    ...(userName
+      ? [`학습자의 이름은 "${userName}"입니다. 자기소개처럼 이름이 자연스럽게 필요한 상황에서만 이름을 사용하세요.`]
+      : []),
     "반드시 일본어로만 응답하고, 매 응답은 2~3문장 이내로 짧게 답하세요.",
     "한국어를 섞지 말고, 상황에 자연스러운 구어체로 대화를 이어가세요.",
   ].join(" ");
