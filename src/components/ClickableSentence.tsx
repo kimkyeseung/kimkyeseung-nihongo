@@ -17,12 +17,16 @@ function ClickableSentence({
   onWordClick,
   onKanjiClick,
   excludeWord,
+  showFurigana = true,
 }: {
   text: string;
   onWordClick: (word: WordEntry) => void;
   onKanjiClick?: (kanji: KanjiEntry) => void;
   /** 지금 보고 있는 단어와 같은 표제어는 예문 안에서 또 눌러도 의미가 없으니 클릭 불가로 둔다. */
   excludeWord?: string;
+  /** false면 후리가나 없이 원문만 보여준다(클릭 가능 여부는 그대로) — 회화 페이지의
+      "후리가나 표시" 토글처럼 furigana on/off가 필요한 화면에서 쓴다. */
+  showFurigana?: boolean;
 }) {
   const segments = useMemo(() => segmentSentenceIntoWords(text), [text]);
 
@@ -30,14 +34,15 @@ function ClickableSentence({
     <>
       {segments.map((seg, i) => {
         if (seg.word) {
-          const content = seg.word.furigana
-            ? seg.word.furigana.map((f, j) => (
-                <ruby key={j}>
-                  {f.ruby}
-                  <rt>{f.rt}</rt>
-                </ruby>
-              ))
-            : seg.text;
+          const content =
+            showFurigana && seg.word.furigana
+              ? seg.word.furigana.map((f, j) => (
+                  <ruby key={j}>
+                    {f.ruby}
+                    <rt>{f.rt}</rt>
+                  </ruby>
+                ))
+              : seg.text;
 
           if (seg.word.word === excludeWord) {
             return (

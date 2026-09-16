@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
-import FuriganaText from "../components/FuriganaText";
+import ClickableSentence from "../components/ClickableSentence";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
+import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
+import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useUserProfileStore } from "../stores/userProfileStore";
 import { useConversationSessionStore } from "../stores/conversationSessionStore";
 import { LEVELS, SCENARIOS, type Level, type Scenario } from "../lib/conversationPrompts";
+import type { WordEntry } from "../types/dictionary";
+import type { KanjiEntry } from "../types/kanji";
 
 function ScenarioPicker({
   onStart,
@@ -94,6 +98,8 @@ function ConversationPage() {
 
   const japaneseInput = useJapaneseInput<HTMLInputElement>();
   const listEndRef = useRef<HTMLDivElement>(null);
+  const [selectedWord, setSelectedWord] = useState<WordEntry | null>(null);
+  const [selectedKanji, setSelectedKanji] = useState<KanjiEntry | null>(null);
 
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -199,8 +205,15 @@ function ConversationPage() {
               >
                 {m.role === "assistant" && m.text === "" && isStreaming ? (
                   <LoadingMascot />
+                ) : m.role === "assistant" ? (
+                  <ClickableSentence
+                    text={m.text}
+                    showFurigana={showFurigana}
+                    onWordClick={setSelectedWord}
+                    onKanjiClick={setSelectedKanji}
+                  />
                 ) : (
-                  <FuriganaText text={m.text} show={m.role === "assistant" && showFurigana} />
+                  m.text
                 )}
               </motion.div>
               {m.role === "user" && (m.correction || m.correctionLoading) && (
@@ -241,6 +254,9 @@ function ConversationPage() {
           전송
         </button>
       </div>
+
+      <WordMeaningDialog word={selectedWord} onClose={() => setSelectedWord(null)} />
+      <KanjiDetailSheet entry={selectedKanji} onClose={() => setSelectedKanji(null)} />
     </div>
   );
 }
