@@ -13,9 +13,10 @@ import { useGamificationStore } from "../stores/gamificationStore";
 import { useUserProfileStore } from "../stores/userProfileStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import {
+  GRAMMAR_CORRECTION_SYSTEM_PROMPT,
   LEVELS,
   SCENARIOS,
-  buildCorrectionPrompt,
+  buildGrammarCorrectionUserPrompt,
   buildSystemPrompt,
   type Level,
   type Scenario,
@@ -108,7 +109,7 @@ function ConversationPage() {
     [scenario, level, userName]
   );
   const chatModel = useLanguageModel(systemPrompt);
-  const correctionModel = useLanguageModel("");
+  const correctionModel = useLanguageModel(GRAMMAR_CORRECTION_SYSTEM_PROMPT);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   const listEndRef = useRef<HTMLDivElement>(null);
@@ -156,7 +157,7 @@ function ConversationPage() {
     if (showCorrection) {
       setMessages((m) => m.map((msg) => (msg.id === userMsgId ? { ...msg, correctionLoading: true } : msg)));
       try {
-        const correction = await correctionModel.prompt(buildCorrectionPrompt(userText));
+        const correction = await correctionModel.prompt(buildGrammarCorrectionUserPrompt(userText));
         setMessages((m) =>
           m.map((msg) => (msg.id === userMsgId ? { ...msg, correction, correctionLoading: false } : msg))
         );

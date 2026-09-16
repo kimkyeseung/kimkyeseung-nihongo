@@ -8,7 +8,8 @@ import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useLanguageModel } from "../hooks/useLanguageModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import {
-  buildWritingCorrectionPrompt,
+  buildWritingCorrectionSystemPrompt,
+  buildWritingCorrectionUserPrompt,
   parseCorrectionResponse,
   type WritingCorrectionOptions,
 } from "../lib/writingCorrection";
@@ -40,7 +41,6 @@ function OptionChip({
 }
 
 function WritingPage() {
-  const model = useLanguageModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const celebrate = useConfettiStore((s) => s.celebrate);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
@@ -49,13 +49,30 @@ function WritingPage() {
   const [rawResponse, setRawResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [shake, setShake] = useState(false);
-  // "한자 변환 제안" 칩은 체크 시 켜지는 긍정형 옵션이라, buildWritingCorrectionPrompt가 받는
+  // "한자 변환 제안" 칩은 체크 시 켜지는 긍정형 옵션이라, WritingCorrectionOptions가 받는
   // keepKanaChoice(부정형: 한자 변환 제안을 "받지 않기")로 넘길 때는 반전시켜야 한다.
   const [showKanjiSuggestions, setShowKanjiSuggestions] = useState(true);
   const [showSimilarSentences, setShowSimilarSentences] = useState(true);
   const [showAppliedExpressions, setShowAppliedExpressions] = useState(true);
   const [showMorePolite, setShowMorePolite] = useState(true);
   const [showMoreCasual, setShowMoreCasual] = useState(true);
+
+  // 고정 지시문(옵션에 따라 달라짐)은 세션 생성 시점의 시스템 프롬프트로, 학습자가 매번
+  // 쓰는 문장은 별도의 prompt() 호출로 분리한다 — 문장에 지시문이 섞여 들어와도 명령으로
+  // 착각하지 않도록 하기 위함(프롬프트 인젝션 방지, writingCorrection.ts 주석 참고).
+  // 옵션 체크박스를 바꾸면 시스템 프롬프트가 바뀌어 useLanguageModel이 세션을 새로 만든다.
+  const options: WritingCorrectionOptions = useMemo(
+    () => ({
+      keepKanaChoice: !showKanjiSuggestions,
+      showSimilarSentences,
+      showAppliedExpressions,
+      showMorePolite,
+      showMoreCasual,
+    }),
+    [showKanjiSuggestions, showSimilarSentences, showAppliedExpressions, showMorePolite, showMoreCasual]
+  );
+  const systemPrompt = useMemo(() => buildWritingCorrectionSystemPrompt(options), [options]);
+  const model = useLanguageModel(systemPrompt);
 
   const result = useMemo(
     () => (submittedText ? parseCorrectionResponse(rawResponse, submittedText) : null),
@@ -69,16 +86,9 @@ function WritingPage() {
     setRawResponse("");
     setIsLoading(true);
     recordProgress(XP_REWARDS.writingCorrection);
-    const options: WritingCorrectionOptions = {
-      keepKanaChoice: !showKanjiSuggestions,
-      showSimilarSentences,
-      showAppliedExpressions,
-      showMorePolite,
-      showMoreCasual,
-    };
     try {
       let acc = "";
-      for await (const chunk of model.promptStreaming(buildWritingCorrectionPrompt(text, options))) {
+      for await (const chunk of model.promptStreaming(buildWritingCorrectionUserPrompt(text))) {
         acc += chunk;
         const snapshot = acc;
         setRawResponse(snapshot);
@@ -97,19 +107,7 @@ function WritingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [
-    japaneseInput.value,
-    isLoading,
-    model,
-    showKanjiSuggestions,
-    showSimilarSentences,
-    showAppliedExpressions,
-    showMorePolite,
-    showMoreCasual,
-    recordProgress,
-    celebrate,
-    reportError,
-  ]);
+  }, [japaneseInput.value, isLoading, model, recordProgress, celebrate, reportError]);
 
   function handleReset() {
     japaneseInput.setValue("");
