@@ -49,11 +49,13 @@ function WritingPage() {
   const [rawResponse, setRawResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [shake, setShake] = useState(false);
-  const [keepKanaChoice, setKeepKanaChoice] = useState(false);
-  const [showSimilarSentences, setShowSimilarSentences] = useState(false);
-  const [showAppliedExpressions, setShowAppliedExpressions] = useState(false);
-  const [showMorePolite, setShowMorePolite] = useState(false);
-  const [showMoreCasual, setShowMoreCasual] = useState(false);
+  // "한자 변환 제안" 칩은 체크 시 켜지는 긍정형 옵션이라, buildWritingCorrectionPrompt가 받는
+  // keepKanaChoice(부정형: 한자 변환 제안을 "받지 않기")로 넘길 때는 반전시켜야 한다.
+  const [showKanjiSuggestions, setShowKanjiSuggestions] = useState(true);
+  const [showSimilarSentences, setShowSimilarSentences] = useState(true);
+  const [showAppliedExpressions, setShowAppliedExpressions] = useState(true);
+  const [showMorePolite, setShowMorePolite] = useState(true);
+  const [showMoreCasual, setShowMoreCasual] = useState(true);
 
   const result = useMemo(
     () => (submittedText ? parseCorrectionResponse(rawResponse, submittedText) : null),
@@ -68,7 +70,7 @@ function WritingPage() {
     setIsLoading(true);
     recordProgress(XP_REWARDS.writingCorrection);
     const options: WritingCorrectionOptions = {
-      keepKanaChoice,
+      keepKanaChoice: !showKanjiSuggestions,
       showSimilarSentences,
       showAppliedExpressions,
       showMorePolite,
@@ -99,7 +101,7 @@ function WritingPage() {
     japaneseInput.value,
     isLoading,
     model,
-    keepKanaChoice,
+    showKanjiSuggestions,
     showSimilarSentences,
     showAppliedExpressions,
     showMorePolite,
@@ -132,9 +134,9 @@ function WritingPage() {
     <div className="p-4 sm:p-6">
       <div className="flex flex-wrap gap-2">
         <OptionChip
-          label="한자 변환 제안 받지 않기"
-          active={keepKanaChoice}
-          onToggle={() => setKeepKanaChoice((v) => !v)}
+          label="한자 변환 제안"
+          active={showKanjiSuggestions}
+          onToggle={() => setShowKanjiSuggestions((v) => !v)}
         />
         <OptionChip
           label="비슷한 문장"
