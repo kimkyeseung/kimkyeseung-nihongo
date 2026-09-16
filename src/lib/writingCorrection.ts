@@ -1,4 +1,4 @@
-export function buildWritingCorrectionPrompt(text: string): string {
+export function buildWritingCorrectionPrompt(text: string, keepKanaChoice = false): string {
   return [
     "당신은 일본어 작문 첨삭 선생님입니다. 학습자가 쓴 아래 일본어 문장을 첨삭하세요.",
     "다른 설명 없이 반드시 아래 형식 그대로 답하세요:",
@@ -8,6 +8,13 @@ export function buildWritingCorrectionPrompt(text: string): string {
     "(반말/정중체/격식체 등 문장의 격식 수준을 한국어로 짧게 판단)",
     "### 설명",
     '(문법 오류나 어색한 표현이 있으면 한국어로 1~3문장 설명. 없으면 "자연스러운 문장입니다."라고만 적으세요.)',
+    ...(keepKanaChoice
+      ? [
+          "",
+          "학습자가 히라가나로 쓴 단어를 한자로 바꾸는 등, 문법과 무관하게 한자/가나 표기만 바꾸는 제안은 하지 마세요.",
+          "실제 문법 오류나 부자연스러운 표현이 아니라면 학습자가 선택한 한자/가나 표기를 그대로 유지하세요.",
+        ]
+      : []),
     "",
     `문장: ${text}`,
   ].join("\n");

@@ -22,6 +22,7 @@ function WritingPage() {
   const [rawResponse, setRawResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [shake, setShake] = useState(false);
+  const [keepKanaChoice, setKeepKanaChoice] = useState(false);
 
   const result = useMemo(
     () => (submittedText ? parseCorrectionResponse(rawResponse, submittedText) : null),
@@ -37,7 +38,7 @@ function WritingPage() {
     recordProgress(XP_REWARDS.writingCorrection);
     try {
       let acc = "";
-      for await (const chunk of model.promptStreaming(buildWritingCorrectionPrompt(text))) {
+      for await (const chunk of model.promptStreaming(buildWritingCorrectionPrompt(text, keepKanaChoice))) {
         acc += chunk;
         const snapshot = acc;
         setRawResponse(snapshot);
@@ -56,7 +57,7 @@ function WritingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [japaneseInput.value, isLoading, model, recordProgress, celebrate, reportError]);
+  }, [japaneseInput.value, isLoading, model, keepKanaChoice, recordProgress, celebrate, reportError]);
 
   function handleReset() {
     japaneseInput.setValue("");
@@ -101,6 +102,15 @@ function WritingPage() {
           />
         )}
       </div>
+
+      <label className="mt-2 flex items-center gap-1 text-xs text-gray-500">
+        <input
+          type="checkbox"
+          checked={keepKanaChoice}
+          onChange={(e) => setKeepKanaChoice(e.target.checked)}
+        />
+        한자 변환 제안 받지 않기 (가나 표기 그대로 유지)
+      </label>
 
       {model.downloadProgress !== null && (
         <div className="mt-2 text-xs text-gray-400">
