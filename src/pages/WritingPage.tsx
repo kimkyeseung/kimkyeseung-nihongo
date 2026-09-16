@@ -7,7 +7,11 @@ import WritingDiff from "../components/WritingDiff";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useLanguageModel } from "../hooks/useLanguageModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
-import { buildWritingCorrectionPrompt, parseCorrectionResponse } from "../lib/writingCorrection";
+import {
+  buildWritingCorrectionPrompt,
+  parseCorrectionResponse,
+  type WritingCorrectionOptions,
+} from "../lib/writingCorrection";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -23,6 +27,10 @@ function WritingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [shake, setShake] = useState(false);
   const [keepKanaChoice, setKeepKanaChoice] = useState(false);
+  const [showSimilarSentences, setShowSimilarSentences] = useState(false);
+  const [showAppliedExpressions, setShowAppliedExpressions] = useState(false);
+  const [showMorePolite, setShowMorePolite] = useState(false);
+  const [showMoreCasual, setShowMoreCasual] = useState(false);
 
   const result = useMemo(
     () => (submittedText ? parseCorrectionResponse(rawResponse, submittedText) : null),
@@ -36,9 +44,16 @@ function WritingPage() {
     setRawResponse("");
     setIsLoading(true);
     recordProgress(XP_REWARDS.writingCorrection);
+    const options: WritingCorrectionOptions = {
+      keepKanaChoice,
+      showSimilarSentences,
+      showAppliedExpressions,
+      showMorePolite,
+      showMoreCasual,
+    };
     try {
       let acc = "";
-      for await (const chunk of model.promptStreaming(buildWritingCorrectionPrompt(text, keepKanaChoice))) {
+      for await (const chunk of model.promptStreaming(buildWritingCorrectionPrompt(text, options))) {
         acc += chunk;
         const snapshot = acc;
         setRawResponse(snapshot);
@@ -57,7 +72,19 @@ function WritingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [japaneseInput.value, isLoading, model, keepKanaChoice, recordProgress, celebrate, reportError]);
+  }, [
+    japaneseInput.value,
+    isLoading,
+    model,
+    keepKanaChoice,
+    showSimilarSentences,
+    showAppliedExpressions,
+    showMorePolite,
+    showMoreCasual,
+    recordProgress,
+    celebrate,
+    reportError,
+  ]);
 
   function handleReset() {
     japaneseInput.setValue("");
@@ -103,14 +130,48 @@ function WritingPage() {
         )}
       </div>
 
-      <label className="mt-2 flex items-center gap-1 text-xs text-gray-500">
-        <input
-          type="checkbox"
-          checked={keepKanaChoice}
-          onChange={(e) => setKeepKanaChoice(e.target.checked)}
-        />
-        한자 변환 제안 받지 않기 (가나 표기 그대로 유지)
-      </label>
+      <div className="mt-2 flex flex-col gap-1 text-xs text-gray-500">
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={keepKanaChoice}
+            onChange={(e) => setKeepKanaChoice(e.target.checked)}
+          />
+          한자 변환 제안 받지 않기 (가나 표기 그대로 유지)
+        </label>
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={showSimilarSentences}
+            onChange={(e) => setShowSimilarSentences(e.target.checked)}
+          />
+          비슷한 문장 보기
+        </label>
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={showAppliedExpressions}
+            onChange={(e) => setShowAppliedExpressions(e.target.checked)}
+          />
+          응용 표현 보기
+        </label>
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={showMorePolite}
+            onChange={(e) => setShowMorePolite(e.target.checked)}
+          />
+          더 정중한 표현 보기
+        </label>
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={showMoreCasual}
+            onChange={(e) => setShowMoreCasual(e.target.checked)}
+          />
+          더 친근한 표현 보기
+        </label>
+      </div>
 
       {model.downloadProgress !== null && (
         <div className="mt-2 text-xs text-gray-400">
@@ -174,6 +235,46 @@ function WritingPage() {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {result.similarSentences.length > 0 && (
+            <div className="mt-3 rounded-xl bg-primary/5 p-3">
+              <p className="text-xs font-bold text-primary">📚 비슷한 문장</p>
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {result.similarSentences.map((sentence, i) => (
+                  <li key={i} className="font-ja text-sm text-gray-600">
+                    {sentence}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.appliedExpressions.length > 0 && (
+            <div className="mt-3 rounded-xl bg-accent/5 p-3">
+              <p className="text-xs font-bold text-accent">🔧 응용 표현</p>
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {result.appliedExpressions.map((expr, i) => (
+                  <li key={i} className="font-ja text-sm text-gray-600">
+                    {expr}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.morePolite && (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3">
+              <p className="text-xs font-bold text-gray-500">🎩 더 정중한 표현</p>
+              <p className="mt-2 font-ja text-sm text-gray-600">{result.morePolite}</p>
+            </div>
+          )}
+
+          {result.moreCasual && (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3">
+              <p className="text-xs font-bold text-gray-500">😊 더 친근한 표현</p>
+              <p className="mt-2 font-ja text-sm text-gray-600">{result.moreCasual}</p>
             </div>
           )}
         </div>
