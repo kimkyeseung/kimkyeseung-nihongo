@@ -24,11 +24,14 @@ Chrome Canary의 온디바이스 AI(Prompt API, `window.LanguageModel`)를 활�
 - 동사 て형 등 규칙 기반 활용형은 LLM이 아니라 직접 구현한 변환 함수로 계산한다.
 - `window.LanguageModel` 사용 전 반드시 `'LanguageModel' in window`로 가드하고,
   미지원 시 안내 화면을 보여준다.
-- LLM 세션은 커스텀 훅(`useLanguageModel`)으로 생성/재사용/`destroy()`를 관리하고,
-  불필요한 세션은 즉시 destroy한다. 스트리밍이 가능하면 `promptStreaming()`을 우선 사용한다.
+- LLM 세션은 커스텀 훅으로 생성/재사용/`destroy()`를 관리하고, 불필요한 세션은 즉시
+  destroy한다. 스트리밍이 가능하면 `promptStreaming()`을 우선 사용한다.
+  **페이지는 `useAiModel`만 쓴다** — 그 아래에서 Chrome 내장 Prompt API(`useLanguageModel`)와
+  Gemma 4(`useGemmaSession`)를 갈아끼운다. 페이지에서 둘 중 하나를 직접 부르지 말 것.
 - 외부 데이터셋(JMDict, KANJIDIC2, KanjiVG, Tatoeba)은 전부 CC BY-SA/CC-BY 라이선스이므로
   정보 페이지와 README에 출처를 표기해야 한다.
 - 대용량 사전 데이터는 IndexedDB, 가벼운 사용자 상태(단어장, 스트릭/XP)는 localStorage에 저장한다.
+  GB 단위 바이너리(Gemma 모델 파일)만 예외적으로 OPFS에 둔다 — "대문/Gemma 4" 노트 참고.
 
 ## 타입 컨벤션
 - `interface`보다 필요한 곳엔 명시적 타입 사용 (예: `WordEntry`, `KanjiEntry`)
@@ -46,19 +49,24 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      KanjiStrokeOrder, KanjiDetailSheet, WordbookCard, FuriganaText, WritingDiff,
                      BadgeSheet, BadgeWatcher(뱃지 신규 획득 감지), Confetti, LoadingMascot,
                      PromptApiUnsupportedNotice(LLM 페이지 공용 안내 화면),
-                     PromptApiOnboardingDialog(첫 접속 시 1회 안내 모달)
+                     PromptApiOnboardingDialog(첫 접속 시 1회 안내 모달),
+                     ProgressBar(공용 진행률 바) + AssetLoadingBar(대문 학습 데이터 프리로드) +
+                     GemmaModelCard(대문 Gemma 4 모델 다운로드/엔진 선택)
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
-                     + AboutPage(정보/출처, 하단 네비게이션 밖)
-src/hooks/         useJapaneseSpeech, useDebouncedValue, useLanguageModel 완료
+                     + AboutPage(정보/출처, 하단 네비게이션 밖) + HomePage(대문 `/`)
+src/hooks/         useJapaneseSpeech, useDebouncedValue, useLanguageModel,
+                     useAssetPreload, useGemmaModel 완료
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, srs.ts) +
                      furigana.ts(LLM 응답에 사전 후리가나 오버레이) + diff.ts(문자 단위 LCS diff) +
                      conversationPrompts.ts + writingCorrection.ts(첨삭 프롬프트/응답 파싱) +
-                     xpRewards.ts(행동별 XP 값) + badges.ts(뱃지 정의)
+                     xpRewards.ts(행동별 XP 값) + badges.ts(뱃지 정의) +
+                     preloadAssets.ts(대문 프리로드) + gemmaModel.ts/gemmaEngine.ts(Gemma 4)
 src/stores/        Zustand 스토어:
-                     kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore
-                     (전부 localStorage persist) · confettiStore(휘발성, persist 안 함)
+                     kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
+                     aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json) — 완료
-src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입 등 — 완료
+public/            favicon.svg, icons.svg, hero.png(대문 그림 1536×1024)
+src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입, opfs.ts(move 선언) — 완료
 scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립트 (완료, scripts/data/README.md 참고)
 ```
 
@@ -93,6 +101,62 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   wordbookCount/kanjiLearnedCount)로 표현할 수 있는지 먼저 고민할 것.
 - 상단바(`Layout.tsx`)의 `GamificationBar`를 탭하면 `BadgeSheet`가 열린다 — 스펙의 "상단바에
   표시"를 스트릭/XP 숫자로, 뱃지는 탭해서 보는 상세 뷰로 구현했다.
+
+## 대문 페이지(`/`) 구현 노트
+- `/`는 예전엔 `/gojuon`으로 리다이렉트했지만 지금은 `HomePage`(대문)다. 헤더·하단 네비게이션이
+  없는 전체 화면이라 **Layout 밖**에 두고, 나머지 라우트는 path 없는 레이아웃 라우트로 감쌌다
+  (`router.tsx`). 대문으로 돌아가는 길은 `Layout.tsx`의 헤더 로고 링크뿐 — `/about`과 같은
+  "스펙에 없는 페이지는 하단 네비에 넣지 않는다" 규칙을 따른다.
+- HomePage만 `lazy()`가 아니라 정적 import다. 첫 화면이라 청크 왕복을 한 번 더 하면 손해고,
+  이 페이지가 쓰는 큰 데이터는 전부 동적 import 뒤에 있어서 진입 청크는 그대로 가볍다
+  (빌드 기준 461KB/gzip 148KB — 대문 추가 전 445KB에서 거의 안 늘었다).
+- **히어로 이미지**: `public/hero.png`의 배경색이 페이지 배경과 **정확히 같은 `#faf4e4`**라서
+  테두리·둥근 모서리 없이 여백 바깥까지 꽉 채워도 경계가 안 보인다. 그림을 바꾸면 이 색부터
+  맞출 것 — 안 맞으면 네모난 경계가 그대로 드러난다.
+- **학습 데이터 프리로드**(`preloadAssets.ts`): 사용자가 소개 글을 읽는 동안 kanji/dictionary/
+  kanjivg 청크를 순서대로 미리 당겨와 `AssetLoadingBar`에 진행률을 보여준다. 진행률 가중치는
+  항목 수가 아니라 **실제 파일 크기(바이트)**다 — 1/n로 나누면 2.9MB짜리 사전에서 바가 한참
+  멈춘 것처럼 보인다. 한 항목이 실패해도 나머지는 계속 받고 바는 끝까지 차오른다(실패는 ⚠️로
+  따로 표시). 대문 그림은 학습 데이터가 아니므로 이 목록에 넣지 않는다.
+- 로딩이 안 끝나도 CTA를 눌러 앱으로 넘어갈 수 있다 — 못 받은 데이터는 그 페이지에서 평소대로
+  다시 받으므로 막을 이유가 없다.
+
+## Gemma 4 엔진 구현 노트
+- **전제**: Chrome Prompt API는 모델을 고를 수 없다. `LanguageModel.create()`에 모델 선택
+  파라미터가 없고 브라우저가 들고 있는 모델을 쓴다. 그래서 "Prompt API의 모델을 Gemma로
+  교체"는 불가능하고, **WebGPU 위에서 도는 별도 엔진(LiteRT-LM)을 두 번째 선택지로 추가**하는
+  구조로 만들었다. 이 구분을 잊고 Prompt API에 모델 옵션을 넘기려 하지 말 것.
+- `@litert-lm/core`(Google 공식, `google-ai-edge/LiteRT-LM`)를 쓴다. 모델은 Hugging Face의
+  `litert-community/gemma-4-E2B-it-litert-lm` / `gemma-4-E2B-it-web.litertlm`,
+  **정확히 2,008,432,640 바이트**. 공개 파일이라 토큰이 필요 없고 CORS도 열려 있다(확인함).
+- 구성: 모델 다운로드 + OPFS 캐시(`gemmaModel.ts`), 엔진 어댑터(`gemmaEngine.ts`), 대문 카드
+  UI(`GemmaModelCard.tsx`), 엔진 선택 스토어(`aiEngineStore.ts`), 세션 훅(`useGemmaSession.ts`),
+  그리고 두 엔진을 갈아끼우는 창구(`useAiModel.ts`).
+- `useAiModel`은 훅 규칙상 `useLanguageModel`과 `useGemmaSession`을 **항상 둘 다 호출**하고
+  결과만 골라서 돌려준다. 쓰지 않는 쪽은 비용이 없다 — Prompt API는 첫 `prompt()` 때 지연
+  생성이고, Gemma는 `enabled=false`면 OPFS 확인조차 하지 않는다. 조건부로 훅을 부르지 말 것.
+- **Gemma를 골랐는데 못 쓰는 경우**(모델 없음 / WebGPU 없음)는 `GemmaEngineNotice`로 안내한다.
+  `PromptApiUnsupportedNotice`를 재사용하면 "브라우저가 Prompt API를 지원하지 않는다"는 엉뚱한
+  안내가 되므로 따로 뒀다 — 이건 "LLM 화면은 안내 컴포넌트를 재사용할 것" 규칙의 예외다.
+  대신 되돌아갈 길("Chrome 내장 AI로 전환" 버튼)을 항상 같이 준다.
+- **아직 실제 추론은 검증하지 못했다**: 2GB 다운로드 + WebGPU 실행이 필요해서, 지금까지 확인한
+  건 다운로드 배관(진행률·OPFS 기록·취소 정리), 엔진 전환 UI, Prompt API 경로 무회귀까지다.
+  모델을 실제로 받은 뒤 `createGemmaSession()` 응답 품질과 `maxNumTokens: 4096` 설정이
+  회화 맥락에 충분한지 확인할 것.
+- 진행률은 LiteRT-LM이 제공하지 않는다(`Engine.create`에 progress 콜백 없음). 그래서
+  `downloadModel()`이 직접 `fetch` 응답 스트림의 바이트를 세고, 받은 조각은 **메모리에 쌓지 않고
+  바로 OPFS로 흘려보낸다** — 2GB를 통째로 들고 있으면 탭이 죽는다.
+- 받다 만 파일은 `*.part`로 쓰다가 **다 받은 뒤에만** `move()`로 최종 이름을 붙인다. 읽을 때도
+  크기가 정확히 맞는지 확인하고 안 맞으면 지운다 — 끊긴 다운로드가 완성본 행세를 못 하게.
+  (`FileSystemFileHandle.move()`는 TS 기본 타입에 없어서 `src/types/opfs.ts`에 선언해뒀다.)
+- 엔진은 앱 전체에서 **하나만** 둔다(모듈 레벨 Promise). 모델 2GB를 GPU에 올리는 비용 때문이고,
+  시나리오별 세션은 그 엔진에서 파생되는 `Conversation`으로 만든다(만들고 지우는 비용이 싸다).
+- `@litert-lm/core`는 WASM 런타임을 기본적으로 **jsDelivr CDN**에서 받는다(변종 하나 21~34MB).
+  자체 호스팅하려면 `node_modules/@litert-lm/core/wasm/`(4개 합쳐 107MB)을 public/에 복사하고
+  `gemmaEngine.ts`의 `LITERT_WASM_PATH`에 경로를 넣으면 된다. 저장소 무게 vs 외부 CDN 의존의
+  트레이드오프라 아직 CDN 기본값을 쓰고 있다.
+- 2GB짜리라 **절대 자동으로 받지 않는다** — 대문에서 버튼을 누르는 것이 곧 동의다. 새로 큰
+  애셋을 받는 기능을 추가할 때도 이 규칙을 따를 것.
 
 ## 회화 페이지 구현 노트
 - `useLanguageModel(systemPrompt)` 훅이 `window.LanguageModel` 전체를 감싼다: 마운트 시

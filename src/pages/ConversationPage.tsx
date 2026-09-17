@@ -4,8 +4,9 @@ import { motion } from "framer-motion";
 import FuriganaText from "../components/FuriganaText";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
+import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
-import { useLanguageModel } from "../hooks/useLanguageModel";
+import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -92,8 +93,8 @@ function ConversationPage() {
     () => (scenario && level ? buildSystemPrompt(scenario, level) : ""),
     [scenario, level]
   );
-  const chatModel = useLanguageModel(systemPrompt);
-  const correctionModel = useLanguageModel("");
+  const chatModel = useAiModel(systemPrompt);
+  const correctionModel = useAiModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   const listEndRef = useRef<HTMLDivElement>(null);
@@ -160,7 +161,21 @@ function ConversationPage() {
   }
 
   if (chatModel.status === "checking") {
-    return <p className="p-6 text-gray-400">Prompt API 지원 여부 확인 중...</p>;
+    return <p className="p-6 text-gray-400">AI 준비 상태 확인 중...</p>;
+  }
+
+  // Gemma 4를 고른 상태에서 못 쓰는 경우는 원인(모델 없음 / WebGPU 없음)도 해결법도 달라서
+  // Prompt API 안내와 다른 화면을 보여준다.
+  if (
+    chatModel.engine === "gemma4" &&
+    (chatModel.status === "model-missing" || chatModel.status === "unsupported")
+  ) {
+    return (
+      <div>
+        <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
+        <GemmaEngineNotice reason={chatModel.status} feature="회화 연습" />
+      </div>
+    );
   }
 
   if (chatModel.status === "unsupported") {
@@ -219,6 +234,13 @@ function ConversationPage() {
           문법 교정 보기
         </label>
       </div>
+
+      {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
+      {chatModel.busyLabel && (
+        <div className="p-3">
+          <LoadingMascot label={chatModel.busyLabel} />
+        </div>
+      )}
 
       {chatModel.downloadProgress !== null && (
         <div className="p-3 text-xs text-gray-400">

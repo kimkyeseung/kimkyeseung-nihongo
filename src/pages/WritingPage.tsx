@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
+import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import WritingDiff from "../components/WritingDiff";
-import { useLanguageModel } from "../hooks/useLanguageModel";
+import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { buildWritingCorrectionPrompt, parseCorrectionResponse } from "../lib/writingCorrection";
 import { useGamificationStore } from "../stores/gamificationStore";
@@ -11,7 +12,7 @@ import { useConfettiStore } from "../stores/confettiStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 
 function WritingPage() {
-  const model = useLanguageModel("");
+  const model = useAiModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const celebrate = useConfettiStore((s) => s.celebrate);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
@@ -63,7 +64,18 @@ function WritingPage() {
   }
 
   if (model.status === "checking") {
-    return <p className="p-6 text-gray-400">Prompt API 지원 여부 확인 중...</p>;
+    return <p className="p-6 text-gray-400">AI 준비 상태 확인 중...</p>;
+  }
+
+  // Gemma 4를 고른 상태에서 못 쓰는 경우는 원인(모델 없음 / WebGPU 없음)도 해결법도 달라서
+  // Prompt API 안내와 다른 화면을 보여준다.
+  if (model.engine === "gemma4" && (model.status === "model-missing" || model.status === "unsupported")) {
+    return (
+      <div>
+        <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">✏️ 작문 첨삭</h2>
+        <GemmaEngineNotice reason={model.status} feature="작문 첨삭" />
+      </div>
+    );
   }
 
   if (model.status === "unsupported") {
@@ -87,6 +99,13 @@ function WritingPage() {
         rows={4}
         className="mt-4 w-full resize-none rounded-2xl border-2 border-gray-100 p-3 font-ja text-lg focus:border-primary/40 focus:outline-none"
       />
+
+      {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
+      {model.busyLabel && (
+        <div className="mt-2">
+          <LoadingMascot label={model.busyLabel} />
+        </div>
+      )}
 
       {model.downloadProgress !== null && (
         <div className="mt-2 text-xs text-gray-400">

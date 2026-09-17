@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import AssetLoadingBar from "../components/AssetLoadingBar";
+import GemmaModelCard from "../components/GemmaModelCard";
 import { useAssetPreload } from "../hooks/useAssetPreload";
 import { useGamificationStore } from "../stores/gamificationStore";
 
@@ -117,6 +118,8 @@ function HomePage() {
               : "먼저 시작하기 (계속 받는 중)"}
           </Link>
         </section>
+
+        <GemmaModelCard />
 
         <section>
           <h2 className="text-lg text-gray-700">무엇을 할 수 있나요</h2>
