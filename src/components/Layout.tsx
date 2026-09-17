@@ -53,10 +53,12 @@ function Layout() {
   return (
     <div className="flex h-svh flex-col">
       <header className="flex items-center justify-between gap-2 border-b-4 border-primary/20 bg-white px-4 py-3 sm:px-6 sm:py-4">
-        <div className="flex items-center gap-2">
+        {/* 대문(`/`)은 하단 네비게이션에 넣지 않고 헤더 로고를 눌러 돌아가게 한다
+            (스펙에 없는 페이지는 헤더 아이콘/링크로만 노출하는 프로젝트 규칙). */}
+        <Link to="/" className="flex items-center gap-2" aria-label="대문으로">
           <span className="text-2xl">🗻</span>
           <h1 className="text-2xl text-primary">김계승 일본어</h1>
-        </div>
+        </Link>
         <div className="flex items-center gap-2">
           <GamificationBar />
           <Link
