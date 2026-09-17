@@ -1,26 +1,79 @@
 import { useCallback, useMemo, useState } from "react";
+import GemmaEngineNotice from "../components/GemmaEngineNotice";
+import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
-import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import WritingDiff from "../components/WritingDiff";
+import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
-import { buildWritingCorrectionPrompt, parseCorrectionResponse } from "../lib/writingCorrection";
+import {
+  buildWritingCorrectionSystemPrompt,
+  buildWritingCorrectionUserPrompt,
+  parseCorrectionResponse,
+  type WritingCorrectionOptions,
+} from "../lib/writingCorrection";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 
+function OptionChip({
+  label,
+  active,
+  onToggle,
+}: {
+  label: string;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={`rounded-full border-2 px-4 py-2 text-sm font-bold sm:text-base ${
+        active ? "border-primary bg-primary/10 text-primary" : "border-gray-100 bg-white text-gray-400"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function WritingPage() {
-  const model = useAiModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const celebrate = useConfettiStore((s) => s.celebrate);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
-  const [input, setInput] = useState("");
+  const japaneseInput = useJapaneseInput<HTMLTextAreaElement>();
   const [submittedText, setSubmittedText] = useState<string | null>(null);
   const [rawResponse, setRawResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [shake, setShake] = useState(false);
+  // "한자 변환 제안" 칩은 체크 시 켜지는 긍정형 옵션이라, WritingCorrectionOptions가 받는
+  // keepKanaChoice(부정형: 한자 변환 제안을 "받지 않기")로 넘길 때는 반전시켜야 한다.
+  const [showKanjiSuggestions, setShowKanjiSuggestions] = useState(true);
+  const [showSimilarSentences, setShowSimilarSentences] = useState(true);
+  const [showAppliedExpressions, setShowAppliedExpressions] = useState(true);
+  const [showMorePolite, setShowMorePolite] = useState(true);
+  const [showMoreCasual, setShowMoreCasual] = useState(true);
+
+  // 고정 지시문(옵션에 따라 달라짐)은 세션 생성 시점의 시스템 프롬프트로, 학습자가 매번
+  // 쓰는 문장은 별도의 prompt() 호출로 분리한다 — 문장에 지시문이 섞여 들어와도 명령으로
+  // 착각하지 않도록 하기 위함(프롬프트 인젝션 방지, writingCorrection.ts 주석 참고).
+  // 옵션 체크박스를 바꾸면 시스템 프롬프트가 바뀌어 useAiModel이 세션을 새로 만든다.
+  const options: WritingCorrectionOptions = useMemo(
+    () => ({
+      keepKanaChoice: !showKanjiSuggestions,
+      showSimilarSentences,
+      showAppliedExpressions,
+      showMorePolite,
+      showMoreCasual,
+    }),
+    [showKanjiSuggestions, showSimilarSentences, showAppliedExpressions, showMorePolite, showMoreCasual]
+  );
+  const systemPrompt = useMemo(() => buildWritingCorrectionSystemPrompt(options), [options]);
+  const model = useAiModel(systemPrompt);
 
   const result = useMemo(
     () => (submittedText ? parseCorrectionResponse(rawResponse, submittedText) : null),
@@ -28,7 +81,7 @@ function WritingPage() {
   );
 
   const handleSubmit = useCallback(async () => {
-    const text = input.trim();
+    const text = japaneseInput.value.trim();
     if (!text || isLoading) return;
     setSubmittedText(text);
     setRawResponse("");
@@ -36,7 +89,7 @@ function WritingPage() {
     recordProgress(XP_REWARDS.writingCorrection);
     try {
       let acc = "";
-      for await (const chunk of model.promptStreaming(buildWritingCorrectionPrompt(text))) {
+      for await (const chunk of model.promptStreaming(buildWritingCorrectionUserPrompt(text))) {
         acc += chunk;
         const snapshot = acc;
         setRawResponse(snapshot);
@@ -55,10 +108,10 @@ function WritingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, model, recordProgress, celebrate, reportError]);
+  }, [japaneseInput.value, isLoading, model, recordProgress, celebrate, reportError]);
 
   function handleReset() {
-    setInput("");
+    japaneseInput.setValue("");
     setSubmittedText(null);
     setRawResponse("");
   }
@@ -89,16 +142,56 @@ function WritingPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <h2 className="text-xl text-primary">✏️ 작문 첨삭</h2>
+      <div className="flex flex-wrap gap-2">
+        <OptionChip
+          label="한자 변환 제안"
+          active={showKanjiSuggestions}
+          onToggle={() => setShowKanjiSuggestions((v) => !v)}
+        />
+        <OptionChip
+          label="비슷한 문장"
+          active={showSimilarSentences}
+          onToggle={() => setShowSimilarSentences((v) => !v)}
+        />
+        <OptionChip
+          label="응용 표현"
+          active={showAppliedExpressions}
+          onToggle={() => setShowAppliedExpressions((v) => !v)}
+        />
+        <OptionChip
+          label="더 정중한 표현"
+          active={showMorePolite}
+          onToggle={() => setShowMorePolite((v) => !v)}
+        />
+        <OptionChip
+          label="더 친근한 표현"
+          active={showMoreCasual}
+          onToggle={() => setShowMoreCasual((v) => !v)}
+        />
+      </div>
+
+      <h2 className="mt-4 text-xl text-primary">✏️ 작문 첨삭</h2>
       <p className="mt-1 text-sm text-gray-400">일본어 문장을 쓰면 문법과 표현을 첨삭해드려요.</p>
 
-      <textarea
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="ここに日本語で文章を書いてください..."
-        rows={4}
-        className="mt-4 w-full resize-none rounded-2xl border-2 border-gray-100 p-3 font-ja text-lg focus:border-primary/40 focus:outline-none"
-      />
+      <div className="relative mt-4">
+        <textarea
+          ref={japaneseInput.ref}
+          defaultValue=""
+          onFocus={() => japaneseInput.setShowSuggestions(true)}
+          onBlur={() => setTimeout(() => japaneseInput.setShowSuggestions(false), 150)}
+          onKeyDown={(e) => japaneseInput.handleSuggestionKeyDown(e)}
+          placeholder="ここに日本語で文章を書いてください..."
+          rows={4}
+          className="w-full resize-none rounded-2xl border-2 border-gray-100 p-3 font-ja text-lg focus:border-primary/40 focus:outline-none"
+        />
+        {japaneseInput.showSuggestions && (
+          <JapaneseSuggestionList
+            suggestions={japaneseInput.suggestions}
+            activeIndex={japaneseInput.activeIndex}
+            onSelect={japaneseInput.selectSuggestion}
+          />
+        )}
+      </div>
 
       {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
       {model.busyLabel && (
@@ -122,7 +215,7 @@ function WritingPage() {
       <div className="mt-3 flex gap-2">
         <button
           onClick={handleSubmit}
-          disabled={!input.trim() || isLoading}
+          disabled={!japaneseInput.value.trim() || isLoading}
           className="btn-press flex-1 rounded-2xl bg-primary py-3 font-bold text-white disabled:bg-gray-200"
           style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
         >
@@ -157,6 +250,59 @@ function WritingPage() {
             <p className="mt-4 whitespace-pre-wrap rounded-xl bg-gray-50 p-3 text-sm text-gray-600">
               {result.explanation}
             </p>
+          )}
+
+          {result.grammarPoints.length > 0 && (
+            <div className="mt-3 rounded-xl bg-info/5 p-3">
+              <p className="text-xs font-bold text-info">💡 문법 포인트</p>
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {result.grammarPoints.map((point, i) => (
+                  <li key={i} className="font-ja text-sm text-gray-600">
+                    {point}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.similarSentences.length > 0 && (
+            <div className="mt-3 rounded-xl bg-primary/5 p-3">
+              <p className="text-xs font-bold text-primary">📚 비슷한 문장</p>
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {result.similarSentences.map((sentence, i) => (
+                  <li key={i} className="font-ja text-sm text-gray-600">
+                    {sentence}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.appliedExpressions.length > 0 && (
+            <div className="mt-3 rounded-xl bg-accent/5 p-3">
+              <p className="text-xs font-bold text-accent">🔧 응용 표현</p>
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {result.appliedExpressions.map((expr, i) => (
+                  <li key={i} className="font-ja text-sm text-gray-600">
+                    {expr}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.morePolite && (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3">
+              <p className="text-xs font-bold text-gray-500">🎩 더 정중한 표현</p>
+              <p className="mt-2 font-ja text-sm text-gray-600">{result.morePolite}</p>
+            </div>
+          )}
+
+          {result.moreCasual && (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3">
+              <p className="text-xs font-bold text-gray-500">😊 더 친근한 표현</p>
+              <p className="mt-2 font-ja text-sm text-gray-600">{result.moreCasual}</p>
+            </div>
           )}
         </div>
       )}

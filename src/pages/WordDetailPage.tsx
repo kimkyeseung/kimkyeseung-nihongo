@@ -11,6 +11,8 @@ import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { findWordById } from "../lib/dictionary";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import { buildExamplePrompt, parseExampleResponse, type ExampleDifficulty, type WordExample } from "../lib/wordExamples";
+import { detectAdjectiveType, getVerbTeForm } from "../lib/verbConjugation";
+import { translatePos } from "../lib/posTags";
 import { useWordbookStore } from "../stores/wordbookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -154,6 +156,8 @@ function WordDetailPage() {
   const toggleWord = useWordbookStore((s) => s.toggleWord);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const koreanReading = entry ? getKoreanReadingForWord(entry.word) : null;
+  const adjectiveType = entry ? detectAdjectiveType(entry) : null;
+  const verbTeForm = entry ? getVerbTeForm(entry) : null;
 
   function handleToggleWordbook() {
     if (!entry) return;
@@ -183,6 +187,11 @@ function WordDetailPage() {
           <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
             {entry.jlptLevel}
           </span>
+          {adjectiveType && (
+            <span className="rounded-full bg-accent/10 px-3 py-1 text-sm text-accent">
+              {adjectiveType === "i" ? "い형용사" : "な형용사"}
+            </span>
+          )}
           {entry.common && <span className="text-xs text-gray-400">자주 쓰는 단어</span>}
         </div>
 
@@ -218,7 +227,7 @@ function WordDetailPage() {
             <div className="flex flex-wrap gap-1">
               {sense.pos.map((p) => (
                 <span key={p} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                  {p}
+                  {translatePos(p)}
                 </span>
               ))}
             </div>
@@ -229,12 +238,17 @@ function WordDetailPage() {
         ))}
       </ol>
 
-      <WordExamples entry={entry} />
+      {verbTeForm && (
+        <div className="mt-4 rounded-2xl bg-gray-50 p-4">
+          <p className="text-sm text-gray-400">て형</p>
+          <p className="mt-1 font-ja text-2xl text-gray-700">{verbTeForm.kanji}</p>
+          {verbTeForm.reading && (
+            <p className="mt-0.5 font-ja text-base text-gray-400">{verbTeForm.reading}</p>
+          )}
+        </div>
+      )}
 
-      <div className="mt-4 flex flex-col gap-2 rounded-2xl bg-gray-50 p-4 text-sm text-gray-400">
-        <p>다음 기능은 구현 예정입니다:</p>
-        <p>· 동사 て형 표시</p>
-      </div>
+      <WordExamples entry={entry} />
     </div>
   );
 }

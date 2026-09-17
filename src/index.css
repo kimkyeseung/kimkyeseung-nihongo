@@ -55,3 +55,14 @@ body {
   transform: translateY(4px);
   box-shadow: 0 0 0 0 var(--btn-shadow, rgb(0 0 0 / 0.2));
 }
+
+/* 비활성 상태에서는 --btn-shadow(보통 원색 그림자)가 배경이 회색(bg-gray-200)으로 바뀐
+   뒤에도 그대로 남아있어서 부자연스러웠다 — 그림자와 글씨색도 함께 무채색으로 바꾼다. */
+.btn-press:disabled {
+  color: rgb(156 163 175); /* text-gray-400 */
+  box-shadow: 0 4px 0 0 rgb(0 0 0 / 0.15);
+  cursor: not-allowed;
+}
+.btn-press:disabled:active {
+  transform: none;
+}

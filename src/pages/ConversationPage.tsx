@@ -1,31 +1,19 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
-import FuriganaText from "../components/FuriganaText";
-import LoadingMascot from "../components/LoadingMascot";
-import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
+import ClickableSentence from "../components/ClickableSentence";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
+import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
+import KanjiDetailSheet from "../components/KanjiDetailSheet";
+import LoadingMascot from "../components/LoadingMascot";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
-import { useAiModel } from "../hooks/useAiModel";
-import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
-import { useGamificationStore } from "../stores/gamificationStore";
-import { XP_REWARDS } from "../lib/xpRewards";
-import {
-  LEVELS,
-  SCENARIOS,
-  buildCorrectionPrompt,
-  buildSystemPrompt,
-  type Level,
-  type Scenario,
-} from "../lib/conversationPrompts";
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  correction?: string;
-  correctionLoading?: boolean;
-}
+import WordMeaningDialog from "../components/WordMeaningDialog";
+import { useJapaneseInput } from "../hooks/useJapaneseInput";
+import { useUserProfileStore } from "../stores/userProfileStore";
+import { useConversationSessionStore } from "../stores/conversationSessionStore";
+import { LEVELS, SCENARIOS, type Level, type Scenario } from "../lib/conversationPrompts";
+import type { WordEntry } from "../types/dictionary";
+import type { KanjiEntry } from "../types/kanji";
 
 function ScenarioPicker({
   onStart,
@@ -34,10 +22,21 @@ function ScenarioPicker({
 }) {
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [level, setLevel] = useState<Level | null>(null);
+  const name = useUserProfileStore((s) => s.name);
+  const setName = useUserProfileStore((s) => s.setName);
 
   return (
     <div className="p-4 sm:p-6">
-      <h3 className="text-sm text-gray-400">시나리오 선택</h3>
+      <h3 className="text-sm text-gray-400">이름 (선택)</h3>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="이름을 입력하면 AI가 자기소개 등에서 불러줘요"
+        className="mt-2 w-full rounded-2xl border-2 border-gray-100 px-4 py-3 text-lg shadow-sm focus:border-primary/40 focus:outline-none"
+      />
+
+      <h3 className="mt-6 text-sm text-gray-400">시나리오 선택</h3>
       <div className="mt-2 grid grid-cols-2 gap-3">
         {SCENARIOS.map((s) => (
           <button
@@ -81,104 +80,65 @@ function ScenarioPicker({
 }
 
 function ConversationPage() {
-  const [scenario, setScenario] = useState<Scenario | null>(null);
-  const [level, setLevel] = useState<Level | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [showFurigana, setShowFurigana] = useState(true);
-  const [showCorrection, setShowCorrection] = useState(false);
+  // 실제 LLM 세션/스트리밍은 Layout에 항상 마운트되는 ConversationSessionController가
+  // 관리한다 — 이 페이지는 탭 전환으로 unmount돼도 대화가 끊기지 않도록 store를 구독하고
+  // 액션을 호출만 하는 얇은 뷰다.
+  const scenario = useConversationSessionStore((s) => s.scenario);
+  const level = useConversationSessionStore((s) => s.level);
+  const messages = useConversationSessionStore((s) => s.messages);
+  const showFurigana = useConversationSessionStore((s) => s.showFurigana);
+  const setShowFurigana = useConversationSessionStore((s) => s.setShowFurigana);
+  const showCorrection = useConversationSessionStore((s) => s.showCorrection);
+  const setShowCorrection = useConversationSessionStore((s) => s.setShowCorrection);
+  const isStreaming = useConversationSessionStore((s) => s.isStreaming);
+  const chatStatus = useConversationSessionStore((s) => s.chatStatus);
+  const chatDownloadProgress = useConversationSessionStore((s) => s.chatDownloadProgress);
+  const chatEngine = useConversationSessionStore((s) => s.chatEngine);
+  const chatBusyLabel = useConversationSessionStore((s) => s.chatBusyLabel);
+  const startConversation = useConversationSessionStore((s) => s.startConversation);
+  const resetConversation = useConversationSessionStore((s) => s.resetConversation);
+  const sendMessage = useConversationSessionStore((s) => s.sendMessage);
 
-  const systemPrompt = useMemo(
-    () => (scenario && level ? buildSystemPrompt(scenario, level) : ""),
-    [scenario, level]
-  );
-  const chatModel = useAiModel(systemPrompt);
-  const correctionModel = useAiModel("");
-  const recordProgress = useGamificationStore((s) => s.recordProgress);
-  const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
+  const japaneseInput = useJapaneseInput<HTMLInputElement>();
   const listEndRef = useRef<HTMLDivElement>(null);
+  const [selectedWord, setSelectedWord] = useState<WordEntry | null>(null);
+  const [selectedKanji, setSelectedKanji] = useState<KanjiEntry | null>(null);
 
-  const handleStart = useCallback((s: Scenario, l: Level) => {
-    setScenario(s);
-    setLevel(l);
-    setMessages([]);
-  }, []);
+  useEffect(() => {
+    listEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  const handleSend = useCallback(async () => {
-    const userText = input.trim();
+  const handleSend = useCallback(() => {
+    const userText = japaneseInput.value.trim();
     if (!userText || isStreaming) return;
-    setInput("");
-
-    const userMsgId = crypto.randomUUID();
-    const assistantMsgId = crypto.randomUUID();
-    setMessages((m) => [
-      ...m,
-      { id: userMsgId, role: "user", text: userText },
-      { id: assistantMsgId, role: "assistant", text: "" },
-    ]);
-    setIsStreaming(true);
-    recordProgress(XP_REWARDS.conversationMessage);
-
-    try {
-      let acc = "";
-      for await (const chunk of chatModel.promptStreaming(userText)) {
-        acc += chunk;
-        const snapshot = acc;
-        setMessages((m) => m.map((msg) => (msg.id === assistantMsgId ? { ...msg, text: snapshot } : msg)));
-      }
-    } catch (err) {
-      setMessages((m) =>
-        m.map((msg) =>
-          msg.id === assistantMsgId ? { ...msg, text: "(응답 생성 중 오류가 발생했습니다)" } : msg
-        )
-      );
-      reportError(err);
-    } finally {
-      setIsStreaming(false);
-      listEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-
-    if (showCorrection) {
-      setMessages((m) => m.map((msg) => (msg.id === userMsgId ? { ...msg, correctionLoading: true } : msg)));
-      try {
-        const correction = await correctionModel.prompt(buildCorrectionPrompt(userText));
-        setMessages((m) =>
-          m.map((msg) => (msg.id === userMsgId ? { ...msg, correction, correctionLoading: false } : msg))
-        );
-      } catch (err) {
-        setMessages((m) => m.map((msg) => (msg.id === userMsgId ? { ...msg, correctionLoading: false } : msg)));
-        reportError(err);
-      }
-    }
-  }, [input, isStreaming, chatModel, correctionModel, showCorrection, recordProgress, reportError]);
+    japaneseInput.setValue("");
+    sendMessage(userText);
+  }, [japaneseInput.value, japaneseInput.setValue, isStreaming, sendMessage]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (japaneseInput.handleSuggestionKeyDown(e)) return;
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
   }
 
-  if (chatModel.status === "checking") {
+  if (chatStatus === "checking") {
     return <p className="p-6 text-gray-400">AI 준비 상태 확인 중...</p>;
   }
 
   // Gemma 4를 고른 상태에서 못 쓰는 경우는 원인(모델 없음 / WebGPU 없음)도 해결법도 달라서
   // Prompt API 안내와 다른 화면을 보여준다.
-  if (
-    chatModel.engine === "gemma4" &&
-    (chatModel.status === "model-missing" || chatModel.status === "unsupported")
-  ) {
+  if (chatEngine === "gemma4" && (chatStatus === "model-missing" || chatStatus === "unsupported")) {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
-        <GemmaEngineNotice reason={chatModel.status} feature="회화 연습" />
+        <GemmaEngineNotice reason={chatStatus} feature="회화 연습" />
       </div>
     );
   }
 
-  if (chatModel.status === "unsupported") {
+  if (chatStatus === "unsupported") {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
@@ -191,7 +151,7 @@ function ConversationPage() {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
-        <ScenarioPicker onStart={handleStart} />
+        <ScenarioPicker onStart={startConversation} />
       </div>
     );
   }
@@ -205,13 +165,7 @@ function ConversationPage() {
           </span>
           <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-500">{level.label}</span>
         </div>
-        <button
-          onClick={() => {
-            setScenario(null);
-            setLevel(null);
-          }}
-          className="text-xs text-gray-400"
-        >
+        <button onClick={resetConversation} className="text-xs text-gray-400">
           다시 선택
         </button>
       </div>
@@ -236,19 +190,19 @@ function ConversationPage() {
       </div>
 
       {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
-      {chatModel.busyLabel && (
+      {chatBusyLabel && (
         <div className="p-3">
-          <LoadingMascot label={chatModel.busyLabel} />
+          <LoadingMascot label={chatBusyLabel} />
         </div>
       )}
 
-      {chatModel.downloadProgress !== null && (
+      {chatDownloadProgress !== null && (
         <div className="p-3 text-xs text-gray-400">
-          모델 다운로드 중... {Math.round(chatModel.downloadProgress * 100)}%
+          모델 다운로드 중... {Math.round(chatDownloadProgress * 100)}%
           <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
             <div
               className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${chatModel.downloadProgress * 100}%` }}
+              style={{ width: `${chatDownloadProgress * 100}%` }}
             />
           </div>
         </div>
@@ -272,8 +226,15 @@ function ConversationPage() {
               >
                 {m.role === "assistant" && m.text === "" && isStreaming ? (
                   <LoadingMascot />
+                ) : m.role === "assistant" ? (
+                  <ClickableSentence
+                    text={m.text}
+                    showFurigana={showFurigana}
+                    onWordClick={setSelectedWord}
+                    onKanjiClick={setSelectedKanji}
+                  />
                 ) : (
-                  <FuriganaText text={m.text} show={m.role === "assistant" && showFurigana} />
+                  m.text
                 )}
               </motion.div>
               {m.role === "user" && (m.correction || m.correctionLoading) && (
@@ -288,23 +249,35 @@ function ConversationPage() {
       </div>
 
       <div className="flex gap-2 border-t border-gray-100 p-3">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="日本語でメッセージを入力..."
-          className="flex-1 rounded-2xl border-2 border-gray-100 px-4 py-2 font-ja focus:border-primary/40 focus:outline-none"
-        />
+        <div className="relative flex-1">
+          <input
+            ref={japaneseInput.ref}
+            defaultValue=""
+            onFocus={() => japaneseInput.setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => japaneseInput.setShowSuggestions(false), 150)}
+            onKeyDown={handleKeyDown}
+            placeholder="日本語でメッセージを入力..."
+            className="w-full rounded-2xl border-2 border-gray-100 px-4 py-2 font-ja focus:border-primary/40 focus:outline-none"
+          />
+          {japaneseInput.showSuggestions && (
+            <JapaneseSuggestionList
+              suggestions={japaneseInput.suggestions}
+              activeIndex={japaneseInput.activeIndex}
+              onSelect={japaneseInput.selectSuggestion}
+            />
+          )}
+        </div>
         <button
           onClick={handleSend}
-          disabled={!input.trim() || isStreaming}
+          disabled={!japaneseInput.value.trim() || isStreaming}
           className="rounded-2xl bg-primary px-5 py-2 font-bold text-white disabled:bg-gray-200"
         >
           전송
         </button>
       </div>
 
-      <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
+      <WordMeaningDialog word={selectedWord} onClose={() => setSelectedWord(null)} />
+      <KanjiDetailSheet entry={selectedKanji} onClose={() => setSelectedKanji(null)} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { getKoreanReadingForWord } from "../lib/kanji";
+import { translatePos } from "../lib/posTags";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useWordbookStore } from "../stores/wordbookStore";
@@ -66,7 +67,7 @@ function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose:
             <div className="mt-3 flex flex-wrap gap-1">
               {word.pos.map((p) => (
                 <span key={p} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                  {p}
+                  {translatePos(p)}
                 </span>
               ))}
             </div>

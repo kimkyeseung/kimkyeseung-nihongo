@@ -4,6 +4,7 @@ import { Link, NavLink, useLocation, useOutlet } from "react-router-dom";
 import GamificationBar from "./GamificationBar";
 import Confetti from "./Confetti";
 import BadgeWatcher from "./BadgeWatcher";
+import ConversationSessionController from "./ConversationSessionController";
 import LoadingMascot from "./LoadingMascot";
 import PromptApiOnboardingDialog from "./PromptApiOnboardingDialog";
 
@@ -99,6 +100,7 @@ function Layout() {
       <Confetti />
       <BadgeWatcher />
       <PromptApiOnboardingDialog />
+      <ConversationSessionController />
     </div>
   );
 }
