@@ -41,6 +41,39 @@ async function opfsRoot(): Promise<FileSystemDirectoryHandle> {
 }
 
 /**
+ * 지금 origin이 더 쓸 수 있는 바이트 수. 브라우저가 알려주지 않으면 null(= 확인 불가).
+ * 할당량은 브라우저마다 크게 다르다 — 2GB가 무조건 들어간다고 가정하면 안 된다.
+ */
+export async function getStorageHeadroom(): Promise<number | null> {
+  if (typeof navigator === "undefined" || !navigator.storage?.estimate) return null;
+  try {
+    const { quota, usage } = await navigator.storage.estimate();
+    if (typeof quota !== "number") return null;
+    return quota - (usage ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 지속 저장(persistent storage)을 요청한다. 거절돼도 다운로드는 그대로 진행한다 —
+ * best-effort 저장소에 남을 뿐이고, 그건 사용자가 감수할 문제다.
+ *
+ * 2GB짜리라 이게 꽤 중요하다: 지속 저장이 아니면 브라우저가 저장 공간이 부족할 때 지워버린다.
+ * 특히 Safari는 일정 기간 방문이 없으면 OPFS를 비우고, 홈 화면/Dock에 추가된 사이트에만
+ * 지속 저장을 허락한다 — 그 경우 사용자는 2GB를 다시 받아야 한다.
+ */
+export async function requestPersistentStorage(): Promise<boolean> {
+  if (typeof navigator === "undefined" || !navigator.storage?.persist) return false;
+  try {
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 이미 받아둔 모델 파일을 반환한다. 없거나 크기가 안 맞으면(=받다 만 파일) null.
  * OPFS는 origin 단위라 localhost:5173과 127.0.0.1:5173은 서로 다른 저장소를 쓴다.
  */
@@ -60,6 +93,54 @@ export async function getCachedModelFile(): Promise<File | null> {
     // NotFoundError 등 — 아직 안 받은 상태
     return null;
   }
+}
+
+/**
+ * 받다 만 파일에 최종 이름을 붙인다.
+ *
+ * **엔진마다 받아주는 인자가 다르다 (실제로 겪은 버그)**: 표준 초안에는 `move(name)`과
+ * `move(dir, name)` 오버로드가 둘 다 있지만 **WebKit은 `move(destination, newName)` 2-인자
+ * 형태만 구현한다**. Safari에서 `move(name)`을 부르면 `TypeError: Not enough arguments`가
+ * 나고, 하필 이 호출이 2GB를 다 받은 **맨 마지막 단계**라 다운로드를 통째로 날린다.
+ * 2-인자 형태는 Chromium·Gecko·WebKit 셋 다 지원하므로 그쪽을 기본으로 쓴다.
+ */
+async function renamePartialToFinal(
+  root: FileSystemDirectoryHandle,
+  partial: FileSystemFileHandle
+): Promise<void> {
+  try {
+    await partial.move(root, GEMMA_MODEL.opfsName);
+  } catch (error) {
+    // 2-인자 형태를 모르는 엔진이 있다면 표준의 1-인자 형태로 한 번 더 시도한다.
+    if (!(error instanceof TypeError)) throw error;
+    await partial.move(GEMMA_MODEL.opfsName);
+  }
+}
+
+/**
+ * 다 받아놓고 이름 붙이기에서만 실패한 `.part`가 있으면 그 핸들을 돌려준다.
+ * 크기가 정확히 맞을 때만 인정한다 — 받다 만 조각은 쓸 수 없다(이어받기는 구현하지 않았다).
+ */
+async function getCompletePartial(
+  root: FileSystemDirectoryHandle
+): Promise<FileSystemFileHandle | null> {
+  try {
+    const handle = await root.getFileHandle(PARTIAL_NAME);
+    const file = await handle.getFile();
+    return file.size === GEMMA_MODEL.bytes ? handle : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 최종 이름으로 저장된 모델을 읽어 크기까지 확인한다. */
+async function readFinalModel(root: FileSystemDirectoryHandle): Promise<File> {
+  const file = await (await root.getFileHandle(GEMMA_MODEL.opfsName)).getFile();
+  if (file.size !== GEMMA_MODEL.bytes) {
+    await deleteCachedModel();
+    throw new Error(`받은 파일 크기가 맞지 않습니다 (${file.size} / ${GEMMA_MODEL.bytes})`);
+  }
+  return file;
 }
 
 export async function deleteCachedModel(): Promise<void> {
@@ -94,6 +175,27 @@ export async function downloadModel(
   if (cached) return cached;
 
   const root = await opfsRoot();
+
+  // 다 받아놓고 이름 붙이기에서만 실패한 적이 있으면 `.part`가 온전한 채로 남아 있다.
+  // 2GB를 다시 받게 하지 않고 이름만 다시 붙인다.
+  const complete = await getCompletePartial(root);
+  if (complete) {
+    await renamePartialToFinal(root, complete);
+    return readFinalModel(root);
+  }
+
+  // 2GB를 다 받고 나서 할당량에 걸리면 시간도 데이터도 통째로 버리게 된다 — 먼저 확인한다.
+  // 확인할 수 없는 브라우저(null)에서는 일단 시도한다: 막을 근거가 없으므로.
+  const headroom = await getStorageHeadroom();
+  if (headroom !== null && headroom < GEMMA_MODEL.bytes) {
+    throw new Error(
+      `저장 공간이 부족합니다. ${formatBytes(GEMMA_MODEL.bytes)}가 필요한데 ` +
+        `${formatBytes(Math.max(0, headroom))}만 쓸 수 있어요. 브라우저 저장 공간을 비우고 다시 시도해 주세요.`
+    );
+  }
+  // 받아둔 모델이 조용히 지워지지 않도록 요청만 해둔다. 거절돼도 계속 진행한다.
+  await requestPersistentStorage();
+
   const partial = await root.getFileHandle(PARTIAL_NAME, { create: true });
   const writable = await partial.createWritable();
 
@@ -139,20 +241,18 @@ export async function downloadModel(
     }
 
     await writable.close();
-
-    // 다 받은 뒤에야 최종 이름을 붙인다 — 중간에 끊긴 파일이 완성본 행세를 못 하게.
-    await partial.move(GEMMA_MODEL.opfsName);
-    const file = await (await root.getFileHandle(GEMMA_MODEL.opfsName)).getFile();
-    if (file.size !== GEMMA_MODEL.bytes) {
-      await deleteCachedModel();
-      throw new Error(`받은 파일 크기가 맞지 않습니다 (${file.size} / ${GEMMA_MODEL.bytes})`);
-    }
-    return file;
   } catch (error) {
+    // 받다 만 조각은 쓸모가 없다(이어받기 미구현) — 지우고 다음에 처음부터 받게 한다.
     await writable.abort().catch(() => {});
     await root.removeEntry(PARTIAL_NAME).catch(() => {});
     throw error;
   }
+
+  // 여기부터는 파일이 온전하다. 다 받은 뒤에야 최종 이름을 붙인다 — 중간에 끊긴 파일이
+  // 완성본 행세를 못 하게. **실패해도 `.part`를 지우지 않는다**: 다시 시도하면 위의 재사용
+  // 경로가 곧바로 집어가므로 2GB를 다시 받지 않아도 된다.
+  await renamePartialToFinal(root, partial);
+  return readFinalModel(root);
 }
 
 export function formatBytes(bytes: number): string {

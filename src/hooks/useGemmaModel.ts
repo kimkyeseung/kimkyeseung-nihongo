@@ -8,7 +8,21 @@ import {
   isWebGpuSupported,
   type DownloadProgress,
 } from "../lib/gemmaModel";
+import { isPromptApiSupported } from "../lib/languageModel";
 import { useAiEngineStore } from "../stores/aiEngineStore";
+
+/**
+ * 내장 AI가 없는 브라우저에서 모델을 받았다면 엔진 선택을 Gemma로 옮겨준다.
+ *
+ * 엔진 기본값은 "prompt-api"인데(aiEngineStore), 내장 AI가 없는 브라우저에서는 그게 동작하지
+ * 않는다. 2GB를 받아놓고도 회화에 들어가면 "지원하지 않는 브라우저"라는 안내를 보게 되는
+ * 함정이 있어서, 고를 것이 하나뿐인 경우엔 대신 골라준다.
+ */
+function selectGemmaIfOnlyOption(): void {
+  if (isPromptApiSupported()) return;
+  const { engine, setEngine } = useAiEngineStore.getState();
+  if (engine !== "gemma4") setEngine("gemma4");
+}
 
 export type GemmaModelStatus =
   /** WebGPU/OPFS가 없어서 이 기능 자체를 쓸 수 없음 */
@@ -47,7 +61,9 @@ export function useGemmaModel(): GemmaModelState {
     let alive = true;
     getCachedModelFile()
       .then((file) => {
-        if (alive) setStatus(file ? "installed" : "not-installed");
+        if (!alive) return;
+        setStatus(file ? "installed" : "not-installed");
+        if (file) selectGemmaIfOnlyOption();
       })
       .catch(() => {
         if (alive) setStatus("not-installed");
@@ -74,6 +90,7 @@ export function useGemmaModel(): GemmaModelState {
         if (controller.signal.aborted) return;
         setStatus("installed");
         setProgress(null);
+        selectGemmaIfOnlyOption();
       })
       .catch((e: unknown) => {
         if (controller.signal.aborted) {

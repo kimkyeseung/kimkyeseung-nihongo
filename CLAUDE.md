@@ -174,6 +174,17 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 받다 만 파일은 `*.part`로 쓰다가 **다 받은 뒤에만** `move()`로 최종 이름을 붙인다. 읽을 때도
   크기가 정확히 맞는지 확인하고 안 맞으면 지운다 — 끊긴 다운로드가 완성본 행세를 못 하게.
   (`FileSystemFileHandle.move()`는 TS 기본 타입에 없어서 `src/types/opfs.ts`에 선언해뒀다.)
+- **`move()`는 엔진마다 받는 인자가 다르다 (실제로 겪은 버그, Safari)**: 표준 초안엔
+  `move(name)` / `move(dir)` / `move(dir, name)` 오버로드가 다 있고 Chromium·Gecko는 전부
+  구현하지만, **WebKit은 `move(destination, newName)` 2-인자 형태만 있다**(WebKit의
+  `FileSystemHandle.idl`로 확인). Safari에서 `move(name)`을 부르면
+  `TypeError: Not enough arguments`가 나는데, 하필 이게 2GB를 다 받은 **맨 마지막 단계**라
+  다운로드를 통째로 날린다. **항상 2-인자 형태로 부를 것**(`renamePartialToFinal`).
+  타입 선언에 오버로드가 있다고 아무 형태나 쓰면 안 된다 — TS 타입은 표준을 적은 것이지
+  특정 엔진의 구현이 아니다.
+- 다운로드 단계와 이름 붙이기 단계의 **실패 처리를 분리했다**: 받다 만 조각은 지우지만(이어받기
+  미구현), 다 받은 뒤 `move()`에서 실패하면 `.part`를 **남긴다**. 다시 누르면
+  `getCompletePartial()`이 집어가 이름만 다시 붙이므로 2GB를 다시 받지 않는다.
 - 엔진은 앱 전체에서 **하나만** 둔다(모듈 레벨 Promise). 모델 2GB를 GPU에 올리는 비용 때문이고,
   시나리오별 세션은 그 엔진에서 파생되는 `Conversation`으로 만든다(만들고 지우는 비용이 싸다).
 - `@litert-lm/core`는 WASM 런타임을 기본적으로 **jsDelivr CDN**에서 받는다(변종 하나 21~34MB).
@@ -182,6 +193,50 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   트레이드오프라 아직 CDN 기본값을 쓰고 있다.
 - 2GB짜리라 **절대 자동으로 받지 않는다** — 대문에서 버튼을 누르는 것이 곧 동의다. 새로 큰
   애셋을 받는 기능을 추가할 때도 이 규칙을 따를 것.
+- **Gemma 경로는 Chrome 전용이 아니다.** WebGPU는 2026년 1월에 Baseline이 됐고(Safari 26,
+  Firefox 141+ Windows / 145+ macOS ARM), 이 앱이 쓰는 OPFS API도 전부 있다 — `getDirectory`
+  (Safari 15.2+/FF 111+), `createWritable`(Safari 26+/FF 111+), `FileSystemFileHandle.move()`
+  (Safari 15.2+/FF 111+). `@litert-lm/core`도 `relaxedSimd`·`jspi`를 감지해 WASM 변종 4개 중
+  하나를 고르므로 JSPI 없는 브라우저용 asyncify 변종이 따로 있고, **`SharedArrayBuffer`를 안 써서
+  COOP/COEP 헤더가 필요 없다**. 게이트는 브랜드가 아니라 기능으로 판단할 것
+  (`isWebGpuSupported() && isOpfsSupported()`).
+- **Safari에서 실제로 추론이 도는 것까지 확인했다** (2026-09-19, macOS). 다운로드 → OPFS 저장 →
+  WebGPU 추론이 끝까지 동작한다. 콘솔 로그에 `RegisterAccelerator: name=GPU WebGPU` /
+  `Statically linked GPU accelerator registered.`가 찍히면 GPU로 돌고 있는 것이다
+  (`CpuAccelerator`/XNNPACK도 같이 등록되지만 등록됐다고 쓰이는 건 아니다).
+- **Safari는 Chrome보다 눈에 띄게 느리다 — 구조적인 이유가 있다.** LiteRT-LM의 `load.js`는
+  `'Suspending' in WebAssembly`로 JSPI를 감지하는데, JSPI는 사실상 Chrome 전용이라 Safari는
+  **asyncify 변종**으로 떨어진다. asyncify는 스택을 감았다 펴려고 모듈 전체를 계측하므로 느리다.
+  최적화로 없앨 수 있는 종류의 느림이 아니다.
+- 콘솔 경고 중 정상인 것들(Chrome에서도 뜬다): `npu_registry.cc ... NPU accelerator could not be
+  loaded`(브라우저에 NPU가 없으니 당연), `gpu_model_info_generator.cc`의 튜닝 로그,
+  `mel_filterbank.cc`의 mel 밴드 경고(Gemma E2B 번들에 **오디오 타워**가 들어 있어 초기화되는 것 —
+  이 앱은 텍스트만 쓰지만 `EngineSettings`에 모달리티를 끄는 옵션이 없다).
+  **Safari 웹인스펙터는 이 INFO 줄들을 빨간 오류처럼 보여준다** — LiteRT가 stderr로 쓰기 때문이고
+  실제 오류가 아니다. 색만 보고 놀라지 말 것.
+- 다운로드 전에 `getStorageHeadroom()`으로 할당량을 확인하고 `requestPersistentStorage()`를
+  부른다. 2GB를 다 받은 뒤에 할당량에 걸리면 시간도 데이터도 통째로 버리게 되고, 지속 저장이
+  아니면 브라우저가 나중에 조용히 지워버린다(**Safari는 일정 기간 미방문 시 OPFS를 비운다** —
+  홈 화면/Dock에 추가된 사이트만 예외). 큰 애셋을 새로 받는 기능에도 이 둘을 붙일 것.
+
+## AI 안내 흐름 (`aiCapability.ts`) — 중요
+- **"AI를 쓸 수 있나?"는 `detectAiCapability()` 한 곳에서만 판단한다.** `isPromptApiSupported()`나
+  `navigator.gpu`를 화면에서 직접 부르지 말 것. 세 화면(첫 접속 모달·대문 카드·회화/작문 인라인
+  안내)이 같은 판단을 써야 문구가 서로 어긋나지 않는다.
+- 안내 순서는 **Gemma 먼저, Chrome은 최후의 보루**다:
+  1. `builtin-ready` — 내장 AI로 바로 된다. Gemma는 "더 정확한 학습"으로 **대문 카드에서만**
+     권한다. 이미 잘 돌아가는 사용자를 첫 화면 모달로 막지 않는다.
+  2. `gemma-required` — 내장 AI는 없지만 WebGPU가 있다. 모달·카드·인라인 안내가 전부 Gemma로
+     유도하고 용량·GPU 메모리·모바일 경고를 같이 보여준다. **여기서 Chrome을 권하지 말 것.**
+  3. `chrome-fallback` — 둘 다 안 된다. **Chrome Canary를 권할 유일한 자리다.** 다운로드가
+     실패한 경우(카드의 `status === "error"`)도 여기에 해당한다.
+- 내장 AI가 없는 브라우저에서 모델을 받으면 `selectGemmaIfOnlyOption()`이 엔진 선택을 자동으로
+  gemma4로 옮긴다 — 엔진 기본값이 `prompt-api`라, 안 그러면 2GB를 받아놓고도 회화에 들어가면
+  "지원하지 않는 브라우저" 안내를 보는 함정이 있다.
+- 모바일은 막지 않고 경고만 한다(`MOBILE_DOWNLOAD_WARNING`). 기기 성능을 웹에서 알 방법이 없어
+  판단을 사용자에게 넘긴다. iPadOS는 UA가 데스크톱 Mac처럼 보이므로 `maxTouchPoints`로 가려낸다.
+- `browserCheck.ts`(진짜 Chrome인지 UA로 판별)는 **Prompt API 자가진단 전용**이다. Gemma 경로
+  판단에 쓰지 말 것 — 브랜드가 아니라 기능으로 판단해야 한다.
 
 ## 회화 페이지 구현 노트
 - `useLanguageModel(systemPrompt)` 훅이 `window.LanguageModel` 전체를 감싼다: 마운트 시
