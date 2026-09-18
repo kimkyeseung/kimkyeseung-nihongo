@@ -15,6 +15,11 @@ dist-ssr/
 # 데이터 파이프라인 원본 캐시 (용량이 커서 커밋하지 않음, scripts/data/README.md 참고)
 scripts/data/.cache/
 
+# bkit 도구가 docs/에 떨궈두는 로컬 상태 파일 (.bkit-memory.json, .pdca-status.json).
+# 프로젝트 문서가 아니라 진행 상황 캐시라 커밋하지 않는다. 숨김 파일만 거르므로
+# docs/에 실제 문서를 넣으면 그건 평소대로 추적된다.
+docs/.*
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
