@@ -38,6 +38,8 @@ function TeacherPage() {
   const appendAnswer = useTeacherChatStore((s) => s.appendAnswer);
   const finishAnswer = useTeacherChatStore((s) => s.finishAnswer);
   const clear = useTeacherChatStore((s) => s.clear);
+  const pendingQuestion = useTeacherChatStore((s) => s.pendingQuestion);
+  const consumePendingQuestion = useTeacherChatStore((s) => s.consumePendingQuestion);
 
   const listEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -65,6 +67,12 @@ function TeacherPage() {
     },
     [isAnswering, ask, recordProgress, model, appendAnswer, finishAnswer, reportError]
   );
+
+  // 회화 말풍선 등에서 "선생님" 버튼으로 넘어온 질문을 받아 바로 물어본다.
+  useEffect(() => {
+    const question = consumePendingQuestion();
+    if (question) handleAsk(question);
+  }, [pendingQuestion, consumePendingQuestion, handleAsk]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     // 폼의 암묵적 제출 대신 onKeyDown으로 직접 처리한다(프로젝트 표준, CLAUDE.md 참고).

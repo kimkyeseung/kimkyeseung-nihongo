@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
+import AskTeacherButton from "../components/AskTeacherButton";
 import ClickableSentence from "../components/ClickableSentence";
 import CopyButton from "../components/CopyButton";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
@@ -240,6 +241,11 @@ function ConversationPage() {
                     />
                     <SpeakButton text={m.text} label="상대 문장 발음 듣기" className="ml-1" />
                     <CopyButton text={m.text} label="상대 문장 복사" className="ml-1" />
+                    <AskTeacherButton
+                      text={m.text}
+                      label="이 문장 선생님에게 물어보기"
+                      className="ml-1"
+                    />
                   </>
                 ) : (
                   <>

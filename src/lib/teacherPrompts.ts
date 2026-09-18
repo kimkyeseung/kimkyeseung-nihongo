@@ -28,6 +28,17 @@ export function buildTeacherUserPrompt(question: string): string {
   return wrapStudentText(question);
 }
 
+/**
+ * 회화/예문 옆 "선생님" 버튼이 대신 보내주는 질문. 사용자가 직접 친 것처럼 말풍선에
+ * 그대로 보이므로, 프롬프트 같지 않고 사람이 물어본 것처럼 읽히게 적는다.
+ */
+export function buildSentenceExplanationQuestion(sentence: string): string {
+  return [
+    `이 문장을 설명해줘: 「${sentence}」`,
+    "한국어 해석 → 문법 해설 → 알아두면 좋은 부가 설명 순서로 알려줘.",
+  ].join("\n");
+}
+
 /** 처음 들어온 사람이 무엇을 물어볼 수 있는지 감을 잡도록 보여주는 예시 질문. */
 export const TEACHER_SAMPLE_QUESTIONS = [
   "조사 だけ에 대해서 알려줘",

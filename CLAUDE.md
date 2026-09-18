@@ -53,7 +53,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      PromptApiOnboardingDialog(첫 접속 시 1회 안내 모달),
                      ProgressBar(공용 진행률 바) + AssetLoadingBar(대문 학습 데이터 프리로드) +
                      GemmaModelCard(대문 Gemma 4 모델 다운로드/엔진 선택) +
-                     SpeakButton(문장/단어 끝 발음 재생 버튼) + CopyButton(클립보드 복사) +
+                     SpeakButton(발음) + CopyButton(복사) + AskTeacherButton(선생님에게 묻기)
+                     — 셋 다 iconButtonClass.ts의 공용 클래스를 쓴다 +
                      KanaDetailDialog(오십음도 글자 상세) + MarkdownAnswer(선생님 답변 렌더링)
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + TeacherPage(선생님 — 자유 질문, 스펙 밖이지만 하단 네비에 포함)
@@ -193,7 +194,10 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   집어 번역하고, 끝나면 messages가 바뀌면서 다음 대사를 집는다(동시에 여러 요청을 던지지
   않으려는 것). 스트리밍 중엔 건드리지 않고, 토글을 나중에 켜도 지나간 대사까지 채워진다.
   실패한 대사를 무한 재시도하지 않도록 "이미 시도한 id"를 ref에 기억한다.
-- AI 대사에는 발음 버튼 옆에 **복사 버튼**(`CopyButton`, 이모지만)이 붙는다.
+- AI 대사에는 발음 버튼 옆에 **복사 버튼**(`CopyButton`)과 **선생님 버튼**(`AskTeacherButton`,
+  누르면 그 문장의 해석·문법 해설을 선생님 페이지에서 바로 물어본다)이 붙는다. 세 버튼은
+  `iconButtonClass.ts`의 공용 클래스를 쓰므로 크기·색이 어긋나지 않는다 — 같은 자리에 버튼을
+  더 만들 때도 이걸 쓸 것.
   `navigator.clipboard`는 권한/보안 컨텍스트에 따라 거부되므로(이 프로젝트 미리보기
   브라우저에서 실제로 NotAllowedError) 임시 textarea + `execCommand("copy")` 폴백이 있다 —
   클립보드 복사를 새로 붙일 때 이 컴포넌트를 재사용할 것.
@@ -236,6 +240,11 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 대화는 `teacherChatStore`(메모리 전용)에 있어 탭을 옮겨도 남지만, **답변 스트리밍 중에
   나가면 세션이 destroy되어 생성은 끊긴다**(작문 첨삭과 같은 절충). 백그라운드에서도 계속
   받으려면 회화의 `ConversationSessionController`처럼 Layout 상주 컨트롤러가 필요하다.
+- **다른 화면에서 대신 질문 보내기**: `AskTeacherButton`이 `teacherChatStore.requestQuestion()`에
+  질문을 넣고 `/teacher`로 이동하면, TeacherPage가 마운트되면서 `consumePendingQuestion()`으로
+  꺼내 바로 물어본다. **꺼내는 즉시 store를 비우는 게 중요하다** — StrictMode에서 effect가 두 번
+  실행돼도 질문이 두 번 날아가지 않는다(실제로 이 가드 없이는 중복된다). 회화 말풍선과 선생님
+  답변 속 예문 칩 양쪽에 같은 버튼이 붙어 있고, 이미 선생님 페이지에 있어도 같은 경로로 동작한다.
 - 하단 네비게이션이 7칸이 되면서 375px에서 자리가 빠듯해졌다. 고정 최소 너비(`min-w-16`)를
   버리고 `flex-1 min-w-0` + 작은 글씨로 화면을 n등분한다 — **항목을 더 늘릴 땐 375px에서
   `nav.scrollWidth > clientWidth`를 꼭 확인할 것**(라벨을 줄이거나 아이콘만 남기는 식으로).

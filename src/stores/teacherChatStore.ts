@@ -11,8 +11,16 @@ interface TeacherChatState {
   messages: TeacherMessage[];
   /** 입력창에 쓰다 만 질문 (탭을 옮겨도 남는다) */
   input: string;
+  /**
+   * 다른 화면(회화 말풍선의 "선생님" 버튼 등)에서 대신 넣어둔 질문.
+   * TeacherPage가 마운트되면 이걸 꺼내 바로 물어본다.
+   */
+  pendingQuestion: string | null;
   isAnswering: boolean;
   setInput: (input: string) => void;
+  requestQuestion: (question: string) => void;
+  /** 꺼내면서 동시에 비운다 — StrictMode에서 effect가 두 번 돌아도 한 번만 질문하도록. */
+  consumePendingQuestion: () => string | null;
   ask: (question: string) => { assistantId: string };
   appendAnswer: (assistantId: string, text: string) => void;
   finishAnswer: () => void;
@@ -28,11 +36,18 @@ interface TeacherChatState {
  * 백그라운드에서도 계속 받아야 한다면 회화의 ConversationSessionController처럼 Layout에
  * 상주하는 컨트롤러가 필요하다.
  */
-export const useTeacherChatStore = create<TeacherChatState>((set) => ({
+export const useTeacherChatStore = create<TeacherChatState>((set, get) => ({
   messages: [],
   input: "",
+  pendingQuestion: null,
   isAnswering: false,
   setInput: (input) => set({ input }),
+  requestQuestion: (question) => set({ pendingQuestion: question }),
+  consumePendingQuestion: () => {
+    const question = get().pendingQuestion;
+    if (question) set({ pendingQuestion: null });
+    return question;
+  },
   ask: (question) => {
     const assistantId = crypto.randomUUID();
     set((s) => ({
@@ -51,5 +66,5 @@ export const useTeacherChatStore = create<TeacherChatState>((set) => ({
       messages: s.messages.map((m) => (m.id === assistantId ? { ...m, text } : m)),
     })),
   finishAnswer: () => set({ isAnswering: false }),
-  clear: () => set({ messages: [], input: "", isAnswering: false }),
+  clear: () => set({ messages: [], input: "", isAnswering: false, pendingQuestion: null }),
 }));

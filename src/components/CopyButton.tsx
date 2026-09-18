@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-
-const SIZE_CLASS = "h-7 w-7 text-sm";
-const TONE_CLASS =
-  "bg-gray-100 text-gray-500 hover:bg-primary/10 hover:text-primary active:bg-primary/20";
+import { iconButtonClass } from "./iconButtonClass";
 
 /**
  * 클립보드에 복사한다. `navigator.clipboard`는 권한/보안 컨텍스트에 따라 거부되는 경우가
@@ -63,7 +60,7 @@ function CopyButton({ text, label = "복사", className = "" }: {
       }}
       aria-label={label}
       title={label}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full align-middle transition-colors ${SIZE_CLASS} ${TONE_CLASS} ${className}`}
+      className={iconButtonClass("sm", "default", className)}
     >
       <span aria-hidden="true">{copied ? "✅" : "📋"}</span>
     </button>

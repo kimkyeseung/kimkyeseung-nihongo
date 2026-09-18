@@ -1,17 +1,6 @@
 import { useJapaneseSpeech } from "../hooks/useJapaneseSpeech";
 import { toSpeechText } from "../lib/speechText";
-
-const SIZE_CLASS = {
-  sm: "h-7 w-7 text-sm",
-  md: "h-10 w-10 text-lg",
-} as const;
-
-const TONE_CLASS = {
-  /** 흰 배경 위(예문·첨삭 결과 카드) */
-  default: "bg-gray-100 text-gray-500 hover:bg-primary/10 hover:text-primary active:bg-primary/20",
-  /** 컬러 배경 위(회화 페이지의 내 말풍선처럼 primary 배경) */
-  onPrimary: "bg-white/20 text-white hover:bg-white/30 active:bg-white/40",
-} as const;
+import { iconButtonClass, type IconButtonSize, type IconButtonTone } from "./iconButtonClass";
 
 /**
  * 일본어 문장/단어 끝에 붙이는 발음 재생 버튼. 문장을 보여주는 화면에서 발음을 들려주고
@@ -29,8 +18,8 @@ function SpeakButton({
   text: string;
   /** 스크린리더용 설명. 같은 화면에 버튼이 여러 개면 무엇을 읽는지 구분해서 넘길 것. */
   label?: string;
-  size?: keyof typeof SIZE_CLASS;
-  tone?: keyof typeof TONE_CLASS;
+  size?: IconButtonSize;
+  tone?: IconButtonTone;
   className?: string;
 }) {
   const { speak, isSupported } = useJapaneseSpeech();
@@ -49,7 +38,7 @@ function SpeakButton({
       }}
       aria-label={label}
       title={label}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full align-middle transition-colors ${SIZE_CLASS[size]} ${TONE_CLASS[tone]} ${className}`}
+      className={iconButtonClass(size, tone, className)}
     >
       {/* 🔊는 애플 이모지에서 회색이라 작게 쓰면 잘 안 보인다 — 컬러가 들어간 🗣️를 쓴다.
           VS16(️)을 붙여야 흑백 텍스트 글리프가 아니라 컬러 이모지로 확실히 렌더된다. */}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import AskTeacherButton from "./AskTeacherButton";
 import ClickableSentence from "./ClickableSentence";
 import CopyButton from "./CopyButton";
 import KanjiDetailSheet from "./KanjiDetailSheet";
@@ -74,6 +75,7 @@ function MarkdownAnswer({ text }: { text: string }) {
                 </span>
                 <SpeakButton text={content} label="예문 발음 듣기" />
                 <CopyButton text={content} label="예문 복사" />
+                <AskTeacherButton text={content} label="이 예문 더 물어보기" />
               </span>
             );
           },
