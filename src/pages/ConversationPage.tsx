@@ -7,6 +7,7 @@ import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
+import SpeakButton from "../components/SpeakButton";
 import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useUserProfileStore } from "../stores/userProfileStore";
@@ -227,14 +228,25 @@ function ConversationPage() {
                 {m.role === "assistant" && m.text === "" && isStreaming ? (
                   <LoadingMascot />
                 ) : m.role === "assistant" ? (
-                  <ClickableSentence
-                    text={m.text}
-                    showFurigana={showFurigana}
-                    onWordClick={setSelectedWord}
-                    onKanjiClick={setSelectedKanji}
-                  />
+                  <>
+                    <ClickableSentence
+                      text={m.text}
+                      showFurigana={showFurigana}
+                      onWordClick={setSelectedWord}
+                      onKanjiClick={setSelectedKanji}
+                    />
+                    <SpeakButton text={m.text} label="상대 문장 발음 듣기" className="ml-1" />
+                  </>
                 ) : (
-                  m.text
+                  <>
+                    {m.text}
+                    <SpeakButton
+                      text={m.text}
+                      label="내 문장 발음 듣기"
+                      tone="onPrimary"
+                      className="ml-1"
+                    />
+                  </>
                 )}
               </motion.div>
               {m.role === "user" && (m.correction || m.correctionLoading) && (

@@ -51,7 +51,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      PromptApiUnsupportedNotice(LLM 페이지 공용 안내 화면),
                      PromptApiOnboardingDialog(첫 접속 시 1회 안내 모달),
                      ProgressBar(공용 진행률 바) + AssetLoadingBar(대문 학습 데이터 프리로드) +
-                     GemmaModelCard(대문 Gemma 4 모델 다운로드/엔진 선택)
+                     GemmaModelCard(대문 Gemma 4 모델 다운로드/엔진 선택) +
+                     SpeakButton(문장/단어 끝 발음 재생 버튼)
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + AboutPage(정보/출처, 하단 네비게이션 밖) + HomePage(대문 `/`)
 src/hooks/         useJapaneseSpeech, useDebouncedValue, useLanguageModel,
@@ -60,7 +61,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      furigana.ts(LLM 응답에 사전 후리가나 오버레이) + diff.ts(문자 단위 LCS diff) +
                      conversationPrompts.ts + writingCorrection.ts(첨삭 프롬프트/응답 파싱) +
                      xpRewards.ts(행동별 XP 값) + badges.ts(뱃지 정의) +
-                     preloadAssets.ts(대문 프리로드) + gemmaModel.ts/gemmaEngine.ts(Gemma 4)
+                     preloadAssets.ts(대문 프리로드) + gemmaModel.ts/gemmaEngine.ts(Gemma 4) +
+                     speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리)
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함)
@@ -247,6 +249,38 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
 내용물보다 작아지지 않는다. **고정 방법: 루트는 `min-h-svh`가 아니라 `h-svh`(고정 높이)로,
 스크롤 영역인 `<main>`에는 `flex-1 overflow-y-auto`에 `min-h-0`을 반드시 추가한다.**
 새로 풀스크린 레이아웃(헤더+스크롤 영역+하단바 구조)을 만들 때마다 이 패턴을 그대로 쓸 것.
+
+## 발음 재생(TTS) 구현 노트
+- 문장/단어 끝의 🔊 버튼은 전부 `SpeakButton` 하나다(내부에서 `useJapaneseSpeech` 사용).
+  문장을 보여주는 새 화면에서 발음이 필요하면 이 컴포넌트를 재사용할 것 — 화면마다
+  `useJapaneseSpeech`를 새로 부르지 말 것. 오십음도는 예외로 칸 자체를 탭하면 소리가
+  나는 구조라 버튼을 따로 붙이지 않았다.
+- 현재 붙어있는 곳: 단어 상세(표제어·LLM 예문), 단어 뜻 다이얼로그, 회화(AI 말풍선·내
+  말풍선), 작문 첨삭(원문/수정문·비슷한 문장·응용 표현·더 정중한/친근한 표현).
+- **한자 표기 대신 사전의 가나 읽기를 읽힌다**(단어 단위일 때). 음성 엔진이 한자를 다른
+  음으로 읽는 경우가 있어서, `entry.reading`이 있으면 그걸 넘긴다.
+- **화면 문자열을 그대로 읽히면 안 된다**: "비슷한 문장"처럼 `일본어 (한국어 번역)` 형식인
+  항목이 있어서, `src/lib/speechText.ts`의 `toSpeechText()`가 한글이 든 괄호와 목록 불릿을
+  걷어낸 뒤 발화한다. SpeakButton이 내부에서 항상 통과시키므로 호출부는 화면 문자열을
+  그대로 넘기면 된다.
+- **음성 고르기 (실제로 겪은 버그)**: 예전엔 `voices.find(v => v.lang === "ja-JP")`로 목록의
+  첫 번째를 썼는데, macOS Ventura+ 의 ja-JP 목록은 캐릭터 목소리(Eddy·Flo·Grandma·Rocko…)가
+  앞을 차지해서 **Kyoko가 아니라 Eddy가 선택되고 있었다**(발음이 과장되게 들리는 원인).
+  지금은 `useJapaneseSpeech`의 `scoreVoice`가 캐릭터 목소리를 걸러내고
+  O-ren/Hattori/Kyoko/Google 日本語 같은 표준 음성과 이름에 Premium/Enhanced/Siri가 붙은
+  고품질 버전을 우선한다. **목록의 순서를 신뢰하지 말 것** — 기기마다 다르다.
+  (사용자가 macOS 시스템 설정에서 고급 일본어 음성을 받아두면 자동으로 그쪽이 선택된다.)
+- 속도는 0.95가 기본이다(0.85는 늘어져서 부자연스럽고 1.0은 학습자가 따라가기 빠르다).
+  `speak(text, { rate })`로 호출부에서 바꿀 수 있다.
+- 긴 문장은 `splitForSpeech`가 문장부호 단위로 끊어 큐에 넣는다 — Chrome이 긴 발화를
+  15초쯤에서 잘라먹는 버그를 피하면서 문장 사이 호흡도 자연스러워진다. 너무 잘게 끊기면
+  뚝뚝 끊겨 들려서 120자까지는 앞 조각에 이어 붙인다.
+- 버튼 아이콘은 🗣️다. 🔊는 애플 이모지에서 회색이라 작게 쓰면 잘 안 보인다. 이모지를 바꿀 땐
+  VS16(`️`)을 꼭 붙일 것 — 없으면 흑백 텍스트 글리프로 렌더될 수 있다.
+- SpeechSynthesis 미지원 브라우저에서는 버튼이 아예 렌더링되지 않는다(안내 문구는
+  오십음도처럼 페이지 단위로 한 번만 보여주는 쪽이 덜 시끄럽다).
+- 재생에는 XP를 주지 않는다 — 버튼을 연타하면 무한히 쌓이기 때문. 오십음도의
+  `XP_REWARDS.gojuonPlayed`는 "그날 오십음도를 공부했다"는 신호로 남겨둔 기존 동작이다.
 
 ## 애니메이션 디테일 구현 노트
 스펙의 "애니메이션/트랜지션 (전반적으로 풍부하게 적용)" 요구사항을 아래처럼 구현했다:

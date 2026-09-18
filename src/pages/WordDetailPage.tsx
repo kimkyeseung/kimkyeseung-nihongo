@@ -5,6 +5,7 @@ import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
+import SpeakButton from "../components/SpeakButton";
 import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useLanguageModel } from "../hooks/useLanguageModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
@@ -114,6 +115,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
                   onKanjiClick={setSelectedKanji}
                   excludeWord={entry.word}
                 />
+                <SpeakButton text={ex.japanese} label="예문 발음 듣기" className="ml-1" />
               </p>
               {ex.korean && <p className="mt-1 text-sm text-gray-500">{ex.korean}</p>}
             </li>
@@ -209,7 +211,11 @@ function WordDetailPage() {
         </button>
       </div>
 
-      <h2 className="mt-2 font-ja text-4xl">{entry.word}</h2>
+      <div className="mt-2 flex items-center gap-3">
+        <h2 className="font-ja text-4xl">{entry.word}</h2>
+        {/* 한자 표기를 그대로 읽히면 음성 엔진이 다른 음으로 읽을 수 있어 사전의 가나 읽기를 넘긴다. */}
+        <SpeakButton text={entry.reading || entry.word} label="단어 발음 듣기" size="md" />
+      </div>
       <p className="mt-1 font-ja text-xl text-gray-500">
         {entry.reading}
         {koreanReading && <span className="ml-2 text-base text-gray-400">({koreanReading})</span>}

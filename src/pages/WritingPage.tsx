@@ -4,6 +4,7 @@ import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
+import SpeakButton from "../components/SpeakButton";
 import WritingDiff from "../components/WritingDiff";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useAiModel } from "../hooks/useAiModel";
@@ -272,6 +273,7 @@ function WritingPage() {
                 {result.similarSentences.map((sentence, i) => (
                   <li key={i} className="font-ja text-sm text-gray-600">
                     {sentence}
+                    <SpeakButton text={sentence} label="비슷한 문장 발음 듣기" className="ml-1" />
                   </li>
                 ))}
               </ul>
@@ -285,6 +287,7 @@ function WritingPage() {
                 {result.appliedExpressions.map((expr, i) => (
                   <li key={i} className="font-ja text-sm text-gray-600">
                     {expr}
+                    <SpeakButton text={expr} label="응용 표현 발음 듣기" className="ml-1" />
                   </li>
                 ))}
               </ul>
@@ -294,14 +297,20 @@ function WritingPage() {
           {result.morePolite && (
             <div className="mt-3 rounded-xl bg-gray-50 p-3">
               <p className="text-xs font-bold text-gray-500">🎩 더 정중한 표현</p>
-              <p className="mt-2 font-ja text-sm text-gray-600">{result.morePolite}</p>
+              <p className="mt-2 font-ja text-sm text-gray-600">
+                {result.morePolite}
+                <SpeakButton text={result.morePolite} label="더 정중한 표현 발음 듣기" className="ml-1" />
+              </p>
             </div>
           )}
 
           {result.moreCasual && (
             <div className="mt-3 rounded-xl bg-gray-50 p-3">
               <p className="text-xs font-bold text-gray-500">😊 더 친근한 표현</p>
-              <p className="mt-2 font-ja text-sm text-gray-600">{result.moreCasual}</p>
+              <p className="mt-2 font-ja text-sm text-gray-600">
+                {result.moreCasual}
+                <SpeakButton text={result.moreCasual} label="더 친근한 표현 발음 듣기" className="ml-1" />
+              </p>
             </div>
           )}
         </div>

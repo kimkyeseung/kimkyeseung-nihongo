@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
+import SpeakButton from "./SpeakButton";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import { translatePos } from "../lib/posTags";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -43,6 +44,8 @@ function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose:
                 <p className="mt-1 font-ja text-lg text-gray-500">
                   {word.reading}
                   {koreanReading && <span className="ml-2 text-base text-gray-400">({koreanReading})</span>}
+                  {/* 한자 표기 대신 사전의 가나 읽기를 읽힌다 — 음성 엔진이 다른 음으로 읽는 걸 막는다. */}
+                  <SpeakButton text={word.reading || word.word} label="단어 발음 듣기" className="ml-2" />
                 </p>
               </div>
               <div className="flex items-center gap-2">
