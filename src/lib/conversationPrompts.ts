@@ -63,3 +63,17 @@ export const GRAMMAR_CORRECTION_SYSTEM_PROMPT = [
 export function buildGrammarCorrectionUserPrompt(userInput: string): string {
   return wrapStudentText(userInput);
 }
+
+// 번역도 회화 세션과 분리된 세션에서 단발성으로 돌린다(문법 교정과 같은 이유 — 롤플레이
+// 맥락을 오염시키지 않기 위해). 번역은 "정답이 정해진 사전 정보"가 아니라 생성형 작업이므로
+// 이 프로젝트 규칙상 LLM에 맡겨도 되는 쪽이다.
+export const TRANSLATION_SYSTEM_PROMPT = [
+  "당신은 일본어-한국어 번역가입니다.",
+  "주어진 일본어 문장을 자연스러운 한국어로 번역하세요.",
+  "설명·주석·원문 없이 번역문만 한 줄로 답하세요.",
+].join(" ");
+
+export function buildTranslationUserPrompt(japanese: string): string {
+  // AI가 만든 문장이지만 결국 학습자 입력에 이어진 내용이라, 같은 방식으로 데이터 취급한다.
+  return wrapStudentText(japanese);
+}

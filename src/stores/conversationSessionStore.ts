@@ -9,6 +9,9 @@ export interface ChatMessage {
   text: string;
   correction?: string;
   correctionLoading?: boolean;
+  /** AI 대사의 한국어 번역 ("번역" 토글이 켜져 있을 때만 채워진다) */
+  translation?: string;
+  translationLoading?: boolean;
 }
 
 interface ConversationSessionState {
@@ -17,6 +20,7 @@ interface ConversationSessionState {
   messages: ChatMessage[];
   showFurigana: boolean;
   showCorrection: boolean;
+  showTranslation: boolean;
   isStreaming: boolean;
   chatStatus: AiModelStatus;
   chatDownloadProgress: number | null;
@@ -33,6 +37,7 @@ interface ConversationSessionState {
   sendMessage: (text: string) => void;
   setShowFurigana: (value: boolean) => void;
   setShowCorrection: (value: boolean) => void;
+  setShowTranslation: (value: boolean) => void;
 }
 
 export const useConversationSessionStore = create<ConversationSessionState>((set) => ({
@@ -41,6 +46,7 @@ export const useConversationSessionStore = create<ConversationSessionState>((set
   messages: [],
   showFurigana: true,
   showCorrection: false,
+  showTranslation: false,
   isStreaming: false,
   chatStatus: "checking",
   chatDownloadProgress: null,
@@ -51,4 +57,5 @@ export const useConversationSessionStore = create<ConversationSessionState>((set
   sendMessage: () => {},
   setShowFurigana: (value) => set({ showFurigana: value }),
   setShowCorrection: (value) => set({ showCorrection: value }),
+  setShowTranslation: (value) => set({ showTranslation: value }),
 }));

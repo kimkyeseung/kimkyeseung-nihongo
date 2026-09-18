@@ -8,8 +8,10 @@ import { XP_REWARDS } from "../lib/xpRewards";
 import {
   GRAMMAR_CORRECTION_SYSTEM_PROMPT,
   OPENING_TRIGGER,
+  TRANSLATION_SYSTEM_PROMPT,
   buildGrammarCorrectionUserPrompt,
   buildSystemPrompt,
+  buildTranslationUserPrompt,
   type Level,
   type Scenario,
 } from "../lib/conversationPrompts";
@@ -37,6 +39,7 @@ function ConversationSessionController() {
   );
   const chatModel = useAiModel(systemPrompt);
   const correctionModel = useAiModel(GRAMMAR_CORRECTION_SYSTEM_PROMPT);
+  const translationModel = useAiModel(TRANSLATION_SYSTEM_PROMPT);
 
   useEffect(() => {
     useConversationSessionStore.setState({
@@ -121,6 +124,39 @@ function ConversationSessionController() {
   useEffect(() => {
     useConversationSessionStore.setState({ startConversation, resetConversation, sendMessage });
   }, [startConversation, resetConversation, sendMessage]);
+
+  // "번역" 토글이 켜져 있으면 AI 대사를 하나씩 한국어로 옮긴다. 스트리밍이 끝난 뒤에만
+  // 손대고(중간 텍스트를 번역하면 낭비), 한 번에 하나씩만 요청한다 — 번역이 끝나 messages가
+  // 바뀌면 이 effect가 다시 돌면서 다음 대사를 집는다. 토글을 나중에 켜도 이미 지나간
+  // 대사까지 같은 방식으로 채워진다.
+  const showTranslation = useConversationSessionStore((s) => s.showTranslation);
+  const messages = useConversationSessionStore((s) => s.messages);
+  const isStreaming = useConversationSessionStore((s) => s.isStreaming);
+  // 실패한 대사를 무한히 다시 시도하지 않도록 "이미 손댄 id"를 기억한다.
+  const translationTriedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!showTranslation || isStreaming) return;
+    const pending = messages.find(
+      (m) => m.role === "assistant" && m.text && !m.translation && !translationTriedRef.current.has(m.id)
+    );
+    if (!pending) return;
+
+    translationTriedRef.current.add(pending.id);
+    const setMessage = (patch: Partial<typeof pending>) =>
+      useConversationSessionStore.setState((s) => ({
+        messages: s.messages.map((msg) => (msg.id === pending.id ? { ...msg, ...patch } : msg)),
+      }));
+
+    setMessage({ translationLoading: true });
+    translationModel
+      .prompt(buildTranslationUserPrompt(pending.text))
+      .then((translation) => setMessage({ translation: translation.trim(), translationLoading: false }))
+      .catch((err) => {
+        setMessage({ translationLoading: false });
+        reportError(err);
+      });
+  }, [showTranslation, isStreaming, messages, translationModel, reportError]);
 
   // 회화 시작 직후 AI가 먼저 말을 걸게 한다 — OPENING_TRIGGER는 실제 학습자 발화가 아니므로
   // 대화 로그(messages)에는 남기지 않고, 그걸 보내서 받은 응답만 assistant 메시지로 추가한다.

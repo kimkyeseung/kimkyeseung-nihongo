@@ -52,7 +52,7 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      PromptApiOnboardingDialog(첫 접속 시 1회 안내 모달),
                      ProgressBar(공용 진행률 바) + AssetLoadingBar(대문 학습 데이터 프리로드) +
                      GemmaModelCard(대문 Gemma 4 모델 다운로드/엔진 선택) +
-                     SpeakButton(문장/단어 끝 발음 재생 버튼) +
+                     SpeakButton(문장/단어 끝 발음 재생 버튼) + CopyButton(클립보드 복사) +
                      KanaDetailDialog(오십음도 글자 상세)
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + AboutPage(정보/출처, 하단 네비게이션 밖) + HomePage(대문 `/`)
@@ -174,6 +174,16 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - "문법 교정 보기"는 회화용 세션과 별도로 `useLanguageModel("")`를 하나 더 띄워, 사용자의
   마지막 입력만 담은 프롬프트(`buildCorrectionPrompt`)를 단발성 `prompt()`로 보낸다 —
   회화 세션의 롤플레이 맥락을 오염시키지 않기 위해 세션을 분리했다.
+- **번역 보기**(입력창 옆 "번역" 토글)도 같은 이유로 세션을 하나 더 띄운다
+  (`TRANSLATION_SYSTEM_PROMPT`). 번역이 붙는 건 **AI 대사뿐** — 내가 쓴 문장은 뜻을 알고
+  쓴 것이라 필요 없다. 컨트롤러의 effect가 "번역이 아직 없는 AI 대사"를 **한 번에 하나씩**
+  집어 번역하고, 끝나면 messages가 바뀌면서 다음 대사를 집는다(동시에 여러 요청을 던지지
+  않으려는 것). 스트리밍 중엔 건드리지 않고, 토글을 나중에 켜도 지나간 대사까지 채워진다.
+  실패한 대사를 무한 재시도하지 않도록 "이미 시도한 id"를 ref에 기억한다.
+- AI 대사에는 발음 버튼 옆에 **복사 버튼**(`CopyButton`, 이모지만)이 붙는다.
+  `navigator.clipboard`는 권한/보안 컨텍스트에 따라 거부되므로(이 프로젝트 미리보기
+  브라우저에서 실제로 NotAllowedError) 임시 textarea + `execCommand("copy")` 폴백이 있다 —
+  클립보드 복사를 새로 붙일 때 이 컴포넌트를 재사용할 것.
 - 후리가나는 LLM에게 만들게 하지 않는다. `src/lib/furigana.ts`의 `annotateFurigana`가
   `dictionary.json`에 이미 있는 단어만 그리디 최장일치로 찾아 후리가나를 입힌다
   (사전에 없는 단어/표현은 그냥 원문 그대로 — 이 프로젝트의 "사전적 사실은 LLM이 지어내지

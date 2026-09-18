@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import ClickableSentence from "../components/ClickableSentence";
+import CopyButton from "../components/CopyButton";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import KanjiDetailSheet from "../components/KanjiDetailSheet";
@@ -97,6 +98,8 @@ function ConversationPage() {
   const chatEngine = useConversationSessionStore((s) => s.chatEngine);
   const chatBusyLabel = useConversationSessionStore((s) => s.chatBusyLabel);
   const startConversation = useConversationSessionStore((s) => s.startConversation);
+  const showTranslation = useConversationSessionStore((s) => s.showTranslation);
+  const setShowTranslation = useConversationSessionStore((s) => s.setShowTranslation);
   const resetConversation = useConversationSessionStore((s) => s.resetConversation);
   const sendMessage = useConversationSessionStore((s) => s.sendMessage);
 
@@ -236,6 +239,7 @@ function ConversationPage() {
                       onKanjiClick={setSelectedKanji}
                     />
                     <SpeakButton text={m.text} label="상대 문장 발음 듣기" className="ml-1" />
+                    <CopyButton text={m.text} label="상대 문장 복사" className="ml-1" />
                   </>
                 ) : (
                   <>
@@ -252,6 +256,12 @@ function ConversationPage() {
               {m.role === "user" && (m.correction || m.correctionLoading) && (
                 <p className="mt-1 max-w-[80%] rounded-xl bg-info/10 px-3 py-1 text-xs text-info">
                   {m.correctionLoading ? "문법 확인 중..." : m.correction}
+                </p>
+              )}
+              {/* 번역은 AI 대사에만 붙인다 — 내가 쓴 문장은 뜻을 이미 알고 쓴 것이다. */}
+              {m.role === "assistant" && showTranslation && (m.translation || m.translationLoading) && (
+                <p className="mt-1 max-w-[80%] px-1 text-sm text-gray-500">
+                  {m.translationLoading ? "번역 중..." : m.translation}
                 </p>
               )}
             </div>
@@ -279,6 +289,19 @@ function ConversationPage() {
             />
           )}
         </div>
+        <button
+          type="button"
+          onClick={() => setShowTranslation(!showTranslation)}
+          aria-pressed={showTranslation}
+          title="AI 대사의 한국어 번역 보기"
+          className={`shrink-0 rounded-2xl border-2 px-3 py-2 text-sm font-bold ${
+            showTranslation
+              ? "border-info bg-info/10 text-info"
+              : "border-gray-100 bg-white text-gray-400"
+          }`}
+        >
+          번역
+        </button>
         <button
           onClick={handleSend}
           disabled={!japaneseInput.value.trim() || isStreaming}
