@@ -16,9 +16,13 @@ import { detectAdjectiveType, getVerbTeForm } from "../lib/verbConjugation";
 import { translatePos } from "../lib/posTags";
 import { useWordbookStore } from "../stores/wordbookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { useWordExamples } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import type { WordEntry } from "../types/dictionary";
 import type { KanjiEntry } from "../types/kanji";
+
+// zustand 셀렉터가 매번 새 배열을 만들면 스냅샷이 계속 달라지므로 빈 목록은 하나를 돌려쓴다.
+const NO_EXAMPLES: WordExample[] = [];
 
 /** LLM으로 단어 활용 예문을 생성한다. 예문은 생성형 작업이라 LLM을 쓰지만, 후리가나는
  * FuriganaText가 사전 데이터에서만 가져와 오버레이한다(LLM이 읽기를 지어내지 않도록). */
@@ -26,7 +30,9 @@ function WordExamples({ entry }: { entry: WordEntry }) {
   const model = useLanguageModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
-  const [examples, setExamples] = useState<WordExample[]>([]);
+  // 생성해둔 예문은 단어별로 store에 남겨, 다른 탭에 갔다 와도 다시 만들지 않아도 되게 한다.
+  const examples = useWordExamples((s) => s.byWordId[entry.id] ?? NO_EXAMPLES);
+  const setExamples = useWordExamples((s) => s.setExamples);
   // null = 생성 중이 아님. 문자열이면 지금 스트리밍 중인 배치의 원문(완료되면 examples에 합쳐짐).
   const [streamingRaw, setStreamingRaw] = useState<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<WordEntry | null>(null);
@@ -51,14 +57,17 @@ function WordExamples({ entry }: { entry: WordEntry }) {
           acc += chunk;
           setStreamingRaw(acc);
         }
-        setExamples((prev) => [...prev, ...parseExampleResponse(acc)]);
+        // 스트리밍이 끝난 뒤 최신 목록에 덧붙인다 — 렌더 시점 값(examples)을 쓰면 연속
+        // 생성 때 앞의 결과를 덮어쓴다.
+        const current = useWordExamples.getState().byWordId[entry.id] ?? NO_EXAMPLES;
+        setExamples(entry.id, [...current, ...parseExampleResponse(acc)]);
       } catch (err) {
         reportError(err);
       } finally {
         setStreamingRaw(null);
       }
     },
-    [entry, isLoading, model, recordProgress, reportError]
+    [entry, isLoading, model, recordProgress, reportError, setExamples]
   );
 
   if (model.status === "checking") return null;

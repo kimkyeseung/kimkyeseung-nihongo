@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { bind, unbind } from "wanakana";
 import { searchDictionary } from "../lib/dictionary";
@@ -14,7 +14,9 @@ function currentToken(value: string): string {
 }
 
 export function useJapaneseInput<T extends HTMLInputElement | HTMLTextAreaElement>(
-  maxSuggestions = 8
+  maxSuggestions = 8,
+  /** 쓰다 만 문장을 store에 보관했다가 되돌려 넣을 때 쓴다(작문 페이지). */
+  initialValue = ""
 ) {
   // 일반 useRef가 아니라 콜백 ref(+ state)를 쓴다: 이 훅을 쓰는 페이지들(회화/작문)은
   // "지원 여부 확인 중" 화면이나 시나리오 선택 화면처럼 input/textarea가 없는 상태로 먼저
@@ -23,7 +25,10 @@ export function useJapaneseInput<T extends HTMLInputElement | HTMLTextAreaElemen
   // 시점에 한 번만 실행되고 끝나 wanakana 바인딩이 영영 안 붙는 버그가 났다 — 엘리먼트가
   // 실제로 나타날 때마다 effect가 다시 돌도록 콜백 ref로 그 시점을 state에 반영한다.
   const [el, setEl] = useState<T | null>(null);
-  const [value, setValueState] = useState("");
+  const [value, setValueState] = useState(initialValue);
+  // 엘리먼트가 (뒤늦게) 나타날 때 지금 값을 다시 넣어주기 위한 최신값 보관 — effect 의존성에
+  // value를 넣으면 타이핑할 때마다 wanakana를 다시 바인딩하게 되므로 ref로 읽는다.
+  const valueRef = useRef(initialValue);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
 
@@ -33,8 +38,11 @@ export function useJapaneseInput<T extends HTMLInputElement | HTMLTextAreaElemen
   // (DictionaryPage에서 확인된 패턴, CLAUDE.md 참고 — 이 프로젝트의 wanakana 입력 표준).
   useEffect(() => {
     if (!el) return;
+    // 페이지를 떠났다 돌아오면 엘리먼트는 비어 있고 값은 store에서 온 initialValue에 있다.
+    if (valueRef.current && el.value !== valueRef.current) el.value = valueRef.current;
     bind(el, { IMEMode: "toHiragana" });
     const handleInput = () => {
+      valueRef.current = el.value;
       setValueState(el.value);
       setShowSuggestions(true);
       setActiveIndex(-1);
@@ -54,6 +62,7 @@ export function useJapaneseInput<T extends HTMLInputElement | HTMLTextAreaElemen
 
   const setValue = useCallback(
     (next: string) => {
+      valueRef.current = next;
       setValueState(next);
       if (el) el.value = next;
     },

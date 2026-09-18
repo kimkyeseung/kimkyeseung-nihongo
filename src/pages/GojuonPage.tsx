@@ -4,10 +4,13 @@ import KanaDetailDialog from "../components/KanaDetailDialog";
 import { GOJUON_SECTIONS, type KanaCell, type ScriptMode } from "../data/gojuon";
 import { useJapaneseSpeech } from "../hooks/useJapaneseSpeech";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { useGojuonView } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 
 function GojuonPage() {
-  const [mode, setMode] = useState<ScriptMode>("hiragana");
+  // 히라가나/가타카나 선택은 페이지를 떠나도 유지된다(pageStateStore 주석 참고).
+  const mode = useGojuonView((s) => s.mode);
+  const setMode = useGojuonView((s) => s.setMode);
   const [selected, setSelected] = useState<KanaCell | null>(null);
   const { speak, isSupported } = useJapaneseSpeech();
   const recordProgress = useGamificationStore((s) => s.recordProgress);

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
@@ -19,6 +19,7 @@ import {
 import { preserveLearnerScript } from "../lib/scriptPreference";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
+import { useWritingDraft, useWritingOptions } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 
 function OptionChip({
@@ -62,18 +63,32 @@ function WritingPage() {
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const celebrate = useConfettiStore((s) => s.celebrate);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
-  const japaneseInput = useJapaneseInput<HTMLTextAreaElement>();
-  const [submittedText, setSubmittedText] = useState<string | null>(null);
-  const [rawResponse, setRawResponse] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  // 쓰다 만 문장도 탭을 옮겼다 돌아오면 그대로 남아있도록 store 값으로 시작한다.
+  const japaneseInput = useJapaneseInput<HTMLTextAreaElement>(8, useWritingDraft.getState().input);
+  // 입력·결과·옵션 모두 페이지를 떠나도 남는다(pageStateStore 주석 참고). 스트리밍 도중
+  // 페이지를 벗어나면 세션이 destroy되어 첨삭은 중단되지만, 이미 받은 만큼은 남는다.
+  const submittedText = useWritingDraft((s) => s.submittedText);
+  const rawResponse = useWritingDraft((s) => s.rawResponse);
+  const isLoading = useWritingDraft((s) => s.isLoading);
+  const startSubmission = useWritingDraft((s) => s.startSubmission);
+  const setRawResponse = useWritingDraft((s) => s.setRawResponse);
+  const finishSubmission = useWritingDraft((s) => s.finishSubmission);
+  const resetDraft = useWritingDraft((s) => s.reset);
   const [shake, setShake] = useState(false);
   // "한자 변환 제안" 칩은 체크 시 켜지는 긍정형 옵션이라, WritingCorrectionOptions가 받는
   // keepKanaChoice(부정형: 한자 변환 제안을 "받지 않기")로 넘길 때는 반전시켜야 한다.
-  const [showKanjiSuggestions, setShowKanjiSuggestions] = useState(true);
-  const [showSimilarSentences, setShowSimilarSentences] = useState(true);
-  const [showAppliedExpressions, setShowAppliedExpressions] = useState(true);
-  const [showMorePolite, setShowMorePolite] = useState(true);
-  const [showMoreCasual, setShowMoreCasual] = useState(true);
+  const showKanjiSuggestions = useWritingOptions((s) => s.showKanjiSuggestions);
+  const showSimilarSentences = useWritingOptions((s) => s.showSimilarSentences);
+  const showAppliedExpressions = useWritingOptions((s) => s.showAppliedExpressions);
+  const showMorePolite = useWritingOptions((s) => s.showMorePolite);
+  const showMoreCasual = useWritingOptions((s) => s.showMoreCasual);
+  const toggleOption = useWritingOptions((s) => s.toggle);
+  const setDraftInput = useWritingDraft((s) => s.setInput);
+
+  // 타이핑할 때마다 store에 옮겨 적어둔다(위 initialValue와 한 쌍).
+  useEffect(() => {
+    setDraftInput(japaneseInput.value);
+  }, [japaneseInput.value, setDraftInput]);
 
   // 고정 지시문(옵션에 따라 달라짐)은 세션 생성 시점의 시스템 프롬프트로, 학습자가 매번
   // 쓰는 문장은 별도의 prompt() 호출로 분리한다 — 문장에 지시문이 섞여 들어와도 명령으로
@@ -104,9 +119,7 @@ function WritingPage() {
   const handleSubmit = useCallback(async () => {
     const text = japaneseInput.value.trim();
     if (!text || isLoading) return;
-    setSubmittedText(text);
-    setRawResponse("");
-    setIsLoading(true);
+    startSubmission(text);
     recordProgress(XP_REWARDS.writingCorrection);
     try {
       let acc = "";
@@ -130,10 +143,10 @@ function WritingPage() {
         setTimeout(() => setShake(false), 500);
       }
     } catch (err) {
-      setSubmittedText(null);
+      resetDraft();
       reportError(err);
     } finally {
-      setIsLoading(false);
+      finishSubmission();
     }
   }, [
     japaneseInput.value,
@@ -143,12 +156,15 @@ function WritingPage() {
     celebrate,
     reportError,
     showKanjiSuggestions,
+    startSubmission,
+    setRawResponse,
+    finishSubmission,
+    resetDraft,
   ]);
 
   function handleReset() {
     japaneseInput.setValue("");
-    setSubmittedText(null);
-    setRawResponse("");
+    resetDraft();
   }
 
   if (model.status === "checking") {
@@ -181,27 +197,27 @@ function WritingPage() {
         <OptionChip
           label="한자 변환 제안"
           active={showKanjiSuggestions}
-          onToggle={() => setShowKanjiSuggestions((v) => !v)}
+          onToggle={() => toggleOption("showKanjiSuggestions")}
         />
         <OptionChip
           label="비슷한 문장"
           active={showSimilarSentences}
-          onToggle={() => setShowSimilarSentences((v) => !v)}
+          onToggle={() => toggleOption("showSimilarSentences")}
         />
         <OptionChip
           label="응용 표현"
           active={showAppliedExpressions}
-          onToggle={() => setShowAppliedExpressions((v) => !v)}
+          onToggle={() => toggleOption("showAppliedExpressions")}
         />
         <OptionChip
           label="더 정중한 표현"
           active={showMorePolite}
-          onToggle={() => setShowMorePolite((v) => !v)}
+          onToggle={() => toggleOption("showMorePolite")}
         />
         <OptionChip
           label="더 친근한 표현"
           active={showMoreCasual}
-          onToggle={() => setShowMoreCasual((v) => !v)}
+          onToggle={() => toggleOption("showMoreCasual")}
         />
       </div>
 

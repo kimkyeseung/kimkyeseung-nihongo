@@ -6,6 +6,7 @@ import { bind, unbind } from "wanakana";
 import { searchDictionary } from "../lib/dictionary";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useRecentSearchesStore } from "../stores/recentSearchesStore";
+import { useDictionaryView } from "../stores/pageStateStore";
 import type { WordEntry } from "../types/dictionary";
 
 function ResultRow({ entry, onClick }: { entry: WordEntry; onClick: () => void }) {
@@ -28,10 +29,13 @@ function DictionaryPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
-  const [query, setQuery] = useState("");
+  // 검색어와 검색 결과는 탭을 옮겼다 돌아와도 그대로다(pageStateStore 주석 참고).
+  const query = useDictionaryView((s) => s.query);
+  const setQuery = useDictionaryView((s) => s.setQuery);
+  const committedQuery = useDictionaryView((s) => s.committedQuery);
+  const setCommittedQuery = useDictionaryView((s) => s.setCommittedQuery);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const [committedQuery, setCommittedQuery] = useState<string | null>(null);
 
   const recent = useRecentSearchesStore((s) => s.recent);
   const addRecent = useRecentSearchesStore((s) => s.add);
@@ -44,6 +48,9 @@ function DictionaryPage() {
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
+    // 돌아왔을 때 입력창을 store에 남아있는 검색어로 되돌려놓는다 — value가 아니라 네이티브
+    // 엘리먼트를 직접 쓰는 구조라(아래 주석 참고) 마운트 시 한 번 직접 넣어줘야 한다.
+    el.value = useDictionaryView.getState().query;
     bind(el, { IMEMode: "toHiragana" });
     const handleInput = () => {
       setQuery(el.value);
@@ -55,7 +62,7 @@ function DictionaryPage() {
       unbind(el);
       el.removeEventListener("input", handleInput);
     };
-  }, []);
+  }, [setQuery]);
 
   const debouncedQuery = useDebouncedValue(query, 200);
   const suggestions = useMemo(() => searchDictionary(debouncedQuery, 8), [debouncedQuery]);
@@ -64,10 +71,13 @@ function DictionaryPage() {
     [committedQuery]
   );
 
-  const setInputValue = useCallback((value: string) => {
-    setQuery(value);
-    if (inputRef.current) inputRef.current.value = value;
-  }, []);
+  const setInputValue = useCallback(
+    (value: string) => {
+      setQuery(value);
+      if (inputRef.current) inputRef.current.value = value;
+    },
+    [setQuery]
+  );
 
   const goToWord = useCallback(
     (entry: WordEntry) => {
@@ -86,7 +96,7 @@ function DictionaryPage() {
       setCommittedQuery(term.trim());
       setShowSuggestions(false);
     },
-    [addRecent]
+    [addRecent, setCommittedQuery]
   );
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {

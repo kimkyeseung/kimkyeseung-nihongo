@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useWordbookStore, type WordbookEntry } from "../stores/wordbookStore";
@@ -7,8 +7,10 @@ import { useConfettiStore } from "../stores/confettiStore";
 import { findWordById } from "../lib/dictionary";
 import { XP_REWARDS } from "../lib/xpRewards";
 import WordbookCard from "../components/WordbookCard";
+import { ALL_GROUP, useWordbookReview, useWordbookView } from "../stores/pageStateStore";
 
-const ALL_GROUP = "all";
+// 큐가 아직 없을 때 매번 새 배열을 만들면 아래 useMemo가 렌더마다 다시 계산된다.
+const EMPTY_QUEUE: string[] = [];
 
 function GroupChips({
   activeGroup,
@@ -87,22 +89,36 @@ function GroupChips({
   );
 }
 
-// 그룹을 바꿀 때마다 부모가 key={activeGroup}로 이 컴포넌트를 새로 마운트시켜
-// 복습 큐를 다시 만든다. entries가 review()/removeWord() 호출로 바뀔 때마다
-// 큐를 리셋하면 스와이프할 때마다 진행 상황이 날아가 버리므로, 큐는 useState의
-// lazy initializer로 "마운트 시점의 스냅샷"만 한 번 찍고 이후엔 로컬 상태로 관리한다.
-function ReviewDeck({ entries }: { entries: WordbookEntry[] }) {
+// 복습 큐는 "마운트 시점의 스냅샷"이다 — entries가 review()/removeWord()로 바뀔 때마다
+// 큐를 다시 만들면 스와이프할 때마다 진행 상황이 날아간다. 예전엔 useState의 lazy
+// initializer로 찍었는데, 그러면 다른 탭에 갔다 오는 순간(=언마운트) 진행이 사라져서
+// 지금은 pageStateStore의 useWordbookReview에 보관한다. 그룹이 바뀌면(=부모가
+// key={activeGroup}로 리마운트) 그때만 큐를 새로 만든다.
+function ReviewDeck({ group, entries }: { group: string; entries: WordbookEntry[] }) {
   const review = useWordbookStore((s) => s.review);
   const removeWord = useWordbookStore((s) => s.removeWord);
   const restoreEntry = useWordbookStore((s) => s.restoreEntry);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const celebrate = useConfettiStore((s) => s.celebrate);
 
-  const [queue, setQueue] = useState<string[]>(() =>
-    [...entries].sort((a, b) => a.srs.dueAt - b.srs.dueAt).map((e) => e.wordId)
-  );
-  const [total] = useState(queue.length);
+  const session = useWordbookReview((s) => (s.session?.group === group ? s.session : null));
+  const startSession = useWordbookReview((s) => s.start);
+  const setQueueInStore = useWordbookReview((s) => s.setQueue);
   const [undo, setUndo] = useState<WordbookEntry | null>(null);
+
+  // 그 그룹의 큐가 아직 없을 때만 새로 만든다. useEffect가 아니라 useLayoutEffect인 이유는
+  // 페인트 전에 끝내야 "복습 다 끝났습니다" 화면이 한 프레임 깜빡이지 않기 때문.
+  useLayoutEffect(() => {
+    if (session) return;
+    startSession(
+      group,
+      [...entries].sort((a, b) => a.srs.dueAt - b.srs.dueAt).map((e) => e.wordId)
+    );
+  }, [session, group, entries, startSession]);
+
+  const queue = session?.queue ?? EMPTY_QUEUE;
+  const total = session?.total ?? 0;
+  const setQueue = (next: (q: string[]) => string[]) => setQueueInStore(next(queue));
 
   useEffect(() => {
     if (!undo) return;
@@ -301,8 +317,11 @@ function WordList({ entries }: { entries: WordbookEntry[] }) {
 
 function WordbookPage() {
   const entriesMap = useWordbookStore((s) => s.entries);
-  const [mode, setMode] = useState<"review" | "list">("review");
-  const [activeGroup, setActiveGroup] = useState(ALL_GROUP);
+  // 복습/목록 탭과 그룹 필터는 페이지를 떠나도 유지된다(pageStateStore 주석 참고).
+  const mode = useWordbookView((s) => s.mode);
+  const setMode = useWordbookView((s) => s.setMode);
+  const activeGroup = useWordbookView((s) => s.activeGroup);
+  const setActiveGroup = useWordbookView((s) => s.setActiveGroup);
 
   const allEntries = useMemo(() => Object.values(entriesMap), [entriesMap]);
   const filteredEntries = useMemo(
@@ -342,7 +361,7 @@ function WordbookPage() {
       </div>
 
       {mode === "review" ? (
-        <ReviewDeck key={activeGroup} entries={filteredEntries} />
+        <ReviewDeck key={activeGroup} group={activeGroup} entries={filteredEntries} />
       ) : (
         <WordList entries={filteredEntries} />
       )}

@@ -68,7 +68,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기)
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
-                     aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함)
+                     aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
+                     conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, gojuon.ts) — 완료
 public/            favicon.svg, icons.svg, hero.png(대문 그림 1536×1024)
@@ -272,6 +273,31 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
 내용물보다 작아지지 않는다. **고정 방법: 루트는 `min-h-svh`가 아니라 `h-svh`(고정 높이)로,
 스크롤 영역인 `<main>`에는 `flex-1 overflow-y-auto`에 `min-h-0`을 반드시 추가한다.**
 새로 풀스크린 레이아웃(헤더+스크롤 영역+하단바 구조)을 만들 때마다 이 패턴을 그대로 쓸 것.
+
+## 페이지 상태 유지 (라우트 전환) 구현 노트
+- 라우트는 전부 `lazy()` + `AnimatePresence`라 **탭을 옮기면 페이지가 언마운트된다** — 페이지
+  로컬 `useState`에 둔 값은 그때 전부 초기화된다. 사용자가 "다른 페이지 갔다 오면 다 초기화된다"고
+  보고해서, 화면 상태를 `src/stores/pageStateStore.ts`로 옮겼다. **새 페이지에 "돌아와도 남아야
+  하는" 상태를 만들 땐 `useState`가 아니라 여기에 스토어를 하나 추가할 것.**
+- 나누는 기준(회화의 `conversationSessionStore`와 동일):
+  - **persist**: 설정처럼 다음에도 같은 값을 쓰고 싶은 것 — 오십음도 히라가나/가타카나,
+    한자 급수, 단어장 복습/목록 탭·그룹 필터, 작문 옵션 칩. 새로고침해도 남는다.
+  - **메모리 전용**: 방금 그 자리에서 만든 내용 — 사전 검색어·결과, 작문 입력/응답,
+    단어별 LLM 예문, 단어장 복습 큐. 탭 이동에는 살아남고 새로고침하면 사라진다
+    (오래된 결과가 되살아나는 쪽이 더 이상하다).
+- **열려 있던 다이얼로그/시트는 일부러 저장하지 않는다** — 돌아왔을 때 모달이 떠 있으면 당황스럽다.
+- 스트리밍 중(작문 첨삭)에 페이지를 떠나면 `useLanguageModel`이 세션을 destroy하므로 생성은
+  중단된다. 그때까지 받은 응답은 store에 남고 `isLoading`은 `finally`에서 내려간다.
+  회화처럼 백그라운드에서 계속 돌려야 한다면 `ConversationSessionController` 방식(Layout에
+  상주하는 컨트롤러)이 필요하다 — 작문은 거기까지 하지 않았다.
+- **wanakana 입력창은 값 복원을 따로 해줘야 한다**: `value` prop이 아니라 네이티브 엘리먼트를
+  직접 쓰는 구조라(WanaKana 주의사항 참고) store에 값이 있어도 DOM은 비어 있다.
+  `useJapaneseInput(maxSuggestions, initialValue)`의 두 번째 인자로 넘기면 엘리먼트가 붙는
+  시점에 넣어준다(작문). 사전 검색창처럼 훅을 안 쓰는 곳은 bind 이펙트에서 직접 `el.value`에 넣는다.
+- 단어장 복습 큐는 예전엔 `useState` lazy initializer 스냅샷이었다(그룹이 바뀔 때만 리셋하려고).
+  지금은 `useWordbookReview`에 그룹과 함께 보관하고, `session.group !== activeGroup`일 때만
+  새로 만든다. 새 큐 생성은 `useLayoutEffect`로 — `useEffect`면 "복습 다 끝났습니다" 화면이
+  한 프레임 깜빡인다.
 
 ## 오십음도 페이지 구현 노트
 - 글자를 탭하면 `KanaDetailDialog`(사전의 `WordMeaningDialog`와 같은 바텀시트 패턴)가 열리면서
