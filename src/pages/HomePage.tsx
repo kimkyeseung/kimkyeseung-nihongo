@@ -13,42 +13,53 @@ const FEATURES = [
     icon: "あ",
     title: "오십음도",
     desc: "히라가나·가타카나를 눌러 듣고 따라 읽기",
+    needsAi: false,
   },
   {
     to: "/dictionary",
     icon: "📖",
     title: "사전",
     desc: "한자·가나·로마자·뜻 어느 쪽으로 검색해도 OK",
+    needsAi: false,
   },
   {
     to: "/kanji",
     icon: "漢",
     title: "한자",
     desc: "JLPT 급수별 획순 애니메이션과 읽기 퀴즈",
+    needsAi: false,
   },
   {
     to: "/wordbook",
     icon: "🗂️",
     title: "단어장",
     desc: "스와이프로 복습하는 나만의 단어 카드",
+    needsAi: false,
   },
+  // needsAi: 브라우저 안에서 도는 LLM이 있어야 쓸 수 있는 기능. 카드 우측 상단에 대각선
+  // 리본으로 표시한다 — 들어가서야 "지원하지 않는 브라우저" 안내를 보는 것보다 낫다.
+  // (실제로 못 쓰는지 여부는 여기서 판단하지 않는다. 그건 aiCapability.ts가 각 페이지에서
+  //  하는 일이고, 여기 리본은 "이건 AI 기능이다"라는 분류 표시다.)
   {
     to: "/conversation",
     icon: "💬",
     title: "회화",
     desc: "상황별 롤플레이와 문법 교정",
+    needsAi: true,
   },
   {
     to: "/writing",
     icon: "✏️",
     title: "작문",
     desc: "쓴 문장을 고쳐주고 어디가 달라졌는지 표시",
+    needsAi: true,
   },
   {
     to: "/teacher",
     icon: "🧑‍🏫",
     title: "선생님",
     desc: "문법·표현을 한국어로 물어보고 예문까지",
+    needsAi: true,
   },
 ] as const;
 
@@ -134,14 +145,42 @@ function HomePage() {
               <li key={f.to}>
                 <Link
                   to={f.to}
-                  className="btn-press flex h-full items-start gap-3 rounded-2xl border-4 border-white bg-white p-4 hover:border-primary/30"
+                  // AI 카드는 리본과 같은 색 1px 외곽선으로 한 번 더 묶어준다. 테두리(border-4)는
+                  // 흰색이라 그대로 두고 outline을 쓴다 — outline은 박스 바깥에 그려져서
+                  // 레이아웃을 밀지 않으므로 AI 카드만 크기가 달라지는 일이 없다.
+                  className={`btn-press relative flex h-full items-start gap-3 overflow-hidden rounded-2xl border-4 border-white bg-white p-4 hover:border-primary/30 ${
+                    f.needsAi ? "outline-1 outline-info" : ""
+                  }`}
                   style={{ ["--btn-shadow" as string]: "rgb(0 0 0 / 0.08)" }}
                 >
+                  {/* 모서리를 가로지르는 대각선 리본. 카드 바깥으로 삐져나온 양끝은 부모의
+                      overflow-hidden이 잘라낸다 — 그래서 카드 너비가 1단/2단으로 바뀌어도
+                      오른쪽 끝에 그대로 붙어 있는다(위치를 right 기준으로만 잡았다).
+
+                      **top과 right는 짝이다 — 하나만 고치면 안 된다.** 회전 중심이 우상단
+                      모서리에서 가로·세로로 같은 거리에 있어야 띠가 모서리를 대칭으로 가른다.
+                      어긋나면 한쪽 끝이 카드 밖에서 안 잘리고 **안쪽에서 끝나 대각선 슬래시처럼
+                      보인다**(실제로 그렇게 나왔다). 지금 값:
+                        가로 = w/2 + right = 144/2 + (-48) = 24px
+                        세로 = top + 높이/2 = 15 + 19/2 ≈ 24px  (높이 19px = 10px 글자 + py-0.5)
+                      이 거리(24px)가 곧 모서리를 얼마나 깊게 자르는지다 — 줄이면 띠가 짧아지고
+                      모서리 쪽으로 붙는다. 대신 보이는 길이(24×2×√2 ≈ 68px)가 글자보다
+                      짧아지면 안 된다. 글자 크기를 바꾸면 높이가 달라지므로 top도 다시 계산할 것. */}
+                  {f.needsAi && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute top-[15px] -right-12 w-36 rotate-45 bg-info py-0.5 text-center text-[10px] font-bold text-white"
+                    >
+                      AI 필요
+                    </span>
+                  )}
                   <span className="text-2xl leading-none font-ja">{f.icon}</span>
                   <span className="flex-1">
                     <span className="block text-gray-800">{f.title}</span>
                     <span className="mt-0.5 block text-sm text-gray-500">{f.desc}</span>
                   </span>
+                  {/* 리본은 aria-hidden(회전된 장식)이라 읽어주는 텍스트를 따로 둔다. */}
+                  {f.needsAi && <span className="sr-only">— 브라우저 안 AI가 필요한 기능</span>}
                 </Link>
               </li>
             ))}
