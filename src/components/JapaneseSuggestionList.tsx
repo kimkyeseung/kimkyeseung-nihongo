@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import type { WordEntry } from "../types/dictionary";
+import { displayMeaning } from "../lib/dictionary";
 
 function JapaneseSuggestionList({
   suggestions,
@@ -43,7 +44,7 @@ function JapaneseSuggestionList({
               >
                 <span className="font-ja text-lg">{s.word}</span>
                 <span className="font-ja text-sm text-gray-400">{s.reading}</span>
-                <span className="ml-auto truncate text-sm text-gray-500">{s.meaning}</span>
+                <span className="ml-auto truncate text-sm text-gray-500">{displayMeaning(s)}</span>
               </button>
             </li>
           ))}

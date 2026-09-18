@@ -37,6 +37,8 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     붙여도 최종 크기는 맞아떨어질 수 있어서, 2GB짜리 파일이 조용히 오염된다.
   - 입력창 로마자 변환 범위(`romajiInput`의 `convertTypedRomaji`) — 범위를 한 글자만 잘못
     잡아도 콘솔은 조용하고 사용자가 쓰던 문장만 망가진다.
+  - 한글 검색 랭킹(`dictionary`의 `koreanTokens`/`scoreKorean`) — 틀려도 결과가 0건이 되는 게
+    아니라 **순서만 엉망이 되어서**, 화면에는 뭔가 나오는데 찾던 단어가 안 보인다.
 
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`verbConjugation`, `scriptPreference`, `kanjiQuiz`가 다음 후보다.)
@@ -45,7 +47,8 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
 ## 핵심 규칙 (이 프로젝트 고유)
 - **LLM은 생성형 작업에만 사용한다**: 회화 응답, 예문 생성, 작문 첨삭. 사전 뜻풀이·읽기·
   JLPT 급수·한자 정보처럼 "정답이 정해진 정보"는 절대 LLM으로 생성하지 말고
-  `src/data/`의 정적 JSON(JMDict/KANJIDIC/KanjiVG 가공본)에서 조회한다.
+  `src/data/`의 정적 JSON(JMDict/KANJIDIC/KanjiVG/한국어 위키낱말사전 가공본)에서 조회한다.
+  한국어 뜻풀이도 마찬가지다 — **번역시키지 말 것**("한국어 뜻풀이" 절 참고).
 - 동사 て형 등 규칙 기반 활용형은 LLM이 아니라 직접 구현한 변환 함수로 계산한다.
 - **`window.LanguageModel`이 있는지 직접 확인하지 말 것.** 객체 존재는 "쓸 수 있다"는 뜻이
   아니다(Whale 등 크로미움 포크에서 실제로 뚫렸다 — "AI 안내 흐름" 노트 참고). 지원 여부는
@@ -126,7 +129,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위)
                    테스트: promptSafety.test.ts · conversationPrompts.test.ts ·
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
-                     romajiInput.test.ts
+                     romajiInput.test.ts · dictionary.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
@@ -822,6 +825,27 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   `WordMeaningDialog` 둘 다 품사 칩을 그리므로, 새로 품사를 보여주는 화면을 또 만들 때도
   raw 코드를 그대로 쓰지 말고 이 함수를 재사용할 것.
 
+## 한국어 뜻풀이 / 한글 검색
+- 단어의 한국어 뜻은 **한국어 위키낱말사전**(kaikki.org 가공본)에서 온다. JMdict에는 한국어판이
+  아예 없다(dut·eng·fre·ger·hun·rus·slv·spa·swe뿐) — 언어 파일만 바꾸면 되는 문제가 아니다.
+- **전체의 약 47%(3,956/8,405)에만 있다.** N5 63% · N4 59% · N3 65% · N2 42% · N1 35%.
+  그래서 화면은 **반드시 `displayMeaning(entry)`를 거칠 것** — 한국어가 없으면 영어로 폴백한다.
+  없는 걸 LLM에게 번역시키지 말 것(사전적 사실은 지어내지 않는다는 규칙 그대로다).
+- **읽기(가나)로는 매칭하지 않는다 (실측해서 내린 결론).** 원본에 한자 표기와 읽기를 잇는 정보가
+  거의 없어서 읽기로 이으면 동음이의어에 엉뚱한 뜻이 붙는다. 표본 19개 중 5개가 오답이었다:
+  `下吏(かり)` → "사냥"(狩り) / `協会(きょうかい)` → "교회"(教会) / `宝器(ほうき)` → "빗자루"(箒).
+  품사로 후보를 좁히는 것도 시도했지만 `卯(う)` → "あ행의 3번째 문자"처럼 더 나빠졌다.
+  커버리지 61% → 47%를 잃더라도 **틀린 뜻을 싣지 않는 쪽**을 택했다. 커버리지를 올리고 싶으면
+  읽기 폴백을 되살리지 말고 **다른 출처를 하나 더 붙일 것**.
+- **검색은 뜻풀이를 통째로 `includes`하지 않는다 (실제로 겪은 문제).** 한 뜻풀이에 여러 말이
+  쉼표로 묶여 있어서 통째로 비교하면 음절만 겹쳐도 걸린다 — "물"로 검색했더니 `水`는 안 보이고
+  "물러나다"·"결합물"·"물체"가 먼저 나왔다. `koreanTokens`가 쉼표·세미콜론으로 자르고
+  앞 괄호 설명(`"(마시는) 물"` → `"물"`)을 뗀 형태도 후보로 둔다. 맨 앞 뜻이 일치하면 더
+  높은 점수를 준다(`먹다` → `飲む`보다 `食べる`가 먼저).
+- 같은 점수대의 정렬은 **흔한 단어 → 낮은 급수** 순이다. 점수에 가산점을 섞지 말 것 —
+  새 점수대를 추가할 때마다 경계가 어긋난다(예전엔 common에 +5점을 얹고 있었다).
+- 오십음도의 `kana-words.json`에도 같은 한국어 뜻이 실린다(`build-kana-words.mjs`).
+
 ## 배포 (Vercel) — `vercel.json`을 지우지 말 것
 - Vercel에 정적 사이트로 올라간다(`@vercel/analytics`가 `App.tsx`에 붙어 있다). 빌드 결과물은
   `index.html` 하나 + `assets/`뿐이고, `/gojuon` 같은 경로는 **파일이 아니라 브라우저 안에서만
@@ -835,7 +859,7 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   대신 없는 파일을 요청해도 404 대신 index.html(200)이 돌아온다 — SPA에서는 정상이다.
 
 ## 데이터 파이프라인 (완료됨)
-`src/data/`의 사전/한자/획순 JSON은 이미 생성되어 있다. 원본을 다시 받거나 갱신하려면:
+`src/data/`의 사전/한자/획순 JSON은 이미 생성되어 있다(원본 5종을 받아 가공한다). 원본을 다시 받거나 갱신하려면:
 ```bash
 bash scripts/data/download.sh && bash scripts/data/build-all.sh
 ```

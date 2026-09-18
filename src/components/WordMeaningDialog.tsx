@@ -75,6 +75,10 @@ function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose:
               ))}
             </div>
 
+            {word.koreanMeaning && (
+              <p className="mt-2 text-lg text-gray-800">{word.koreanMeaning.join(", ")}</p>
+            )}
+
             <ol className="mt-2 flex flex-col gap-1">
               {word.senses.slice(0, 3).map((sense, i) => (
                 <li key={i} className="text-gray-700">

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import KanjiStrokeOrder from "./KanjiStrokeOrder";
 import LoadingMascot from "./LoadingMascot";
-import { findWordsContainingKanji } from "../lib/dictionary";
+import { findWordsContainingKanji, displayMeaning } from "../lib/dictionary";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
 import { useGamificationStore } from "../stores/gamificationStore";
@@ -102,7 +102,7 @@ function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClos
                           {koreanReading && (
                             <span className="ml-1 text-xs text-gray-400">({koreanReading})</span>
                           )}
-                          <span className="ml-2 text-xs text-gray-500">{w.meaning}</span>
+                          <span className="ml-2 text-xs text-gray-500">{displayMeaning(w)}</span>
                         </Link>
                       </li>
                     );

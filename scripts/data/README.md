@@ -27,14 +27,15 @@ node scripts/data/build-kanjivg.mjs   # build-kanji.mjs 이후에 실행할 것 
 | 파일 | 소스 | 라이선스 |
 |------|------|----------|
 | `dictionary.json`, `pos-tags.json` | [Bluskyo/JMDict_Extended](https://github.com/Bluskyo/JMDict_Extended) (JMDict + JLPT 태그 + 후리가나 병합) | CC BY-SA (JMDict, EDRDG) |
+| `dictionary.json`, `kana-words.json` (한국어 뜻) | [한국어 위키낱말사전](https://kaikki.org/kowiktionary/) (kaikki.org 가공본) | CC BY-SA 3.0 |
 | `kanji.json` (음독/훈독/뜻/획수) | [scriptin/jmdict-simplified](https://github.com/scriptin/jmdict-simplified)의 KANJIDIC2 JSON 변환본 | CC BY-SA (KANJIDIC2, EDRDG) |
 | `kanji.json` (JLPT 급수) | [AnchorI/jlpt-kanji-dictionary](https://github.com/AnchorI/jlpt-kanji-dictionary) | 원 저장소 라이선스 참고 |
 | `kanjivg.json` (획순 경로) | [KanjiVG](https://github.com/KanjiVG/kanjivg) | CC BY-SA 3.0 |
 
 앱의 정보/설정 페이지와 README에 아래와 같은 출처 표기가 필요하다:
 
-> 사전 데이터: JMDict/KANJIDIC (EDRDG, CC BY-SA) · JLPT 태그: JMDict_Extended,
-> AnchorI/jlpt-kanji-dictionary · 획순: KanjiVG (CC BY-SA 3.0)
+> 사전 데이터: JMDict/KANJIDIC (EDRDG, CC BY-SA) · 한국어 뜻: 한국어 위키낱말사전 (CC BY-SA) ·
+> JLPT 태그: JMDict_Extended, AnchorI/jlpt-kanji-dictionary · 획순: KanjiVG (CC BY-SA 3.0)
 
 `download.sh`의 URL은 2026-09-15 기준 각 저장소의 특정 릴리즈 태그에 고정되어 있다.
 최신 데이터로 갱신하려면 각 저장소의 최신 릴리즈 URL로 교체 후 재실행한다.

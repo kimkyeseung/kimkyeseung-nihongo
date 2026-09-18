@@ -8,6 +8,12 @@ const SOURCES = [
     url: "https://github.com/Bluskyo/JMDict_Extended",
   },
   {
+    name: "한국어 위키낱말사전",
+    desc: "단어의 한국어 뜻풀이 (kaikki.org 가공본)",
+    license: "CC BY-SA 3.0",
+    url: "https://kaikki.org/kowiktionary/",
+  },
+  {
     name: "KANJIDIC2",
     desc: "한자 음독·훈독·뜻·획수",
     license: "CC BY-SA (EDRDG)",
@@ -68,7 +74,8 @@ function AboutPage() {
       </ul>
 
       <p className="mt-4 rounded-2xl bg-gray-50 p-3 text-xs text-gray-400">
-        사전 데이터: JMDict/KANJIDIC (EDRDG, CC BY-SA) · JLPT 태그: JMDict_Extended,
+        사전 데이터: JMDict/KANJIDIC (EDRDG, CC BY-SA) · 한국어 뜻: 한국어 위키낱말사전 (CC BY-SA) ·
+        JLPT 태그: JMDict_Extended,
         AnchorI/jlpt-kanji-dictionary · 획순: KanjiVG (CC BY-SA)
       </p>
     </div>

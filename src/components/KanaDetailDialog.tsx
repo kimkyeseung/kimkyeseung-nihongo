@@ -77,7 +77,7 @@ function KanaDetailDialog({
                         {word.word !== word.reading && (
                           <span className="ml-2 font-ja text-sm text-gray-500">{word.reading}</span>
                         )}
-                        <span className="block truncate text-sm text-gray-600">{word.meaning}</span>
+                        <span className="block truncate text-sm text-gray-600">{word.koreanMeaning?.join(", ") ?? word.meaning}</span>
                       </Link>
                       <SpeakButton text={word.reading} label={`${word.word} 발음 듣기`} />
                     </li>

@@ -24,6 +24,56 @@ function pickPrimary(forms) {
   return forms.find((f) => f.common) ?? forms[0];
 }
 
+const HANGUL = /[가-힣]/;
+/** 한국어 뜻은 최대 이만큼만 싣는다 — 사전 파일 용량과 화면 길이 둘 다를 위해. */
+const MAX_KOREAN_GLOSSES = 4;
+
+/**
+ * 한국어 위키낱말사전(kaikki.org 가공본)에서 **표기 → 한국어 뜻** 사전을 만든다.
+ *
+ * **읽기(가나)로는 매칭하지 않는다 (실측해서 내린 결론).** 원본에는 한자 표기와 읽기를 잇는
+ * 정보가 사실상 없어서(13,629개 중 읽기가 달린 한자 표제어가 469개뿐), 읽기로 이으면 동음이의어에
+ * 엉뚱한 뜻이 붙는다. 표본 19개를 눈으로 확인했을 때 5개가 오답이었다:
+ *   下吏(かり) → "사냥"(狩り) / 協会(きょうかい) → "교회"(教会) / 宝器(ほうき) → "빗자루"(箒)
+ * 품사로 후보를 좁히는 것도 시도했지만 卯(う) → "あ행의 3번째 문자"처럼 더 나빠졌다.
+ * 커버리지(61% → 47%)를 잃더라도 **틀린 뜻을 싣지 않는 쪽**을 택한다 — 사전적 사실은 지어내지
+ * 않는다는 이 프로젝트의 규칙과 같은 이유다.
+ */
+function loadKoreanGlosses(file) {
+  if (!fs.existsSync(file)) {
+    console.warn(`(건너뜀) 한국어 뜻풀이 원본이 없습니다: ${file}`);
+    console.warn("  한국어 뜻 없이 빌드합니다. 받으려면: bash scripts/data/download.sh");
+    return new Map();
+  }
+
+  const byWord = new Map();
+  for (const line of fs.readFileSync(file, "utf-8").split("\n")) {
+    if (!line.trim()) continue;
+    const entry = JSON.parse(line);
+    const glosses = [];
+    for (const sense of entry.senses ?? []) {
+      for (const raw of sense.glosses ?? []) {
+        const gloss = raw.trim().replace(/\.+$/, "").trim();
+        if (!gloss) continue;
+        // 한글이 없는 뜻풀이는 버린다 — 표제어를 그대로 되풀이한 것(何時か → "何時か")이나
+        // 일본어 설명만 남은 항목이 섞여 있다.
+        if (!HANGUL.test(gloss)) continue;
+        glosses.push(gloss);
+      }
+    }
+    if (glosses.length === 0) continue;
+    const prev = byWord.get(entry.word) ?? [];
+    byWord.set(entry.word, [...prev, ...glosses]);
+  }
+
+  // 같은 표기에 여러 항목이 있으면(동음이의) 뜻을 합쳐서 싣는다 — 어느 쪽이 맞는지 고를
+  // 근거가 없으니 고르지 않는다.
+  for (const [word, glosses] of byWord) {
+    byWord.set(word, [...new Set(glosses)].slice(0, MAX_KOREAN_GLOSSES));
+  }
+  return byWord;
+}
+
 function main() {
   const srcPath = path.join(CACHE_DIR, "jmdictExtended.json");
   if (!fs.existsSync(srcPath)) {
@@ -33,6 +83,7 @@ function main() {
   }
 
   const data = readJson(srcPath);
+  const koreanGlosses = loadKoreanGlosses(path.join(CACHE_DIR, "ko-wiktionary-ja.jsonl"));
   const usedPosCodes = new Set();
   const entries = [];
 
@@ -72,6 +123,9 @@ function main() {
       });
     if (senses.length === 0) continue;
 
+    // 표기가 정확히 같을 때만 붙인다(loadKoreanGlosses 주석 참고).
+    const koreanMeaning = koreanGlosses.get(word);
+
     entries.push({
       id: w.id,
       word,
@@ -81,6 +135,7 @@ function main() {
       furigana: word === primaryKanji?.text ? (primaryKanji?.furigana ?? null) : null,
       pos: senses[0].pos,
       meaning: senses[0].glosses[0],
+      ...(koreanMeaning ? { koreanMeaning } : {}),
       senses,
     });
   }
@@ -105,8 +160,18 @@ function main() {
   const byLevel = {};
   for (const e of entries) byLevel[e.jlptLevel] = (byLevel[e.jlptLevel] ?? 0) + 1;
 
+  const koCount = entries.filter((e) => e.koreanMeaning).length;
+  const koByLevel = {};
+  for (const e of entries) if (e.koreanMeaning) koByLevel[e.jlptLevel] = (koByLevel[e.jlptLevel] ?? 0) + 1;
+
   console.log(`dictionary.json: 총 ${entries.length}개 단어`);
   console.log(byLevel);
+  console.log(
+    `한국어 뜻: ${koCount}개 (${((koCount / entries.length) * 100).toFixed(1)}%)`,
+    Object.fromEntries(
+      Object.keys(byLevel).sort().map((lv) => [lv, `${koByLevel[lv] ?? 0}/${byLevel[lv]}`])
+    )
+  );
   console.log(`pos-tags.json: ${Object.keys(posTags).length}개 품사 태그`);
 }
 

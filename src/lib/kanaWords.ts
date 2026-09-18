@@ -7,6 +7,8 @@ export interface KanaWord {
   word: string;
   reading: string;
   meaning: string;
+  /** 한국어 뜻. 없을 수 있다 — WordEntry.koreanMeaning과 같은 규칙. */
+  koreanMeaning?: string[];
 }
 
 const KANA_WORDS = kanaWordsData as Record<

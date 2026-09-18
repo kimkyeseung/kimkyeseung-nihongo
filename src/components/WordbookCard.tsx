@@ -1,5 +1,6 @@
 import { animate, motion, useMotionValue, useTransform } from "framer-motion";
 import type { WordEntry } from "../types/dictionary";
+import { displayMeaning } from "../lib/dictionary";
 
 const SWIPE_THRESHOLD = 100;
 
@@ -63,7 +64,7 @@ function WordbookCard({
         </span>
         <h3 className="mt-4 font-ja text-5xl">{entry.word}</h3>
         <p className="mt-2 font-ja text-xl text-gray-500">{entry.reading}</p>
-        <p className="mt-3 text-gray-600">{entry.meaning}</p>
+        <p className="mt-3 text-gray-600">{displayMeaning(entry)}</p>
       </div>
 
       <p className="text-center text-xs text-gray-300">

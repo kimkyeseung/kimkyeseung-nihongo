@@ -236,6 +236,14 @@ function WordDetailPage() {
         </p>
       )}
 
+      {/* 한국어 뜻이 있으면 먼저 보여준다. 없는 단어가 절반쯤 되므로(빌드 스크립트 주석 참고)
+          영어 뜻 목록은 지우지 않고 그대로 아래에 남긴다 — 지우면 정보가 줄어든다. */}
+      {entry.koreanMeaning && (
+        <p className="mt-4 rounded-2xl bg-primary/10 px-4 py-3 text-lg text-gray-800">
+          {entry.koreanMeaning.join(", ")}
+        </p>
+      )}
+
       <ol className="mt-5 flex flex-col gap-3">
         {entry.senses.map((sense, i) => (
           <li key={i}>

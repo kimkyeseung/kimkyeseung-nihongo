@@ -57,6 +57,7 @@ Framer Motion, WanaKana(로마자→히라가나 변환), react-markdown + remar
 | 데이터 | 출처 | 라이선스 |
 |---|---|---|
 | 사전 뜻풀이·읽기·JLPT 급수·후리가나 | [Bluskyo/JMDict_Extended](https://github.com/Bluskyo/JMDict_Extended) (JMDict 기반) | CC BY-SA (EDRDG) |
+| 단어의 한국어 뜻풀이 | [한국어 위키낱말사전](https://kaikki.org/kowiktionary/) (kaikki.org 가공본) | CC BY-SA 3.0 |
 | 한자 음독·훈독·뜻·획수 | [scriptin/jmdict-simplified](https://github.com/scriptin/jmdict-simplified)의 KANJIDIC2 JSON | CC BY-SA (EDRDG) |
 | 한자 JLPT 급수 매칭 | [AnchorI/jlpt-kanji-dictionary](https://github.com/AnchorI/jlpt-kanji-dictionary) | 원 저장소 라이선스 참고 |
 | 한자 획순 벡터 경로 | [KanjiVG](https://github.com/KanjiVG/kanjivg) | CC BY-SA 3.0 |

@@ -3,7 +3,7 @@ import type { KeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { bind, unbind } from "wanakana";
-import { searchDictionary } from "../lib/dictionary";
+import { searchDictionary, displayMeaning } from "../lib/dictionary";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useRecentSearchesStore } from "../stores/recentSearchesStore";
 import { useDictionaryView } from "../stores/pageStateStore";
@@ -20,7 +20,7 @@ function ResultRow({ entry, onClick }: { entry: WordEntry; onClick: () => void }
       </span>
       <span className="font-ja text-lg">{entry.word}</span>
       <span className="font-ja text-sm text-gray-400">{entry.reading}</span>
-      <span className="ml-auto truncate text-sm text-gray-500">{entry.meaning}</span>
+      <span className="ml-auto truncate text-sm text-gray-500">{displayMeaning(entry)}</span>
     </button>
   );
 }
@@ -133,7 +133,7 @@ function DictionaryPage() {
           onFocus={() => setShowSuggestions(true)}
           onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
           onKeyDown={handleKeyDown}
-          placeholder="한자 / 가나 / 로마자로 검색 (예: nihongo)"
+          placeholder="한자 / 가나 / 로마자 / 한국어 뜻으로 검색 (예: 물)"
           className="w-full rounded-2xl border-2 border-gray-100 px-4 py-3 font-ja text-lg shadow-sm focus:border-primary/40 focus:outline-none"
         />
 
@@ -157,7 +157,7 @@ function DictionaryPage() {
                   >
                     <span className="font-ja text-lg">{s.word}</span>
                     <span className="font-ja text-sm text-gray-400">{s.reading}</span>
-                    <span className="ml-auto truncate text-sm text-gray-500">{s.meaning}</span>
+                    <span className="ml-auto truncate text-sm text-gray-500">{displayMeaning(s)}</span>
                   </button>
                 </li>
               ))}

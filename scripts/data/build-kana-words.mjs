@@ -80,7 +80,14 @@ function pickBest(candidates) {
 }
 
 function toEntry(word) {
-  return { id: word.id, word: word.word, reading: word.reading, meaning: word.meaning };
+  // 한국어 뜻은 있을 때만 싣는다(전체의 약 47%). 없으면 화면이 영어 meaning으로 폴백한다.
+  return {
+    id: word.id,
+    word: word.word,
+    reading: word.reading,
+    meaning: word.meaning,
+    ...(word.koreanMeaning ? { koreanMeaning: word.koreanMeaning } : {}),
+  };
 }
 
 function main() {
