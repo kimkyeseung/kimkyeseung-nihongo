@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { to: "/wordbook", label: "단어장", icon: "🗂️" },
   { to: "/conversation", label: "회화", icon: "💬" },
   { to: "/writing", label: "작문", icon: "✏️" },
+  { to: "/teacher", label: "선생님", icon: "🧑‍🏫" },
 ] as const;
 
 // react-router의 Outlet은 위치가 바뀌면 즉시 다음 페이지로 교체돼서, AnimatePresence가
@@ -80,13 +81,17 @@ function Layout() {
         <AnimatedOutlet />
       </main>
 
-      <nav className="flex justify-around gap-1 overflow-x-auto border-t-4 border-primary/20 bg-white px-2 py-2">
+      {/* 항목이 8개라 375px 화면에서는 한 칸이 40px대까지 좁아진다 — 고정 최소 너비(min-w-16)를
+          주면 넘쳐서 마지막 항목이 잘리므로, flex-1 + min-w-0으로 화면을 8등분하고 라벨은
+          줄바꿈 없이(whitespace-nowrap) 작은 글씨로 넣는다. 항목을 더 늘릴 거라면 이 계산을
+          다시 할 것(라벨을 줄이거나 아이콘만 남기는 식). */}
+      <nav className="flex gap-0.5 border-t-4 border-primary/20 bg-white px-1 py-2 sm:gap-1 sm:px-2">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex min-w-16 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-sm ${
+              `flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[11px] whitespace-nowrap sm:text-sm ${
                 isActive ? "bg-primary/10 text-primary" : "text-gray-500"
               }`
             }

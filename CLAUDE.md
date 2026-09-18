@@ -8,6 +8,7 @@ Chrome Canary의 온디바이스 AI(Prompt API, `window.LanguageModel`)를 활�
 - 라우팅: react-router-dom
 - 상태 관리: Zustand 또는 Context API — localStorage/IndexedDB와 동기화하는 커스텀 훅으로 감싸서 사용
 - 애니메이션: Framer Motion (페이지 전환, 카드 스와이프, confetti 등)
+- 마크다운 렌더링: `react-markdown` + `remark-gfm` (선생님 페이지 답변 전용)
 - 로마자→히라가나: `wanakana` 패키지
 - 패키지 매니저: npm
 
@@ -53,8 +54,9 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      ProgressBar(공용 진행률 바) + AssetLoadingBar(대문 학습 데이터 프리로드) +
                      GemmaModelCard(대문 Gemma 4 모델 다운로드/엔진 선택) +
                      SpeakButton(문장/단어 끝 발음 재생 버튼) + CopyButton(클립보드 복사) +
-                     KanaDetailDialog(오십음도 글자 상세)
+                     KanaDetailDialog(오십음도 글자 상세) + MarkdownAnswer(선생님 답변 렌더링)
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
+                     + TeacherPage(선생님 — 자유 질문, 스펙 밖이지만 하단 네비에 포함)
                      + AboutPage(정보/출처, 하단 네비게이션 밖) + HomePage(대문 `/`)
 src/hooks/         useJapaneseSpeech, useDebouncedValue, useLanguageModel,
                      useAssetPreload, useGemmaModel 완료
@@ -65,11 +67,13 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      preloadAssets.ts(대문 프리로드) + gemmaModel.ts/gemmaEngine.ts(Gemma 4) +
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
                      kanaWords.ts(오십음도 글자별 대표 단어 조회) +
-                     scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기)
+                     scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
+                     teacherPrompts.ts(선생님 지시문·예시 질문)
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
-                     conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태)
+                     conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태) ·
+                     teacherChatStore(선생님 대화, 메모리 전용)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, gojuon.ts) — 완료
 public/            favicon.svg, icons.svg, hero.png(대문 그림 1536×1024)
@@ -77,8 +81,8 @@ src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입, o
 scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립트 (완료, scripts/data/README.md 참고)
 ```
 
-하단 네비게이션 경로 7개 전부 완료: `/gojuon`(기본) · `/dictionary`(+`/dictionary/:id`) · `/kanji` ·
-`/wordbook` · `/conversation` · `/writing`. 스펙 문서(japanese_app_prompt_1.md)의 페이지 구성은
+하단 네비게이션 경로: `/gojuon` · `/dictionary`(+`/dictionary/:id`) · `/kanji` ·
+`/wordbook` · `/conversation` · `/writing` · `/teacher`(7개). 스펙 문서(japanese_app_prompt_1.md)의 페이지 구성은
 전부 최소 기능으로 구현됨. 추가로 `/about`(정보/출처 페이지, 헤더의 ⓘ 아이콘으로 진입,
 하단 네비게이션에는 없음) 완료. 남은 건 다듬기(번들 최적화 등)와 QA.
 
@@ -207,6 +211,25 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 지원 여부 판단은 `src/lib/languageModel.ts`의 `isPromptApiSupported()` 하나로 통일했다
   (`useLanguageModel` 훅과 이 다이얼로그가 같이 씀) — 새로 지원 여부를 확인하는 코드가
   필요하면 이 함수를 재사용할 것, `'LanguageModel' in window`를 여기저기서 새로 쓰지 말 것.
+
+## 선생님 페이지(`/teacher`) 구현 노트
+- 회화가 "일본어로 롤플레이"라면 여기는 **"한국어로 물어보는 수업"**이다. 문법·표현을 자유롭게
+  묻고 마크다운 설명을 받는다. 스펙에 없는 페이지지만 **하단 네비게이션에 넣었다**(사용자 요청) —
+  `/about`처럼 헤더 아이콘으로 빼는 기본 규칙의 예외다.
+- 답변 형식은 `TEACHER_SYSTEM_PROMPT`가 고정한다. 핵심은 **일본어를 전부 백틱으로 감싸게**
+  시키는 것 — `MarkdownAnswer`가 인라인 코드 자리를 `ClickableSentence`로 바꿔 사전 후리가나·
+  단어 탭·발음/복사 버튼을 붙인다. 그래서 **후리가나는 모델에게 쓰게 하지 않는다**(읽기는 사전
+  정보라 LLM이 지어내면 안 된다는 프로젝트 규칙 그대로). 백틱 안이 일본어가 아니면 평범한 코드
+  칩으로 둔다.
+- 마크다운은 `react-markdown` + `remark-gfm`으로 렌더링하고, 요소별 Tailwind 클래스를 직접
+  지정한다(typography 플러그인을 새로 들이지 않으려고). 표(GFM)는 활용형 정리에 쓸모가 있어 켰다.
+- 질문 입력창에는 **wanakana를 붙이지 않는다** — 여기서 치는 건 한국어 질문이다(회화/작문과 다름).
+- 대화는 `teacherChatStore`(메모리 전용)에 있어 탭을 옮겨도 남지만, **답변 스트리밍 중에
+  나가면 세션이 destroy되어 생성은 끊긴다**(작문 첨삭과 같은 절충). 백그라운드에서도 계속
+  받으려면 회화의 `ConversationSessionController`처럼 Layout 상주 컨트롤러가 필요하다.
+- 하단 네비게이션이 7칸이 되면서 375px에서 자리가 빠듯해졌다. 고정 최소 너비(`min-w-16`)를
+  버리고 `flex-1 min-w-0` + 작은 글씨로 화면을 n등분한다 — **항목을 더 늘릴 땐 375px에서
+  `nav.scrollWidth > clientWidth`를 꼭 확인할 것**(라벨을 줄이거나 아이콘만 남기는 식으로).
 
 ## 작문 첨삭 페이지 구현 노트
 - `useLanguageModel`을 그대로 재사용(회화 페이지와 동일 패턴). 모델에게 항상 고정된
