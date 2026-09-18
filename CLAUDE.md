@@ -52,7 +52,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      PromptApiOnboardingDialog(첫 접속 시 1회 안내 모달),
                      ProgressBar(공용 진행률 바) + AssetLoadingBar(대문 학습 데이터 프리로드) +
                      GemmaModelCard(대문 Gemma 4 모델 다운로드/엔진 선택) +
-                     SpeakButton(문장/단어 끝 발음 재생 버튼)
+                     SpeakButton(문장/단어 끝 발음 재생 버튼) +
+                     KanaDetailDialog(오십음도 글자 상세)
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + AboutPage(정보/출처, 하단 네비게이션 밖) + HomePage(대문 `/`)
 src/hooks/         useJapaneseSpeech, useDebouncedValue, useLanguageModel,
@@ -62,11 +63,13 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      conversationPrompts.ts + writingCorrection.ts(첨삭 프롬프트/응답 파싱) +
                      xpRewards.ts(행동별 XP 값) + badges.ts(뱃지 정의) +
                      preloadAssets.ts(대문 프리로드) + gemmaModel.ts/gemmaEngine.ts(Gemma 4) +
-                     speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리)
+                     speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
+                     kanaWords.ts(오십음도 글자별 대표 단어 조회)
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함)
-src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json) — 완료
+src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
+                     kana-words.json, gojuon.ts) — 완료
 public/            favicon.svg, icons.svg, hero.png(대문 그림 1536×1024)
 src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입, opfs.ts(move 선언) — 완료
 scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립트 (완료, scripts/data/README.md 참고)
@@ -249,6 +252,24 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
 내용물보다 작아지지 않는다. **고정 방법: 루트는 `min-h-svh`가 아니라 `h-svh`(고정 높이)로,
 스크롤 영역인 `<main>`에는 `flex-1 overflow-y-auto`에 `min-h-0`을 반드시 추가한다.**
 새로 풀스크린 레이아웃(헤더+스크롤 영역+하단바 구조)을 만들 때마다 이 패턴을 그대로 쓸 것.
+
+## 오십음도 페이지 구현 노트
+- 글자를 탭하면 `KanaDetailDialog`(사전의 `WordMeaningDialog`와 같은 바텀시트 패턴)가 열리면서
+  발음도 같이 재생된다. 다이얼로그에는 큰 글자·로마자·발음 버튼, **반대쪽 문자**(히라가나를
+  보고 있으면 가타카나를, 반대면 히라가나를), 대표 단어 최대 5개가 뜬다. 단어 줄을 누르면
+  단어 상세로 가고, 그 옆 버튼으로 발음을 듣는다(링크 안에 버튼을 넣으면 안 되므로 나란히 둠).
+- **대표 단어는 `src/data/kana-words.json`에서 읽는다** — 사전적 사실이라 LLM 금지고, 그렇다고
+  `dictionary.ts`를 쓰면 2.9MB짜리 사전 청크가 오십음도(하단 네비 기본 진입 페이지)까지
+  딸려온다. 그래서 `scripts/data/build-kana-words.mjs`가 dictionary.json에서 글자별로 5개씩
+  미리 뽑아 58KB짜리 파일로 떨궈둔다(GojuonPage 청크 62KB/gzip 18KB). 오십음도에 사전 데이터가
+  더 필요해지면 이 방식을 따를 것 — 런타임에 dictionary.json을 import하지 말 것.
+  선정 규칙과 예외는 scripts/data/README.md 참고.
+- 가타카나 모드에서는 외래어(カップ), 히라가나 모드에서는 고유어/한자어(角)를 보여준다.
+  한쪽이 비면 다른 쪽으로 폴백하고, 둘 다 없는 8자(ぢ·づ 등)는 대표 단어 칸을 아예 안 그린다.
+- **알려진 문제**(아직 안 고침): ① 탭할 때마다 `XP_REWARDS.gojuonPlayed`가 무조건 지급돼서
+  연타하면 XP가 무한히 쌓인다 — 게이미피케이션 규칙("전환될 때만 지급")과 어긋나므로 가나
+  학습 진도 스토어를 만들 때 "처음 들어본 글자"에만 주도록 함께 고칠 것. ② 375px 화면에서
+  표가 9px 넘쳐 마지막 열이 잘린다(셀 최소폭 3.5rem / 행 레이블 2rem을 줄이면 된다).
 
 ## 발음 재생(TTS) 구현 노트
 - 문장/단어 끝의 🔊 버튼은 전부 `SpeakButton` 하나다(내부에서 `useJapaneseSpeech` 사용).

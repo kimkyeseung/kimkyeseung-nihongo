@@ -1,19 +1,22 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { GOJUON_SECTIONS, type KanaCell } from "../data/gojuon";
+import KanaDetailDialog from "../components/KanaDetailDialog";
+import { GOJUON_SECTIONS, type KanaCell, type ScriptMode } from "../data/gojuon";
 import { useJapaneseSpeech } from "../hooks/useJapaneseSpeech";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 
-type ScriptMode = "hiragana" | "katakana";
-
 function GojuonPage() {
   const [mode, setMode] = useState<ScriptMode>("hiragana");
+  const [selected, setSelected] = useState<KanaCell | null>(null);
   const { speak, isSupported } = useJapaneseSpeech();
   const recordProgress = useGamificationStore((s) => s.recordProgress);
 
-  function handleSpeak(text: string) {
-    speak(text);
+  // 탭하면 상세 다이얼로그를 열면서 발음도 바로 들려준다 — 다이얼로그를 여느라 소리가
+  // 한 박자 늦어지면 예전의 "누르면 바로 소리" 감각이 사라진다.
+  function handleSelect(cell: KanaCell) {
+    setSelected(cell);
+    speak(mode === "hiragana" ? cell.hiragana : cell.katakana);
     recordProgress(XP_REWARDS.gojuonPlayed);
   }
 
@@ -72,7 +75,7 @@ function GojuonPage() {
                     rowLabel={row.rowLabel}
                     cells={row.cells}
                     mode={mode}
-                    onSpeak={handleSpeak}
+                    onSelect={handleSelect}
                   />
                 ))}
               </div>
@@ -80,6 +83,8 @@ function GojuonPage() {
           </section>
         ))}
       </div>
+
+      <KanaDetailDialog cell={selected} mode={mode} onClose={() => setSelected(null)} />
     </div>
   );
 }
@@ -88,12 +93,12 @@ function RowCells({
   rowLabel,
   cells,
   mode,
-  onSpeak,
+  onSelect,
 }: {
   rowLabel: string;
   cells: (KanaCell | null)[];
   mode: ScriptMode;
-  onSpeak: (text: string) => void;
+  onSelect: (cell: KanaCell) => void;
 }) {
   return (
     <>
@@ -103,7 +108,8 @@ function RowCells({
           <motion.button
             key={i}
             whileTap={{ scale: 0.88 }}
-            onClick={() => onSpeak(mode === "hiragana" ? c.hiragana : c.katakana)}
+            onClick={() => onSelect(c)}
+            aria-label={`${mode === "hiragana" ? c.hiragana : c.katakana} ${c.romaji} 자세히 보기`}
             className="flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-primary/10 bg-white py-2 shadow-sm active:border-primary/30"
           >
             <span className="font-ja text-2xl leading-none">
