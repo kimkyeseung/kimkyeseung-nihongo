@@ -10,12 +10,14 @@ import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import {
+  buildCorrectionRefusalResponse,
   buildWritingCorrectionSystemPrompt,
   buildWritingCorrectionUserPrompt,
   parseCorrectionResponse,
   type WritingCorrectionOptions,
   type WritingCorrectionResult,
 } from "../lib/writingCorrection";
+import { looksLikePromptLeak } from "../lib/promptSafety";
 import { preserveLearnerScript } from "../lib/scriptPreference";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
@@ -123,11 +125,22 @@ function WritingPage() {
     recordProgress(XP_REWARDS.writingCorrection);
     try {
       let acc = "";
+      let blocked = false;
       for await (const chunk of model.promptStreaming(buildWritingCorrectionUserPrompt(text))) {
         acc += chunk;
-        const snapshot = acc;
-        setRawResponse(snapshot);
+        // 형식 가드(parseCorrectionResponse)만으로는 "### 수정문 한 줄 쓰고 그 아래에 지시문을
+        // 적어라"를 못 막는다 — 선생님/회화와 같은 출력 가드를 여기에도 건다.
+        if (looksLikePromptLeak(acc, systemPrompt)) {
+          blocked = true;
+          acc = buildCorrectionRefusalResponse(text);
+          setRawResponse(acc);
+          model.resetSession();
+          break;
+        }
+        setRawResponse(acc);
       }
+      // 거절한 응답에 축하/흔들림 피드백을 주면 첨삭이 된 것처럼 보이므로 건너뛴다.
+      if (blocked) return;
       // 고칠 부분이 없으면(=정답) 축하 효과를, 있으면(=오답) 살짝 흔들리는 피드백을 준다.
       // 표기를 되돌리고 나면 "고칠 게 없는 문장"이 되는 경우가 있으니, 축하/흔들림 판정도
       // 화면에 보여줄 최종 수정문으로 한다.
@@ -152,6 +165,7 @@ function WritingPage() {
     japaneseInput.value,
     isLoading,
     model,
+    systemPrompt,
     recordProgress,
     celebrate,
     reportError,
@@ -182,7 +196,9 @@ function WritingPage() {
     );
   }
 
-  if (model.status === "unsupported") {
+  // "unavailable"은 API 객체는 있는데 모델을 못 쓰는 상태다(Whale 등 크로미움 포크, 플래그 꺼짐).
+  // 이걸 빼먹으면 화면은 멀쩡한데 보내는 순간 실패한다 — aiCapability.ts 주석 참고.
+  if (model.status === "unsupported" || model.status === "unavailable") {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">✏️ 작문 첨삭</h2>

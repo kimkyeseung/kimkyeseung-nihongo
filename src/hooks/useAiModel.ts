@@ -13,10 +13,15 @@ export interface AiModel {
   busyLabel: string | null;
   prompt: (input: string) => Promise<string>;
   promptStreaming: (input: string) => AsyncGenerator<string>;
+  /**
+   * 지금 세션을 버리고 다음 prompt에서 새로 만든다. 프롬프트 인젝션이 감지됐을 때
+   * 오염된 턴이 대화 히스토리에 남지 않도록 부른다(promptSafety.ts 참고).
+   */
+  resetSession: () => void;
 }
 
 /**
- * 회화·작문 페이지가 쓰는 생성형 AI 창구.
+ * 회화·작문·선생님 페이지가 쓰는 생성형 AI 창구.
  * `aiEngineStore`의 선택에 따라 Chrome 내장 Prompt API와 Gemma 4(WebGPU) 중 하나를 쓴다.
  *
  * 훅 규칙상 둘 다 항상 호출해야 하지만, 쓰지 않는 쪽은 세션을 만들지 않으므로 비용이 없다
@@ -36,6 +41,7 @@ export function useAiModel(systemPrompt: string): AiModel {
       busyLabel: gemma.busyLabel,
       prompt: gemma.prompt,
       promptStreaming: gemma.promptStreaming,
+      resetSession: gemma.resetSession,
     };
   }
 
@@ -46,5 +52,6 @@ export function useAiModel(systemPrompt: string): AiModel {
     busyLabel: null,
     prompt: promptApi.prompt,
     promptStreaming: promptApi.promptStreaming,
+    resetSession: promptApi.resetSession,
   };
 }

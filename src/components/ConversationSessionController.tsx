@@ -6,8 +6,10 @@ import { useUserProfileStore } from "../stores/userProfileStore";
 import { useConversationSessionStore } from "../stores/conversationSessionStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import {
+  GRAMMAR_CORRECTION_REFUSAL,
   GRAMMAR_CORRECTION_SYSTEM_PROMPT,
   OPENING_TRIGGER,
+  TRANSLATION_REFUSAL,
   TRANSLATION_SYSTEM_PROMPT,
   buildGrammarCorrectionUserPrompt,
   buildSystemPrompt,
@@ -62,11 +64,16 @@ function ConversationSessionController() {
         for await (const chunk of chatModel.promptStreaming(input)) {
           acc += chunk;
           // 지시문을 읊기 시작하면 거기서 끊고 역할을 유지한 거절로 바꾼다(promptSafety.ts 참고).
-          const snapshot = looksLikePromptLeak(acc, systemPrompt) ? ROLE_REFUSAL_REPLY : acc;
+          const leaked = looksLikePromptLeak(acc, systemPrompt);
+          const snapshot = leaked ? ROLE_REFUSAL_REPLY : acc;
           useConversationSessionStore.setState((s) => ({
             messages: s.messages.map((msg) => (msg.id === assistantMsgId ? { ...msg, text: snapshot } : msg)),
           }));
-          if (snapshot === ROLE_REFUSAL_REPLY) return;
+          if (leaked) {
+            // 화면만 바꾸고 끝내면 오염된 턴이 히스토리에 남아 다음 턴에 이어받을 수 있다.
+            chatModel.resetSession();
+            return;
+          }
         }
       } catch (err) {
         useConversationSessionStore.setState((s) => ({
@@ -102,7 +109,12 @@ function ConversationSessionController() {
         messages: s.messages.map((msg) => (msg.id === userMsgId ? { ...msg, correctionLoading: true } : msg)),
       }));
       try {
-        const correction = await correctionModel.prompt(buildGrammarCorrectionUserPrompt(userText));
+        const raw = await correctionModel.prompt(buildGrammarCorrectionUserPrompt(userText));
+        // 교정 세션도 학습자 원문을 그대로 받으므로 같은 가드를 건다 — 지시문이 짧아 유출의
+        // 실익은 적지만, 이 방어의 목적은 비밀 유지가 아니라 역할 이탈을 막는 것이다.
+        const leaked = looksLikePromptLeak(raw, GRAMMAR_CORRECTION_SYSTEM_PROMPT);
+        if (leaked) correctionModel.resetSession();
+        const correction = leaked ? GRAMMAR_CORRECTION_REFUSAL : raw;
         useConversationSessionStore.setState((s) => ({
           messages: s.messages.map((msg) =>
             msg.id === userMsgId ? { ...msg, correction, correctionLoading: false } : msg
@@ -157,7 +169,15 @@ function ConversationSessionController() {
     setMessage({ translationLoading: true });
     translationModel
       .prompt(buildTranslationUserPrompt(pending.text))
-      .then((translation) => setMessage({ translation: translation.trim(), translationLoading: false }))
+      .then((raw) => {
+        // 번역할 대사는 AI가 만든 것이지만 결국 학습자 입력에 이어진 내용이라 같은 가드를 건다.
+        const leaked = looksLikePromptLeak(raw, TRANSLATION_SYSTEM_PROMPT);
+        if (leaked) translationModel.resetSession();
+        setMessage({
+          translation: leaked ? TRANSLATION_REFUSAL : raw.trim(),
+          translationLoading: false,
+        });
+      })
       .catch((err) => {
         setMessage({ translationLoading: false });
         reportError(err);

@@ -62,6 +62,8 @@ function TeacherPage() {
           // 것만으로는 막히지 않아서, 받은 답을 코드에서 한 번 더 본다(promptSafety.ts 주석 참고).
           if (looksLikePromptLeak(acc, TEACHER_SYSTEM_PROMPT)) {
             appendAnswer(assistantId, TEACHER_REFUSAL_ANSWER);
+            // 화면만 바꾸고 끝내면 오염된 턴이 히스토리에 남아 다음 질문에서 이어받을 수 있다.
+            model.resetSession();
             return;
           }
           appendAnswer(assistantId, acc);
@@ -103,7 +105,9 @@ function TeacherPage() {
     );
   }
 
-  if (model.status === "unsupported") {
+  // "unavailable"은 API 객체는 있는데 모델을 못 쓰는 상태다(Whale 등 크로미움 포크, 플래그 꺼짐).
+  // 이걸 빼먹으면 화면은 멀쩡한데 보내는 순간 실패한다 — aiCapability.ts 주석 참고.
+  if (model.status === "unsupported" || model.status === "unavailable") {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">🧑‍🏫 선생님</h2>
