@@ -79,5 +79,12 @@ export function useGemmaSession(systemPrompt: string, enabled: boolean) {
     [ensureSession]
   );
 
-  return { status, busyLabel, prompt, promptStreaming };
+  // useLanguageModel.resetSession과 같은 역할(오염된 대화 히스토리 버리기).
+  // 여기서도 엔진은 살려두고 Conversation만 새로 판다 — 2GB를 GPU에 다시 올리지 않기 위해서다.
+  const resetSession = useCallback(() => {
+    void sessionRef.current?.destroy();
+    sessionRef.current = null;
+  }, []);
+
+  return { status, busyLabel, prompt, promptStreaming, resetSession };
 }

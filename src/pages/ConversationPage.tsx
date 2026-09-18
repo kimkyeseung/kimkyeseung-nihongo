@@ -15,6 +15,7 @@ import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useUserProfileStore } from "../stores/userProfileStore";
 import { useConversationSessionStore } from "../stores/conversationSessionStore";
 import { LEVELS, SCENARIOS, type Level, type Scenario } from "../lib/conversationPrompts";
+import { INLINE_VALUE_MAX_LENGTH } from "../lib/promptSafety";
 import type { WordEntry } from "../types/dictionary";
 import type { KanjiEntry } from "../types/kanji";
 
@@ -35,6 +36,7 @@ function ScenarioPicker({
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
+        maxLength={INLINE_VALUE_MAX_LENGTH}
         placeholder="이름을 입력하면 AI가 자기소개 등에서 불러줘요"
         className="mt-2 w-full rounded-2xl border-2 border-gray-100 px-4 py-3 text-lg shadow-sm focus:border-primary/40 focus:outline-none"
       />

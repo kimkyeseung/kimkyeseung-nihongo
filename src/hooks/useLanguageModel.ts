@@ -71,5 +71,13 @@ export function useLanguageModel(systemPrompt: string) {
     [ensureSession]
   );
 
-  return { status, downloadProgress, prompt, promptStreaming };
+  // 인젝션으로 오염된 턴을 대화 히스토리에서 통째로 버릴 때 쓴다 — 화면 텍스트만 거절 문구로
+  // 바꾸고 세션을 살려두면 다음 턴에 "아까 하던 거 계속해줘"로 이어받을 수 있다.
+  // 다음 prompt() 때 ensureSession이 새 세션을 지연 생성한다.
+  const resetSession = useCallback(() => {
+    sessionRef.current?.destroy();
+    sessionRef.current = null;
+  }, []);
+
+  return { status, downloadProgress, prompt, promptStreaming, resetSession };
 }

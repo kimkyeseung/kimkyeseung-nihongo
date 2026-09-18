@@ -62,6 +62,8 @@ function TeacherPage() {
           // 것만으로는 막히지 않아서, 받은 답을 코드에서 한 번 더 본다(promptSafety.ts 주석 참고).
           if (looksLikePromptLeak(acc, TEACHER_SYSTEM_PROMPT)) {
             appendAnswer(assistantId, TEACHER_REFUSAL_ANSWER);
+            // 화면만 바꾸고 끝내면 오염된 턴이 히스토리에 남아 다음 질문에서 이어받을 수 있다.
+            model.resetSession();
             return;
           }
           appendAnswer(assistantId, acc);

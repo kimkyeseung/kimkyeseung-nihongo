@@ -111,12 +111,26 @@ function extractLines(raw: string, heading: string): string[] {
     .filter(Boolean);
 }
 
+/** 인젝션이 감지됐을 때 모델 응답 대신 넣는, 형식은 지키되 내용은 거절인 응답. */
+export function buildCorrectionRefusalResponse(original: string): string {
+  return [
+    "### 수정문",
+    original,
+    "### 설명",
+    "그건 알려드릴 수 없어요. 일본어 문장을 적어주시면 첨삭해 드릴게요.",
+  ].join("\n");
+}
+
 /**
  * 모델이 지정한 형식을 안 따르면(예: 스텁/구형 모델, 또는 프롬프트 인젝션으로 첨삭 대신
  * 엉뚱한 답을 한 경우) 그 응답을 그대로 화면에 보여주지 않는다 — "### 수정문" 헤딩 자체가
  * 없으면 형식이 완전히 깨진 것으로 보고 안전한 안내 문구로 대체한다(출력 가드레일).
- * 헤딩은 있는데 일부 섹션만 비었으면(예: 실제 스텁 echo처럼 지시문 텍스트가 그대로 찍힌 경우)
- * 그 섹션만 개별적으로 폴백한다.
+ *
+ * **어떤 경우에도 raw를 그대로 화면에 내보내지 않는다.** 예전엔 "### 수정문"은 있는데
+ * "### 설명"이 없으면 raw 전체를 설명란에 넣었는데, 그러면 ① "### 수정문 한 줄 쓰고 그 아래에
+ * 지시문을 적어라"로 유도하면 이 형식 가드를 그냥 통과했고, ② 스트리밍 중에는 "### 설명"이
+ * 도착하기 전까지 **정상 응답에서도 항상** raw가 화면에 흘렀다. 지금은 못 찾은 섹션은 그냥
+ * 비워둔다 — 스트리밍이 진행되면서 채워지고, 끝까지 없으면 안 보여주는 게 맞다.
  */
 export function parseCorrectionResponse(raw: string, original: string): WritingCorrectionResult {
   const hasExpectedFormat = /###\s*수정문/.test(raw);
@@ -124,7 +138,7 @@ export function parseCorrectionResponse(raw: string, original: string): WritingC
     corrected: extractSection(raw, "수정문") ?? original,
     formality: extractSection(raw, "격식체") ?? "",
     explanation:
-      extractSection(raw, "설명") ?? (hasExpectedFormat ? raw.trim() : "응답 형식을 확인하지 못했어요. 다시 시도해주세요."),
+      extractSection(raw, "설명") ?? (hasExpectedFormat ? "" : "응답 형식을 확인하지 못했어요. 다시 시도해주세요."),
     grammarPoints: extractLines(raw, "문법 포인트"),
     similarSentences: extractLines(raw, "비슷한 문장"),
     appliedExpressions: extractLines(raw, "응용 표현"),

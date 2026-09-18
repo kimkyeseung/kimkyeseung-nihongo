@@ -13,6 +13,11 @@ export interface AiModel {
   busyLabel: string | null;
   prompt: (input: string) => Promise<string>;
   promptStreaming: (input: string) => AsyncGenerator<string>;
+  /**
+   * 지금 세션을 버리고 다음 prompt에서 새로 만든다. 프롬프트 인젝션이 감지됐을 때
+   * 오염된 턴이 대화 히스토리에 남지 않도록 부른다(promptSafety.ts 참고).
+   */
+  resetSession: () => void;
 }
 
 /**
@@ -36,6 +41,7 @@ export function useAiModel(systemPrompt: string): AiModel {
       busyLabel: gemma.busyLabel,
       prompt: gemma.prompt,
       promptStreaming: gemma.promptStreaming,
+      resetSession: gemma.resetSession,
     };
   }
 
@@ -46,5 +52,6 @@ export function useAiModel(systemPrompt: string): AiModel {
     busyLabel: null,
     prompt: promptApi.prompt,
     promptStreaming: promptApi.promptStreaming,
+    resetSession: promptApi.resetSession,
   };
 }

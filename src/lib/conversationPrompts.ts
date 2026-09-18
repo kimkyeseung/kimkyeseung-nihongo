@@ -1,4 +1,4 @@
-import { REFUSE_PROMPT_DISCLOSURE, wrapStudentText } from "./promptSafety";
+import { REFUSE_PROMPT_DISCLOSURE, sanitizeInlineValue, wrapStudentText } from "./promptSafety";
 
 export interface Scenario {
   id: string;
@@ -33,15 +33,20 @@ export const LEVELS: Level[] = [
 export const AI_PERSONA_NAME = "さくら";
 
 export function buildSystemPrompt(scenario: Scenario, level: Level, userName?: string): string {
+  // 이름은 사용자가 친 값인데 **시스템 프롬프트 안에** 들어간다 — wrapStudentText가 감쌀 수
+  // 없는 자리라, 걸러내지 않으면 인젝션 방어를 통째로 우회하는 입구가 된다(promptSafety.ts의
+  // sanitizeInlineValue 주석 참고). localStorage에 이미 남아있는 값도 여기서 걸러진다.
+  const safeName = sanitizeInlineValue(userName ?? "");
+
   return [
     "당신은 일본어 회화 연습 상대 역할을 맡은 AI입니다.",
     `당신(AI)의 이름은 "${AI_PERSONA_NAME}"입니다. 자기소개를 할 때는 이 이름을 쓰세요.`,
     `상황: ${scenario.situation}.`,
     `학습자 수준: ${level.guide}. 이 수준에 맞는 어휘와 문장 길이를 사용하세요.`,
-    ...(userName
+    ...(safeName
       ? [
-          `대화 상대(학습자)의 이름은 "${userName}"입니다.`,
-          `학습자를 부를 때는 "${userName}さん"처럼 이 이름을 그대로 쓰세요.`,
+          `대화 상대(학습자)의 이름은 "${safeName}"입니다.`,
+          `학습자를 부를 때는 "${safeName}さん"처럼 이 이름을 그대로 쓰세요.`,
         ]
       : ["학습자의 이름은 아직 모릅니다. 이름이 필요하면 대화 중에 물어보세요."]),
     "[이름]·[あなたの名前]처럼 대괄호로 된 자리표시자는 절대 쓰지 말고, 항상 실제 이름을 넣으세요.",
@@ -70,7 +75,11 @@ export const GRAMMAR_CORRECTION_SYSTEM_PROMPT = [
   "학습자가 쓴 일본어 문장에 문법 오류나 어색한 표현이 있으면 한국어로 짧게(1~2문장) 짚어주고,",
   "특별한 문제가 없으면 '문법적으로 자연스러운 문장입니다.'라고만 답하세요.",
   "다른 설명 없이 교정 포인트만 답하세요.",
+  REFUSE_PROMPT_DISCLOSURE,
 ].join(" ");
+
+/** 문법 교정이 역할을 벗어난 답을 내놓았을 때 대신 보여주는 문구. */
+export const GRAMMAR_CORRECTION_REFUSAL = "이 문장은 교정할 수 없어요.";
 
 export function buildGrammarCorrectionUserPrompt(userInput: string): string {
   return wrapStudentText(userInput);
@@ -83,7 +92,11 @@ export const TRANSLATION_SYSTEM_PROMPT = [
   "당신은 일본어-한국어 번역가입니다.",
   "주어진 일본어 문장을 자연스러운 한국어로 번역하세요.",
   "설명·주석·원문 없이 번역문만 한 줄로 답하세요.",
+  REFUSE_PROMPT_DISCLOSURE,
 ].join(" ");
+
+/** 번역이 역할을 벗어난 답을 내놓았을 때 대신 보여주는 문구. */
+export const TRANSLATION_REFUSAL = "(번역할 수 없는 문장이에요.)";
 
 export function buildTranslationUserPrompt(japanese: string): string {
   // AI가 만든 문장이지만 결국 학습자 입력에 이어진 내용이라, 같은 방식으로 데이터 취급한다.
