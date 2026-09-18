@@ -16,8 +16,17 @@ import { useUserProfileStore } from "../stores/userProfileStore";
 import { useConversationSessionStore } from "../stores/conversationSessionStore";
 import { LEVELS, SCENARIOS, type Level, type Scenario } from "../lib/conversationPrompts";
 import { INLINE_VALUE_MAX_LENGTH } from "../lib/promptSafety";
+import InputModeToggle from "../components/InputModeToggle";
+import { useScriptInput, type InputScript } from "../hooks/useScriptInput";
+import { useInputScriptPrefs } from "../stores/pageStateStore";
 import type { WordEntry } from "../types/dictionary";
 import type { KanjiEntry } from "../types/kanji";
+
+/** 고른 문자에 맞춘 예시. 일본어 모드에서 한글 안내만 뜨면 어색하다. */
+const NAME_PLACEHOLDER: Record<InputScript, string> = {
+  default: "이름을 입력하면 AI가 자기소개 등에서 불러줘요",
+  ja: "なまえ (로마자로 치면 히라가나가 됩니다)",
+};
 
 function ScenarioPicker({
   onStart,
@@ -28,17 +37,25 @@ function ScenarioPicker({
   const [level, setLevel] = useState<Level | null>(null);
   const name = useUserProfileStore((s) => s.name);
   const setName = useUserProfileStore((s) => s.setName);
+  const nameScript = useInputScriptPrefs((s) => s.conversationName);
+  const setNameScript = useInputScriptPrefs((s) => s.setConversationName);
+  const toggleNameScript = useInputScriptPrefs((s) => s.toggleConversationName);
+  const nameInput = useScriptInput<HTMLInputElement>(nameScript, name, setName, toggleNameScript);
 
   return (
     <div className="p-4 sm:p-6">
-      <h3 className="text-sm text-gray-400">이름 (선택)</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm text-gray-400">이름 (선택)</h3>
+        <InputModeToggle value={nameScript} onChange={setNameScript} />
+      </div>
+      {/* value/onChange를 주지 않는다 — 값은 useScriptInput이 네이티브 리스너로 읽어
+          store에 올린다(wanakana가 바꾼 값을 React 합성 onChange가 놓치기 때문). */}
       <input
         type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
+        ref={nameInput.ref}
         maxLength={INLINE_VALUE_MAX_LENGTH}
-        placeholder="이름을 입력하면 AI가 자기소개 등에서 불러줘요"
-        className="mt-2 w-full rounded-2xl border-2 border-gray-100 px-4 py-3 text-lg shadow-sm focus:border-primary/40 focus:outline-none"
+        placeholder={NAME_PLACEHOLDER[nameScript]}
+        className="mt-2 w-full rounded-2xl border-2 border-gray-100 px-4 py-3 font-mixed text-lg shadow-sm focus:border-primary/40 focus:outline-none"
       />
 
       <h3 className="mt-6 text-sm text-gray-400">시나리오 선택</h3>

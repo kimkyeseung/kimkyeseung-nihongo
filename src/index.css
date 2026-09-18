@@ -10,6 +10,16 @@
 
   --font-sans: "Jua", system-ui, sans-serif;
   --font-ja: "Kosugi Maru", system-ui, sans-serif;
+  /*
+   * 한국어와 일본어가 한 줄에 섞이는 자리(입력창 등)에 쓴다 — 한글·영문은 Jua로,
+   * Jua에 없는 가나·한자는 Kosugi Maru로 떨어진다.
+   *
+   * **왜 필요한가 (실제로 겪은 버그)**: 폰트를 안 정해두면 가나가 `system-ui`로 떨어지는데,
+   * system-ui는 **엘리먼트의 lang에 따라 다른 실물 폰트로 해석된다**. 입력 모드를 바꿀 때
+   * lang이 붙었다 떨어지므로(useScriptInput) 같은 18px 글자의 폭이 109px ↔ 125px로 널뛰었다.
+   * 여기서 Kosugi Maru를 명시하면 lang과 무관하게 항상 같은 폰트로 그려진다.
+   */
+  --font-mixed: "Jua", "Kosugi Maru", system-ui, sans-serif;
 
   --animate-pop: pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   --animate-shake: shake 0.4s ease-in-out;

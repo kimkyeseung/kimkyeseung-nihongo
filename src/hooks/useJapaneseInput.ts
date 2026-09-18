@@ -1,17 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { bind, unbind } from "wanakana";
-import { searchDictionary } from "../lib/dictionary";
-import { useDebouncedValue } from "./useDebouncedValue";
-import type { WordEntry } from "../types/dictionary";
-
-// 커서 위치가 아니라 항상 문자열 끝에서부터, 마지막 공백/줄바꿈 다음의 "현재 입력 중인
-// 단어"만 자동완성 대상으로 삼는다. 회화/작문은 이어서 타이핑하는 흐름이라 이걸로 충분하고,
-// 문장 중간 편집까지는 지원하지 않는다.
-function currentToken(value: string): string {
-  const boundary = Math.max(value.lastIndexOf(" "), value.lastIndexOf("\n"));
-  return value.slice(boundary + 1);
-}
+import { useWordSuggestions } from "./useWordSuggestions";
 
 export function useJapaneseInput<T extends HTMLInputElement | HTMLTextAreaElement>(
   maxSuggestions = 8,
@@ -29,13 +18,43 @@ export function useJapaneseInput<T extends HTMLInputElement | HTMLTextAreaElemen
   // 엘리먼트가 (뒤늦게) 나타날 때 지금 값을 다시 넣어주기 위한 최신값 보관 — effect 의존성에
   // value를 넣으면 타이핑할 때마다 wanakana를 다시 바인딩하게 되므로 ref로 읽는다.
   const valueRef = useRef(initialValue);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
+
+  const setValue = useCallback(
+    (next: string) => {
+      valueRef.current = next;
+      setValueState(next);
+      if (el) el.value = next;
+    },
+    [el]
+  );
+
+  const applySuggestion = useCallback(
+    (next: string) => {
+      setValue(next);
+      el?.focus();
+    },
+    [setValue, el]
+  );
+
+  // 자동완성은 선생님 페이지와 같은 훅을 쓴다 — 한쪽만 고쳐 동작이 갈리지 않도록.
+  const {
+    suggestions,
+    showSuggestions,
+    setShowSuggestions,
+    activeIndex,
+    setActiveIndex,
+    selectSuggestion,
+    handleSuggestionKeyDown,
+  } = useWordSuggestions(value, applySuggestion, { maxSuggestions });
 
   // 로마자 입력 시 실시간으로 히라가나로 변환한다. WanaKana가 값을 직접 바꾼 뒤 발생시키는
   // input 이벤트를 React의 합성 onChange가 놓치는 경우가 있어(IME 조합 관련 내부 처리 때문),
   // 네이티브 리스너를 직접 붙여 e.target.value를 읽는 방식으로 우회한다
   // (DictionaryPage에서 확인된 패턴, CLAUDE.md 참고 — 이 프로젝트의 wanakana 입력 표준).
+  //
+  // 여기는 **항상 일본어만 치는 입력창**이라 wanakana의 bind()를 그대로 쓴다. 한글/영문과
+  // 모드를 오가는 입력창(선생님·회화 이름칸)은 bind()를 쓰면 앞 문장이 통째로 변환되므로
+  // useScriptInput + romajiInput.ts 쪽을 쓴다 — 그쪽 주석 참고.
   useEffect(() => {
     if (!el) return;
     // 페이지를 떠났다 돌아오면 엘리먼트는 비어 있고 값은 store에서 온 initialValue에 있다.
@@ -52,62 +71,7 @@ export function useJapaneseInput<T extends HTMLInputElement | HTMLTextAreaElemen
       unbind(el);
       el.removeEventListener("input", handleInput);
     };
-  }, [el]);
-
-  const debouncedToken = useDebouncedValue(currentToken(value), 200);
-  const suggestions = useMemo(
-    () => searchDictionary(debouncedToken, maxSuggestions),
-    [debouncedToken, maxSuggestions]
-  );
-
-  const setValue = useCallback(
-    (next: string) => {
-      valueRef.current = next;
-      setValueState(next);
-      if (el) el.value = next;
-    },
-    [el]
-  );
-
-  const selectSuggestion = useCallback(
-    (entry: WordEntry) => {
-      const boundary = Math.max(value.lastIndexOf(" "), value.lastIndexOf("\n"));
-      setValue(`${value.slice(0, boundary + 1)}${entry.word} `);
-      setShowSuggestions(false);
-      setActiveIndex(-1);
-      el?.focus();
-    },
-    [value, setValue, el]
-  );
-
-  // 화살표/Enter/Escape를 제안 목록 탐색에 먼저 소비한다. 처리했으면 true를 반환하므로,
-  // 호출부는 false일 때만 자기 자신의 Enter 동작(메시지 전송 등)을 이어서 실행하면 된다.
-  const handleSuggestionKeyDown = useCallback(
-    (e: KeyboardEvent<T>): boolean => {
-      if (!showSuggestions || suggestions.length === 0) return false;
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveIndex((i) => (i + 1) % suggestions.length);
-        return true;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveIndex((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
-        return true;
-      }
-      if (e.key === "Escape") {
-        setShowSuggestions(false);
-        return true;
-      }
-      if (e.key === "Enter" && activeIndex >= 0 && suggestions[activeIndex]) {
-        e.preventDefault();
-        selectSuggestion(suggestions[activeIndex]);
-        return true;
-      }
-      return false;
-    },
-    [showSuggestions, suggestions, activeIndex, selectSuggestion]
-  );
+  }, [el, setShowSuggestions, setActiveIndex]);
 
   return {
     ref: setEl,

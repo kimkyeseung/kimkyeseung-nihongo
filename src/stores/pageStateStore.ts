@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { ScriptMode } from "../data/gojuon";
+import type { InputScript } from "../hooks/useScriptInput";
 import type { JlptLevel } from "../types/jlpt";
 import type { WordExample } from "../lib/wordExamples";
 
@@ -156,3 +157,53 @@ export const useWordbookReview = create<WordbookReviewState>((set) => ({
   start: (group, queue) => set({ session: { group, queue, total: queue.length } }),
   setQueue: (queue) => set((s) => (s.session ? { session: { ...s.session, queue } } : s)),
 }));
+
+interface InputScriptPrefs {
+  /** 선생님 페이지 질문창 */
+  teacher: InputScript;
+  /** 회화 시나리오 선택 화면의 이름칸 */
+  conversationName: InputScript;
+  setTeacher: (script: InputScript) => void;
+  setConversationName: (script: InputScript) => void;
+  /** 입력창에서 Tab을 눌렀을 때. 다음 값을 화면이 계산하지 않도록 store가 뒤집는다. */
+  toggleTeacher: () => void;
+  toggleConversationName: () => void;
+}
+
+/**
+ * 입력창 문자 모드. "설정처럼 다음에도 같은 값을 쓰고 싶은 것"이라 persist 쪽이다 —
+ * 일본어로 물어보는 사람은 계속 일본어로 물어본다.
+ *
+ * 두 입력창의 설정을 하나로 합치지 않았다: 선생님에게는 일본어로 묻고 이름은 한글로 쓰는
+ * 조합이 자연스럽다(선생님 페이지는 원래 "한국어로 묻는 수업"이다).
+ */
+export const useInputScriptPrefs = create<InputScriptPrefs>()(
+  persist(
+    (set) => ({
+      teacher: "default",
+      conversationName: "default",
+      setTeacher: (teacher) => set({ teacher }),
+      setConversationName: (conversationName) => set({ conversationName }),
+      toggleTeacher: () => set((s) => ({ teacher: s.teacher === "ja" ? "default" : "ja" })),
+      toggleConversationName: () =>
+        set((s) => ({ conversationName: s.conversationName === "ja" ? "default" : "ja" })),
+    }),
+    {
+      name: "input-script",
+      // v0에는 "ko"/"ja"/"en" 세 값이 저장됐다. 한글·영어를 한 버튼으로 합치면서 "ko"·"en"은
+      // 없는 값이 됐는데, 그대로 두면 **토글에서 아무 버튼도 선택 안 된 것처럼 보인다**
+      // (어느 옵션과도 일치하지 않아서). 저장된 값을 읽는 쪽에서 조용히 넘어가지 않도록 여기서 옮긴다.
+      version: 1,
+      migrate: (persisted) => {
+        const toScript = (value: unknown): InputScript => (value === "ja" ? "ja" : "default");
+        const state = (persisted ?? {}) as Partial<Record<"teacher" | "conversationName", unknown>>;
+        // 액션은 여기서 돌려주지 않아도 된다 — persist의 merge가 초기 state(액션 포함) 위에
+        // 이 값만 덮어쓴다.
+        return {
+          teacher: toScript(state.teacher),
+          conversationName: toScript(state.conversationName),
+        } as InputScriptPrefs;
+      },
+    }
+  )
+);

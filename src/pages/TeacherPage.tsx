@@ -2,12 +2,16 @@ import { useCallback, useEffect, useRef } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
+import InputModeToggle from "../components/InputModeToggle";
+import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
 import MarkdownAnswer from "../components/MarkdownAnswer";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
+import { useScriptInput, type InputScript } from "../hooks/useScriptInput";
+import { useWordSuggestions } from "../hooks/useWordSuggestions";
 import {
   TEACHER_REFUSAL_ANSWER,
   TEACHER_SAMPLE_QUESTIONS,
@@ -16,16 +20,33 @@ import {
 } from "../lib/teacherPrompts";
 import { looksLikePromptLeak } from "../lib/promptSafety";
 import { XP_REWARDS } from "../lib/xpRewards";
+import { useInputScriptPrefs } from "../stores/pageStateStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
+
+/** 보내기 버튼의 종이비행기. 이 프로젝트에 아이콘 세트가 없어 인라인 SVG로 둔다(currentColor 상속). */
+function PaperPlaneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5" fill="currentColor">
+      <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a1 1 0 00-1.39 1.02l1.2 5.4L14 12l-10.79 1.98-1.2 5.4a1 1 0 001.39 1.02z" />
+    </svg>
+  );
+}
+
+/** 지금 고른 문자로 예시를 보여준다 — 한글 예시만 띄우면 일본어 모드에서 어색하다. */
+const QUESTION_PLACEHOLDER: Record<InputScript, string> = {
+  default: "예: 조사 だけ에 대해서 알려줘",
+  ja: "예: だけ について おしえて",
+};
 
 /**
  * 자유 질문 페이지. 회화가 "일본어로 롤플레이"라면 여기는 "한국어로 물어보는 수업"이다.
  * 답변은 마크다운으로 받아 MarkdownAnswer가 렌더링하고, 답변 속 일본어(백틱으로 감싼
  * 부분)에는 사전 후리가나와 단어 탭이 자동으로 붙는다.
  *
- * 질문 입력창에는 wanakana를 붙이지 않는다 — 여기서 치는 건 한국어 질문이기 때문
- * (회화/작문 입력창과 다른 점).
+ * 질문 입력창의 기본은 한글이다 — 여기서 치는 건 한국어 질문이기 때문(회화/작문과 다른 점).
+ * 다만 일본어로 묻고 싶을 수도 있어서 `InputModeToggle`로 문자를 바꿀 수 있고, "일본어"를
+ * 고른 동안에만 wanakana가 붙는다(useScriptInput.ts 참고).
  */
 function TeacherPage() {
   const model = useAiModel(TEACHER_SYSTEM_PROMPT);
@@ -42,6 +63,20 @@ function TeacherPage() {
   const clear = useTeacherChatStore((s) => s.clear);
   const pendingQuestion = useTeacherChatStore((s) => s.pendingQuestion);
   const consumePendingQuestion = useTeacherChatStore((s) => s.consumePendingQuestion);
+
+  const script = useInputScriptPrefs((s) => s.teacher);
+  const setScript = useInputScriptPrefs((s) => s.setTeacher);
+  const toggleScript = useInputScriptPrefs((s) => s.toggleTeacher);
+  const questionInput = useScriptInput<HTMLInputElement>(script, input, setInput, toggleScript);
+  // 사전 자동완성은 일본어를 칠 때만 의미가 있다 — 한글 질문에 사전을 뒤질 이유가 없다.
+  const suggestions = useWordSuggestions(
+    input,
+    (next) => {
+      setInput(next);
+      questionInput.focus();
+    },
+    { enabled: script === "ja" }
+  );
 
   const listEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -85,6 +120,8 @@ function TeacherPage() {
   }, [pendingQuestion, consumePendingQuestion, handleAsk]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    // 자동완성 목록이 떠 있으면 화살표·Enter를 그쪽이 먼저 쓴다(회화 페이지와 같은 순서).
+    if (suggestions.handleSuggestionKeyDown(e)) return;
     // 폼의 암묵적 제출 대신 onKeyDown으로 직접 처리한다(프로젝트 표준, CLAUDE.md 참고).
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -190,22 +227,52 @@ function TeacherPage() {
         <div ref={listEndRef} />
       </div>
 
-      <div className="flex gap-2 border-t border-gray-100 p-3">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="예: 조사 だけ에 대해서 알려줘"
-          className="flex-1 rounded-2xl border-2 border-gray-100 px-4 py-2 focus:border-primary/40 focus:outline-none"
-        />
-        <button
-          onClick={() => handleAsk(input)}
-          disabled={!input.trim() || isAnswering}
-          className="rounded-2xl bg-primary px-5 py-2 font-bold text-white disabled:bg-gray-200"
-        >
-          질문
-        </button>
-      </div>
+      {/* 답변을 받는 동안에는 입력 영역을 통째로 감춘다 — 어차피 보낼 수 없는 상태이고,
+          "생각하는 중" 마스코트에 시선이 가도록 비워두는 편이 낫다. */}
+      {!isAnswering && (
+        <div className="border-t border-gray-100 p-3">
+          <div className="flex justify-end pb-2">
+            <InputModeToggle value={script} onChange={setScript} />
+          </div>
+          <div className="flex items-center gap-2">
+            {/* 자동완성 목록이 이 칸을 기준으로 뜨므로 relative가 필요하다. */}
+            <div className="relative min-w-0 flex-1">
+              {/* value/onChange를 주지 않는다 — 값은 useScriptInput이 네이티브 리스너로 읽어
+                  store에 올린다(변환이 바꾼 값을 React 합성 onChange가 놓치기 때문). */}
+              <input
+                ref={questionInput.ref}
+                onFocus={() => suggestions.setShowSuggestions(true)}
+                // 목록의 버튼을 누르는 순간 blur가 먼저 와서 목록이 사라지면 클릭이 죽는다.
+                // (목록 쪽에서도 onMouseDown을 막지만, 여기서 한 박자 늦추는 게 회화 페이지와
+                //  같은 방식이다.)
+                onBlur={() => setTimeout(() => suggestions.setShowSuggestions(false), 150)}
+                onKeyDown={handleKeyDown}
+                placeholder={QUESTION_PLACEHOLDER[script]}
+                className="w-full rounded-2xl border-2 border-gray-100 px-4 py-2 font-mixed focus:border-primary/40 focus:outline-none"
+              />
+              {suggestions.showSuggestions && (
+                // 이 입력창은 화면 맨 아래에 붙어 있어서 목록을 위로 띄운다.
+                <JapaneseSuggestionList
+                  placement="above"
+                  suggestions={suggestions.suggestions}
+                  activeIndex={suggestions.activeIndex}
+                  onSelect={suggestions.selectSuggestion}
+                />
+              )}
+            </div>
+            <button
+              onClick={() => handleAsk(input)}
+              disabled={!input.trim()}
+              aria-label="질문 보내기"
+              title="질문 보내기"
+              className="btn-press flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white disabled:bg-gray-200"
+              style={{ ["--btn-shadow" as string]: "#3d9401" }}
+            >
+              <PaperPlaneIcon />
+            </button>
+          </div>
+        </div>
+      )}
 
       <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
     </div>
