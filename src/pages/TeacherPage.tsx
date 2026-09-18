@@ -9,10 +9,12 @@ import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice
 import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import {
+  TEACHER_REFUSAL_ANSWER,
   TEACHER_SAMPLE_QUESTIONS,
   TEACHER_SYSTEM_PROMPT,
   buildTeacherUserPrompt,
 } from "../lib/teacherPrompts";
+import { looksLikePromptLeak } from "../lib/promptSafety";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
@@ -56,6 +58,12 @@ function TeacherPage() {
         let acc = "";
         for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(text))) {
           acc += chunk;
+          // 지시문을 그대로 읊기 시작하면 거기서 끊는다 — 프롬프트로 "말하지 말라"고 시키는
+          // 것만으로는 막히지 않아서, 받은 답을 코드에서 한 번 더 본다(promptSafety.ts 주석 참고).
+          if (looksLikePromptLeak(acc, TEACHER_SYSTEM_PROMPT)) {
+            appendAnswer(assistantId, TEACHER_REFUSAL_ANSWER);
+            return;
+          }
           appendAnswer(assistantId, acc);
         }
       } catch (err) {

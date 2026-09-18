@@ -15,7 +15,11 @@ import {
   type Level,
   type Scenario,
 } from "../lib/conversationPrompts";
+import { looksLikePromptLeak } from "../lib/promptSafety";
 import PromptApiTroubleshootDialog from "./PromptApiTroubleshootDialog";
+
+/** 지시문을 읊기 시작한 응답을 대체하는 말 — 역할을 유지한 채 거절한다. */
+const ROLE_REFUSAL_REPLY = "ごめんなさい、それはお答えできません。";
 
 /**
  * 회화 페이지(/conversation)는 라우트를 벗어나면 unmount되므로, 세션/스트리밍 로직을 그
@@ -57,10 +61,12 @@ function ConversationSessionController() {
         let acc = "";
         for await (const chunk of chatModel.promptStreaming(input)) {
           acc += chunk;
-          const snapshot = acc;
+          // 지시문을 읊기 시작하면 거기서 끊고 역할을 유지한 거절로 바꾼다(promptSafety.ts 참고).
+          const snapshot = looksLikePromptLeak(acc, systemPrompt) ? ROLE_REFUSAL_REPLY : acc;
           useConversationSessionStore.setState((s) => ({
             messages: s.messages.map((msg) => (msg.id === assistantMsgId ? { ...msg, text: snapshot } : msg)),
           }));
+          if (snapshot === ROLE_REFUSAL_REPLY) return;
         }
       } catch (err) {
         useConversationSessionStore.setState((s) => ({
@@ -73,7 +79,7 @@ function ConversationSessionController() {
         useConversationSessionStore.setState({ isStreaming: false });
       }
     },
-    [chatModel, reportError]
+    [chatModel, systemPrompt, reportError]
   );
 
   const sendMessage = useCallback(
