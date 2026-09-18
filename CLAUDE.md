@@ -220,9 +220,26 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   홈 화면/Dock에 추가된 사이트만 예외). 큰 애셋을 새로 받는 기능에도 이 둘을 붙일 것.
 
 ## AI 안내 흐름 (`aiCapability.ts`) — 중요
-- **"AI를 쓸 수 있나?"는 `detectAiCapability()` 한 곳에서만 판단한다.** `isPromptApiSupported()`나
+- **"AI를 쓸 수 있나?"는 `aiCapability.ts` 한 곳에서만 판단한다.** `isPromptApiSupported()`나
   `navigator.gpu`를 화면에서 직접 부르지 말 것. 세 화면(첫 접속 모달·대문 카드·회화/작문 인라인
   안내)이 같은 판단을 써야 문구가 서로 어긋나지 않는다.
+- **`window.LanguageModel`이 있다고 쓸 수 있는 게 아니다 (실제로 겪은 버그, Whale)**:
+  크로미움 포크(Whale·Edge·Opera·Samsung Internet…)에는 API 객체가 노출되지만 구글이 Gemini
+  Nano를 진짜 Chrome에만 배포해서 `availability()`가 `"unavailable"`을 준다. 동기 검사만 믿었더니
+  **화면은 멀쩡한데 메시지를 보내는 순간 실패**했다. 그래서:
+  - 경로 판단(`path`)은 **`availability()`를 기다리는 `resolveAiCapability()`**(React에서는
+    `useAiCapability()` 훅)에서만 한다. 동기 `detectAiCapabilitySnapshot()`은 `gemma`·`isMobile`
+    같이 동기로 알 수 있는 것만 담고 `path`를 아예 갖고 있지 않다 — 타입으로 오용을 막는다.
+  - 훅은 확정 전에 `null`을 준다. **null일 때 아무것도 단정하지 말 것** — 동기 정보로 먼저
+    그렸다가 뒤집으면 잘못된 안내가 한 번 번쩍인다.
+  - `"downloadable"`·`"downloading"`은 **쓸 수 있는 것으로 본다**(브라우저가 알아서 받는다).
+    `"unavailable"`만 못 쓰는 상태다.
+- **LLM 페이지는 `"unsupported"`와 `"unavailable"`을 **둘 다** 처리해야 한다.** 예전엔
+  `"unsupported"`만 봐서 Whale에서 회화·작문·선생님 화면이 정상처럼 렌더됐다. 새 LLM 페이지를
+  만들 때도 두 상태를 같이 볼 것.
+- 안내 문구는 `builtinUnavailableReason()`이 만든다 — **크로미움 포크에는 "플래그를 켜세요"라고
+  하지 않는다**(켤 플래그가 없다). 진짜 Chrome일 때만 플래그·자가진단을 함께 안내한다.
+  판별은 `browserCheck.ts`의 `detectBrowser().isGenuineChrome`을 재사용한다.
 - 안내 순서는 **Gemma 먼저, Chrome은 최후의 보루**다:
   1. `builtin-ready` — 내장 AI로 바로 된다. Gemma는 "더 정확한 학습"으로 **대문 카드에서만**
      권한다. 이미 잘 돌아가는 사용자를 첫 화면 모달로 막지 않는다.

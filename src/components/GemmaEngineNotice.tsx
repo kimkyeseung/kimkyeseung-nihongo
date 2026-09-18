@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { GEMMA_MODEL, formatBytes } from "../lib/gemmaModel";
-import { detectAiCapability } from "../lib/aiCapability";
+import { useAiCapability } from "../hooks/useAiCapability";
 import { useAiEngineStore } from "../stores/aiEngineStore";
 
 /**
@@ -20,7 +20,8 @@ function GemmaEngineNotice({
   const setEngine = useAiEngineStore((s) => s.setEngine);
   const missing = reason === "model-missing";
   // 내장 AI가 없으면 "내장 AI로 전환"은 아무 데도 데려가지 못한다 — 그때는 Chrome을 권한다.
-  const { promptApi } = detectAiCapability();
+  // Whale처럼 API 객체만 있는 브라우저를 거르려면 availability()를 기다려야 한다.
+  const promptApi = useAiCapability()?.promptApi ?? false;
 
   return (
     <div className="m-4 rounded-2xl bg-info/10 p-5 text-sm text-gray-700">

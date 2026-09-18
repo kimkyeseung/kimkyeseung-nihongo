@@ -145,7 +145,9 @@ function ConversationPage() {
     );
   }
 
-  if (chatStatus === "unsupported") {
+  // "unavailable"은 API 객체는 있는데 모델을 못 쓰는 상태다(Whale 등 크로미움 포크, 플래그 꺼짐).
+  // 이걸 빼먹으면 화면은 멀쩡한데 보내는 순간 실패한다 — aiCapability.ts 주석 참고.
+  if (chatStatus === "unsupported" || chatStatus === "unavailable") {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>

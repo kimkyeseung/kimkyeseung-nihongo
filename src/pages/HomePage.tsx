@@ -44,13 +44,19 @@ const FEATURES = [
     title: "작문",
     desc: "쓴 문장을 고쳐주고 어디가 달라졌는지 표시",
   },
+  {
+    to: "/teacher",
+    icon: "🧑‍🏫",
+    title: "선생님",
+    desc: "문법·표현을 한국어로 물어보고 예문까지",
+  },
 ] as const;
 
 const POINTS = [
   {
     icon: "🔒",
     title: "서버 없이 내 브라우저 안에서",
-    desc: "회화·작문 첨삭은 Chrome의 온디바이스 AI(Prompt API)가 처리합니다. 입력한 문장이 어디로도 전송되지 않습니다.",
+    desc: "회화·작문 첨삭·선생님 답변은 브라우저 안에서 도는 AI가 처리합니다. Chrome 내장 AI나 직접 받은 Gemma 4 중 하나를 쓰며, 입력한 문장은 어디로도 전송되지 않습니다.",
   },
   {
     icon: "📚",
@@ -89,7 +95,7 @@ function HomePage() {
         <section className="text-center">
           <h1 className="text-3xl text-primary sm:text-4xl">혼자서, 매일 조금씩 일본어</h1>
           <p className="mt-2 text-gray-600">
-            오십음도부터 한자 획순, 회화와 작문 첨삭까지.
+            오십음도부터 한자 획순, 회화·작문 첨삭과 선생님에게 질문까지.
             <br className="hidden sm:inline" /> 설치도 로그인도 없이 브라우저 하나로 하는 일본어
             학습.
           </p>

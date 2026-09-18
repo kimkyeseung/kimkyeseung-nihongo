@@ -21,7 +21,7 @@ export interface AiModel {
 }
 
 /**
- * 회화·작문 페이지가 쓰는 생성형 AI 창구.
+ * 회화·작문·선생님 페이지가 쓰는 생성형 AI 창구.
  * `aiEngineStore`의 선택에 따라 Chrome 내장 Prompt API와 Gemma 4(WebGPU) 중 하나를 쓴다.
  *
  * 훅 규칙상 둘 다 항상 호출해야 하지만, 쓰지 않는 쪽은 세션을 만들지 않으므로 비용이 없다
