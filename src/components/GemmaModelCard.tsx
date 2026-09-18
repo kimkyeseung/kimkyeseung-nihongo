@@ -35,7 +35,8 @@ function ChromeCanaryFallback({ lead }: { lead: string }) {
  * 내장 AI가 되는 사용자에게 Gemma를 권하는 자리는 **첫 접속 모달이 아니라 이 카드**다.
  */
 function GemmaModelCard() {
-  const { status, progress, error, download, cancel, remove } = useGemmaModel();
+  const { status, progress, error, partialBytes, autoResuming, download, cancel, remove, discardPartial } =
+    useGemmaModel();
   const engine = useAiEngineStore((s) => s.engine);
   const setEngine = useAiEngineStore((s) => s.setEngine);
   // 모바일 경고는 동기 정보로 충분하지만, "Gemma가 유일한 길인가"는 availability()를
@@ -65,6 +66,17 @@ function GemmaModelCard() {
   }
 
   const usingGemma = engine === "gemma4";
+  /** 받다 만 조각이 있으면 "처음부터"가 아니라 "이어받기"다. */
+  const canResume = partialBytes > 0 && partialBytes < GEMMA_MODEL.bytes;
+  /**
+   * 자동 이어받기 중에는 status가 잠깐 "error"다. 그때 에러 카드를 그리면 다시 받기 시작하는
+   * 순간 빨간 문구가 한 번 번쩍인다 — 받는 중으로 취급한다.
+   */
+  const busy = status === "downloading" || autoResuming;
+  // 이어받는 첫 순간에는 progress가 아직 없다. 받아둔 만큼을 기준으로 그려야 진행률 바가
+  // 0으로 떨어졌다 되돌아오지 않는다.
+  const receivedBytes = progress?.receivedBytes ?? (canResume ? partialBytes : 0);
+  const totalBytes = progress?.totalBytes ?? GEMMA_MODEL.bytes;
 
   return (
     <div
@@ -105,19 +117,30 @@ function GemmaModelCard() {
 
       {status === "checking" && <p className="mt-3 text-sm text-gray-400">설치 여부 확인 중...</p>}
 
-      {(status === "not-installed" || status === "error") && (
+      {(status === "not-installed" || status === "error") && !busy && (
         <>
           <button
             onClick={download}
             className="btn-press mt-3 w-full rounded-2xl bg-info px-4 py-3 text-white"
             style={{ ["--btn-shadow" as string]: "rgb(0 0 0 / 0.2)" }}
           >
-            모델 내려받기 ({formatBytes(GEMMA_MODEL.bytes)})
+            {canResume
+              ? `이어받기 (${formatBytes(partialBytes)} / ${formatBytes(GEMMA_MODEL.bytes)}부터)`
+              : `모델 내려받기 (${formatBytes(GEMMA_MODEL.bytes)})`}
           </button>
-          <p className="mt-2 text-xs text-gray-400">
-            한 번만 받으면 브라우저에 저장되어 다음부터는 오프라인으로 동작합니다. 데이터
-            요금제에서는 주의하세요.
-          </p>
+          {canResume ? (
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-400">받아둔 만큼은 다시 받지 않습니다.</p>
+              <button onClick={discardPartial} className="shrink-0 text-xs text-gray-400 underline">
+                처음부터 받기
+              </button>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-gray-400">
+              한 번만 받으면 브라우저에 저장되어 다음부터는 오프라인으로 동작합니다. 데이터
+              요금제에서는 주의하세요.
+            </p>
+          )}
           {snapshot.isMobile && (
             <p className="mt-2 rounded-2xl bg-warning/10 p-2 text-xs text-gray-600">
               ⚠️ {MOBILE_DOWNLOAD_WARNING}
@@ -137,34 +160,42 @@ function GemmaModelCard() {
         </>
       )}
 
-      {status === "downloading" && (
+      {busy && (
         <div className="mt-3">
           <div className="flex items-baseline justify-between gap-2 text-sm">
             <span className="text-gray-500">
-              {progress
-                ? `${formatBytes(progress.receivedBytes)} / ${formatBytes(progress.totalBytes)}`
+              {progress || canResume
+                ? `${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`
                 : "연결 중..."}
             </span>
             <span className="text-info tabular-nums">
-              {progress ? Math.round(progress.ratio * 100) : 0}%
+              {Math.round((receivedBytes / totalBytes) * 100)}%
             </span>
           </div>
           <ProgressBar
             className="mt-2"
-            percent={progress ? progress.ratio * 100 : 0}
+            percent={(receivedBytes / totalBytes) * 100}
             label="Gemma 4 모델 내려받는 중"
           />
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="text-xs text-gray-400">
-              {progress
-                ? (formatEta(progress.totalBytes - progress.receivedBytes, progress.bytesPerSecond) ??
-                  "남은 시간 계산 중...")
-                : ""}
+              {autoResuming || (canResume && !progress)
+                ? "끊긴 지점부터 이어받는 중..."
+                : progress
+                  ? (formatEta(totalBytes - receivedBytes, progress.bytesPerSecond) ??
+                    "남은 시간 계산 중...")
+                  : "남은 시간 계산 중..."}
             </span>
             <button onClick={cancel} className="text-xs text-gray-400 underline">
               취소
             </button>
           </div>
+          {snapshot.isMobile && (
+            <p className="mt-2 rounded-2xl bg-info/10 p-2 text-xs text-gray-600">
+              📱 받는 동안 화면을 켜두세요. 다른 앱으로 옮겨도 받아둔 만큼은 남고, 돌아오면 그
+              지점부터 이어받습니다.
+            </p>
+          )}
         </div>
       )}
 

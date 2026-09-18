@@ -5,6 +5,7 @@ import GamificationBar from "./GamificationBar";
 import Confetti from "./Confetti";
 import BadgeWatcher from "./BadgeWatcher";
 import ConversationSessionController from "./ConversationSessionController";
+import GemmaDownloadBar from "./GemmaDownloadBar";
 import LoadingMascot from "./LoadingMascot";
 import PromptApiOnboardingDialog from "./PromptApiOnboardingDialog";
 
@@ -72,6 +73,11 @@ function Layout() {
           </Link>
         </div>
       </header>
+
+      {/* 2GB 모델을 받는 동안 어느 페이지에서나 보이는 띠. 받는 중이 아니면 아무것도 그리지
+          않으므로 헤더 아래 공간을 차지하지 않는다 (h-svh 레이아웃이라 이게 중요하다 —
+          빈 자리를 남기면 그만큼 main의 스크롤 영역이 줄어든다). */}
+      <GemmaDownloadBar />
 
       {/* min-h-0가 없으면 flex-1 아이템이 내용물 높이만큼 계속 늘어나 버려서
           overflow-y-auto가 무용지물이 되고(자체 스크롤이 안 생김), 결과적으로
