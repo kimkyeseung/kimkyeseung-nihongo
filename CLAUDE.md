@@ -27,11 +27,18 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
 ## 테스트
 - vitest를 쓴다(`npm test`). 설정 파일은 없다 — 기본값(`**/*.test.ts`, node 환경)으로 충분하다.
 - 테스트는 대상 모듈 옆에 둔다(`src/lib/promptSafety.ts` ↔ `src/lib/promptSafety.test.ts`).
-- **전부를 테스트하지 않는다.** 지금 있는 건 프롬프트 인젝션 방어(`promptSafety` /
-  `conversationPrompts` / `writingCorrection`)뿐이고, 이유는 이 코드가 전부 "실제로 뚫려봐서"
-  만들어졌고 **조용히 죽어도 아무도 모르기 때문**이다(실제로 `LEAK_MARKERS` 정규화 버그로
-  마커 하나가 한동안 죽어 있었다). 같은 성격의 코드 — 버그가 콘솔 에러 없이 조용히 지나가고,
-  순수 함수로 떼어낼 수 있는 것 — 을 만들면 여기에 테스트를 추가할 것.
+- **전부를 테스트하지 않는다.** 기준은 하나다 — **버그가 콘솔 에러 없이 조용히 지나가고,
+  순수 함수로 떼어낼 수 있는 것**. 지금 있는 것도 전부 그런 코드다:
+  - 프롬프트 인젝션 방어(`promptSafety` / `conversationPrompts` / `writingCorrection`) —
+    전부 "실제로 뚫려봐서" 만들어졌고, 죽어도 아무도 모른다(실제로 `LEAK_MARKERS` 정규화
+    버그로 마커 하나가 한동안 죽어 있었다).
+  - AI 지원 판정(`aiCapability`) — 틀리면 엉뚱한 안내 화면이 뜬다.
+  - Gemma 이어받기 위치 계산(`gemmaModel`의 `planResumeWrite`) — 오프셋이 어긋난 채 이어
+    붙여도 최종 크기는 맞아떨어질 수 있어서, 2GB짜리 파일이 조용히 오염된다.
+  - 입력창 로마자 변환 범위(`romajiInput`의 `convertTypedRomaji`) — 범위를 한 글자만 잘못
+    잡아도 콘솔은 조용하고 사용자가 쓰던 문장만 망가진다.
+
+  같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`verbConjugation`, `scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
 
@@ -63,7 +70,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
 
 ## 디자인 톤
 듀오링고 스타일 카툰풍, 아동 친화적(큰 글씨/큰 터치 영역/둥근 모서리). 컬러는
-`--color-primary` 등 CSS 변수로 관리. 상세 가이드는 스펙 문서의 "디자인/UI 스타일 가이드" 참고.
+`--color-primary` 등 CSS 변수로 관리. 폰트는 세 가지다 — `font-sans`(Jua, 기본) ·
+`font-ja`(Kosugi Maru, 일본어만 있는 자리) · `font-mixed`(한·일이 한 줄에 섞이는 자리,
+"입력 문자 전환 토글" 절 참고). 상세 가이드는 스펙 문서의 "디자인/UI 스타일 가이드" 참고.
 
 ## 프로젝트 구조
 ```
@@ -80,7 +89,10 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      AI 안내: PromptApiUnsupportedNotice(내장 AI 불가) ·
                        GemmaEngineNotice(Gemma를 골랐는데 못 쓸 때) ·
                        PromptApiTroubleshootDialog(런타임 실패) ·
-                       GemmaModelCard(대문 모델 다운로드/엔진 선택) · ChromeLink
+                       GemmaModelCard(대문 모델 다운로드/엔진 선택) ·
+                       GemmaDownloadBar(Layout 상주 — 받는 중에만 어느 페이지에서나 뜨는 띠) ·
+                       ChromeLink
+                     입력: InputModeToggle(한·영 / 일본어 입력 전환 — 전용 절 참고)
                      버튼: SpeakButton(발음) + CopyButton(복사) + AskTeacherButton(선생님에게 묻기)
                        — 셋 다 iconButtonClass.ts의 공용 클래스를 쓴다
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
@@ -89,10 +101,12 @@ src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·
                        PromptApiDiagnosticsPage(`/diagnostics` 자가진단)
                        — 뒤 셋은 하단 네비게이션 밖
 src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLanguageModel(Prompt API) ·
-                     useGemmaSession/useGemmaModel(Gemma 4) · useAiCapability(안내 경로 확정) ·
+                     useGemmaSession(Gemma 4) · useGemmaModel(모델 설치 상태 — 다운로드 자체는
+                       lib/gemmaDownloadController.ts가 갖고 있다) · useAiCapability(안내 경로 확정) ·
                      usePromptApiTroubleshoot(런타임 실패 진단)
-                   그 외: useJapaneseSpeech, useJapaneseInput(wanakana 입력), useDebouncedValue,
-                     useAssetPreload
+                   그 외: useJapaneseSpeech, useJapaneseInput(wanakana 입력 + 사전 자동완성),
+                     useScriptInput(입력 문자 전환), useWordSuggestions(사전 자동완성 — 위 둘이 공유),
+                     useDebouncedValue, useAssetPreload
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, kanaWords.ts,
                      posTags.ts, sentenceWords.ts, srs.ts) +
                      furigana.ts(LLM 응답에 사전 후리가나 오버레이) + diff.ts(문자 단위 LCS diff) +
@@ -102,18 +116,23 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                        promptSafety.ts(인젝션 방어 — 전용 절 참고) +
                      AI 지원 판정: aiCapability.ts(안내 경로) · languageModel.ts ·
                        languageModelDiagnostics.ts · browserCheck.ts(진짜 Chrome 판별) ·
-                       chromeLinks.tsx + gemmaModel.ts/gemmaEngine.ts(Gemma 4) +
+                       chromeLinks.tsx + gemmaModel.ts/gemmaEngine.ts(Gemma 4) ·
+                       gemmaDownloadController.ts(다운로드 모듈 싱글턴) ·
+                       screenWakeLock.ts(받는 동안 화면 꺼짐 방지) +
                      xpRewards.ts(행동별 XP 값) + badges.ts(뱃지 정의) +
                      preloadAssets.ts(대문 프리로드) +
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
-                     scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기)
+                     scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
+                     romajiInput.ts(입력창의 로마자→히라가나 변환 범위)
                    테스트: promptSafety.test.ts · conversationPrompts.test.ts ·
-                     writingCorrection.test.ts · aiCapability.test.ts
+                     writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
+                     romajiInput.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
                      conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태) ·
-                     teacherChatStore(선생님 대화, 메모리 전용)
+                     teacherChatStore(선생님 대화, 메모리 전용) ·
+                     gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, gojuon.ts) — 완료
 public/            favicon.svg, icons.svg, hero.png(대문 그림 1536×1024)
@@ -210,9 +229,50 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   다운로드를 통째로 날린다. **항상 2-인자 형태로 부를 것**(`renamePartialToFinal`).
   타입 선언에 오버로드가 있다고 아무 형태나 쓰면 안 된다 — TS 타입은 표준을 적은 것이지
   특정 엔진의 구현이 아니다.
-- 다운로드 단계와 이름 붙이기 단계의 **실패 처리를 분리했다**: 받다 만 조각은 지우지만(이어받기
-  미구현), 다 받은 뒤 `move()`에서 실패하면 `.part`를 **남긴다**. 다시 누르면
-  `getCompletePartial()`이 집어가 이름만 다시 붙이므로 2GB를 다시 받지 않는다.
+- 다운로드 단계와 이름 붙이기 단계의 **실패 처리를 분리했다**: 다 받은 뒤 `move()`에서 실패하면
+  `.part`를 **남긴다**. 다시 누르면 `getCompletePartial()`이 집어가 이름만 다시 붙이므로 2GB를
+  다시 받지 않는다.
+- **끊기면 이어받는다 (모바일에서 실제로 겪은 문제)**: 모바일 브라우저는 화면이 꺼지거나 다른
+  앱으로 전환하는 것만으로 탭을 얼리고 진행 중인 `fetch`를 죽인다. 예전엔 그때 `.part`를 지워서
+  1.9GB를 받았어도 알림 하나 확인하고 오면 처음부터였고, 화면에는 브라우저가 준 영어 한 줄
+  (`"Network Error"` 등)이 그대로 떴다. 지금은 `Range: bytes=N-`으로 이어받는다. 주의할 점:
+  - **`If-Range`를 반드시 같이 보낼 것.** 그 사이 원본이 바뀌면 서버가 206 대신 200(전체)을
+    주고, 그걸 보고 처음부터 다시 쓴다. 이게 없으면 다른 파일의 뒷부분을 이어 붙인다.
+    짝이 되는 ETag는 localStorage가 아니라 **`.part` 옆 OPFS 사이드카**에 둔다 — 한쪽만
+    지워지면 판단이 어긋난다.
+  - **끊긴 상황에서도 `writable.close()`로 커밋할 것.** `createWritable()`의 쓰기는 스왑
+    파일에 쌓였다가 `close()` 때 반영되므로, 예전처럼 `abort()`하면 받은 2GB가 통째로 사라져
+    이어받을 것이 남지 않는다. 이어 쓸 때는 `createWritable({ keepExistingData: true })` +
+    `seek(offset)` — `keepExistingData` 없이 열면 파일이 0바이트로 잘린다.
+  - 서버 응답으로 "어디서부터 쓸지"를 정하는 `planResumeWrite`는 **조용히 틀리는 코드**다
+    (오프셋이 어긋나도 최종 크기는 맞을 수 있어 크기 검사를 통과한다). `gemmaModel.test.ts`로
+    고정해뒀으니 손대면 `npm test`부터 돌릴 것.
+  - 남은 한계: 탭이 **얼기만 하면**(보통의 앱 전환) 돌아올 때 커밋되지만, OS가 탭을 **죽이면**
+    catch가 아예 안 돌아 마지막 커밋 이후가 날아간다. 중간중간 커밋하려면 `close()`/재오픈이
+    필요한데 `keepExistingData`가 매번 전체를 복사해 O(n²)이 된다 — 제대로 하려면 Web Worker
+    에서 `createSyncAccessHandle()`로 제자리에 쓰는 방식으로 가야 한다(아직 안 했다).
+- **다운로드는 React 밖에 산다 (실제로 겪은 문제)**: 예전엔 `useGemmaModel` 훅이 다운로드를
+  직접 들고 있어서, 그 훅을 쓰는 `GemmaModelCard`가 대문에만 있다 보니 **다른 페이지로 옮기는
+  순간 카드가 언마운트되면서 2GB 다운로드가 취소**됐다. 지금은 `gemmaDownloadController.ts`
+  (모듈 싱글턴)가 주인이고 `gemmaDownloadStore`가 상태만 들고 있으며, 훅은 store를 구독해
+  넘겨주는 얇은 창구다. 회화의 `ConversationSessionController`와 같은 문제이지만 여기서는 한
+  발 더 나가 **컴포넌트가 아니라 모듈**로 뺐다 — 대문(`/`)이 Layout 밖이라 Layout 상주
+  컨트롤러로는 시작 지점을 덮지 못하기 때문이다. **오래 걸리는 작업을 새로 만들 때 "그 화면이
+  떠 있는 동안만" 살아 있어도 되는지 먼저 따져볼 것.**
+  - 받는 중이라는 사실은 `GemmaDownloadBar`(Layout 상주)가 어느 페이지에서나 보여준다.
+    안 보이면 사용자는 취소된 줄 알고 대문에 돌아가 다시 누른다.
+  - 진행률은 **250ms로 throttle**해서 store에 넣는다. `downloadModel`은 청크마다(초당 수백 번)
+    진행률을 주는데, 띠가 모든 페이지에 떠 있으므로 그대로 흘리면 학습 화면 전체가 그 빈도로
+    리렌더된다. 마지막 한 번은 간격과 무관하게 항상 반영한다.
+- **화면 꺼짐은 `screenWakeLock.ts`의 `holdScreenAwake()`로 막는다** (받는 동안에만 잡고,
+  컨트롤러가 store를 구독해 상태에 맞춘다). 탭이 숨겨지면 락이 자동으로 풀리므로
+  `visibilitychange`에서 다시 잡아야 한다. React 훅이 아닌 이유는 위와 같다 — 훅으로 두면
+  화면을 옮길 때 락이 같이 풀린다. **이건 "다른 앱으로 전환"은 못 막는다** — 그쪽은 위의
+  이어받기가 담당한다. 미지원·거절(저전력 모드 등)이면 조용히 넘어가고 다운로드는 계속한다.
+- 끊긴 사실은 대개 **탭이 다시 보이는 순간** 알게 된다(얼어 있던 promise가 그때 거절된다).
+  그래서 자동 이어받기를 "다음 `visibilitychange`를 기다린다"로 짜면 이미 지나간 뒤라 영영 안
+  걸린다 — 컨트롤러는 지금 보이는 상태면 그 자리에서 바로 재시도한다. **직전 시도가
+  실제로 진척을 냈을 때만** 자동 재시도한다(아예 끊긴 상태에서 같은 실패를 반복하지 않으려고).
 - 엔진은 앱 전체에서 **하나만** 둔다(모듈 레벨 Promise). 모델 2GB를 GPU에 올리는 비용 때문이고,
   시나리오별 세션은 그 엔진에서 파생되는 `Conversation`으로 만든다(만들고 지우는 비용이 싸다).
 - `@litert-lm/core`는 WASM 런타임을 기본적으로 **jsDelivr CDN**에서 받는다(변종 하나 21~34MB).
@@ -399,7 +459,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   칩으로 둔다.
 - 마크다운은 `react-markdown` + `remark-gfm`으로 렌더링하고, 요소별 Tailwind 클래스를 직접
   지정한다(typography 플러그인을 새로 들이지 않으려고). 표(GFM)는 활용형 정리에 쓸모가 있어 켰다.
-- 질문 입력창에는 **wanakana를 붙이지 않는다** — 여기서 치는 건 한국어 질문이다(회화/작문과 다름).
+- 질문 입력창의 **기본은 한글**이다 — 여기서 치는 건 한국어 질문이다(회화/작문과 다름).
+  다만 일본어로 묻고 싶을 수도 있어서 `InputModeToggle`로 문자를 바꿀 수 있고, **"일본어"를
+  고른 동안에만** wanakana가 붙는다("입력 문자 전환 토글" 절 참고). 회화의 이름칸도 같다.
 - 대화는 `teacherChatStore`(메모리 전용)에 있어 탭을 옮겨도 남지만, **답변 스트리밍 중에
   나가면 세션이 destroy되어 생성은 끊긴다**(작문 첨삭과 같은 절충). 백그라운드에서도 계속
   받으려면 회화의 `ConversationSessionController`처럼 Layout 상주 컨트롤러가 필요하다.
@@ -408,6 +470,16 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   꺼내 바로 물어본다. **꺼내는 즉시 store를 비우는 게 중요하다** — StrictMode에서 effect가 두 번
   실행돼도 질문이 두 번 날아가지 않는다(실제로 이 가드 없이는 중복된다). 회화 말풍선과 선생님
   답변 속 예문 칩 양쪽에 같은 버튼이 붙어 있고, 이미 선생님 페이지에 있어도 같은 경로로 동작한다.
+- **입력 영역(입력창·보내기·전환 토글)은 답변 중에 통째로 숨긴다.** 어차피 보낼 수 없는
+  상태이고, "생각하는 중" 마스코트에 시선이 가도록 비워두는 편이 낫다. 답변이 끝나면 돌아온다.
+- 보내기 버튼은 종이비행기 **인라인 SVG**다(`PaperPlaneIcon`). `public/icons.svg`는 템플릿
+  잔재(github·discord 등)라 쓸 게 없어서 직접 넣었고, `currentColor`를 상속하므로 버튼 색만
+  바꾸면 아이콘도 따라온다.
+- 일본어 모드일 때 **사전 자동완성이 입력창 위로** 뜬다(`JapaneseSuggestionList`의
+  `placement="above"`). 이 입력창은 화면 맨 아래에 붙어 있어서 기본값(아래)으로 두면 잘린다.
+  자동완성 로직은 회화·작문과 같은 `useWordSuggestions`를 쓴다 — 한쪽만 고쳐 동작이 갈리지
+  않도록 `useJapaneseInput`도 이 훅을 쓰게 바꿨다. 한글 모드에서는 `enabled: false`로 아예
+  검색하지 않는다(한국어 질문에 일본어 사전을 뒤질 이유가 없다).
 - 하단 네비게이션이 7칸이 되면서 375px에서 자리가 빠듯해졌다. 고정 최소 너비(`min-w-16`)를
   버리고 `flex-1 min-w-0` + 작은 글씨로 화면을 n등분한다 — **항목을 더 늘릴 땐 375px에서
   `nav.scrollWidth > clientWidth`를 꼭 확인할 것**(라벨을 줄이거나 아이콘만 남기는 식으로).
@@ -451,6 +523,63 @@ React의 합성 이벤트 시스템이 IME 조합(composition) 관련 내부 처
 반드시 `useEffect`에서 `inputRef.current.addEventListener("input", handler)`로 네이티브
 리스너를 직접 붙이고 `e.target.value`를 읽어 state를 갱신할 것 (`DictionaryPage.tsx` 참고).
 이후 wanakana를 쓰는 다른 입력(작문 페이지 등)에도 동일 패턴을 적용할 것.
+
+## 입력 문자 전환 토글 (`InputModeToggle` / `useScriptInput`)
+- 선생님 질문창과 회화 이름칸에 **한/영 · 일본어** 두 칸짜리 토글이 붙어 있다. 선택은
+  `pageStateStore`의 `useInputScriptPrefs`에 persist하고, 두 입력창의 설정을 따로 둔다
+  (선생님에게는 일본어로 묻고 이름은 한글로 쓰는 조합이 자연스럽다).
+- **한글과 영어를 나누지 않는다.** 한/영 전환은 OS 입력기가 이미 하는 일이고 웹은 그걸 바꿀
+  수 없어서, 버튼을 따로 두면 눌러도 아무 일도 안 일어나는 칸이 생긴다(처음엔 3칸으로 만들었다가
+  합쳤다). **앱이 실제로 바꿀 수 있는 건 "로마자를 히라가나로 바꿔줄까 말까"뿐이고 모드도 그
+  둘뿐이다** — 새 언어를 넣고 싶어지면 "그래서 코드가 뭘 다르게 하는데?"를 먼저 답할 것.
+- 기본 모드에서는 `lang` 속성을 **아예 지운다**. 한글일지 영문일지 앱이 모르는데 둘 중 하나로
+  찍으면 모바일 키보드에 틀린 힌트를 주게 된다.
+- **토글 버튼은 입력창의 포커스를 뺏지 않는다**(`onMouseDown`에서 `preventDefault`). 모드 전환은
+  타이핑 도중에 하는 일이라, 누를 때마다 커서가 빠지면 다시 클릭해서 이어 쳐야 한다. 같은 자리에
+  버튼을 더 만들 때도 이걸 붙일 것.
+- **입력창에 포커스가 있을 때 Tab이 모드를 바꾼다.** 단 **Shift+Tab은 일부러 그대로 뒀다** —
+  Tab은 원래 포커스를 옮기는 키라 둘 다 먹으면 키보드만 쓰는 사용자가 입력창에 갇힌다.
+  조합(IME) 중에는 Tab이 입력기 몫이라 `isComposing`이면 건드리지 않는다.
+- 다음 모드는 화면이 계산하지 않고 store의 `toggleTeacher`/`toggleConversationName`이 뒤집는다
+  (zustand 액션이라 참조가 안정적이고, 이벤트 리스너가 오래된 값을 붙들 일이 없다).
+- **`wanakana.bind()`를 쓰지 않는다 (실제로 겪은 버그, 중요)**: `bind()`의 변환 범위는 "커서에서
+  뒤로 걸으며 만나는 **일본어가 아닌 글자 전부**"다(내부 `workBackwards`). 멈추는 건 가나·한자뿐이라
+  **영문·숫자·공백은 경계가 되지 못한다.** 그래서 `hello world`가 든 입력창을 일본어 모드로 바꾸고
+  한 글자만 쳐도 앞 문장이 통째로 `へlぉ をrlだ`가 됐다. 모드를 바꿀 수 있는 입력창에서는
+  "모드를 켜기 전에 있던 글자"가 변환 대상이 아니므로, `src/lib/romajiInput.ts`의
+  `convertTypedRomaji`가 **그 시점의 길이를 바닥(floor)으로 두고 그 뒤만** 변환한다.
+  - 로마자 표는 그대로 wanakana(`toKana`, 같은 `IMEMode: "toHiragana"` 옵션)가 담당한다 —
+    **바뀐 건 "어디부터 어디까지 넘길지"뿐**이라 ん·촉음·요음·덜 친 꼬리(`sus` → `すs`) 동작은
+    그대로다. 변환 규칙을 직접 구현하지 말 것.
+  - 바닥은 지우다가 짧아지면 같이 내려온다(`Math.min`). 안 그러면 다 지운 뒤에도 변환이 안 된다.
+  - `bind()`가 해주던 `autocapitalize`/`autocorrect`/`spellcheck` 끄기는 훅이 직접 한다 —
+    모바일 키보드가 로마자 첫 글자를 대문자로 바꾸면 변환이 어긋난다.
+  - 조합(IME) 중에는 변환하지 않는다(`InputEvent.isComposing`). 한글 조합 중간 상태를 로마자로
+    오인하면 글자가 깨진다.
+- **모드를 바꿀 때 가나 글자 크기가 널뛰던 버그 (실제로 겪음)**: 기본 폰트 `Jua`에는 가나가 없어
+  `system-ui`로 떨어지는데, **`system-ui`는 엘리먼트의 `lang`에 따라 다른 실물 폰트로 해석된다**
+  (한국어 시스템 폰트 vs 일본어 시스템 폰트). 모드 전환 때 `lang`이 붙었다 떨어지므로 같은 18px
+  글자의 폭이 **109px ↔ 125px**로 흔들렸다. 두 입력창에 `font-mixed`
+  (`"Jua", "Kosugi Maru", system-ui`)를 줘서 가나를 항상 Kosugi Maru로 고정해 해결했다 —
+  109/125/109 → 112/112/112로 확인. **한국어와 일본어가 한 줄에 섞이는 자리를 새로 만들면
+  `font-sans`가 아니라 `font-mixed`를 쓸 것.**
+- 저장된 값의 모드 이름이 바뀌면 persist에 `version`/`migrate`를 같이 올릴 것. 3칸에서 2칸으로
+  합칠 때 옛 `"ko"`·`"en"`을 그냥 두면 **어느 버튼도 선택 안 된 것처럼 보인다**(옵션과 일치하지
+  않아서). 지금은 `version: 1`의 migrate가 `"ja"`가 아닌 값을 전부 `"default"`로 옮긴다.
+- `useScriptInput`을 쓰는 input은 **uncontrolled다** — `value`/`onChange` prop을 주지 말고
+  `ref`만 넘긴다(위 WanaKana 절과 같은 이유). 바깥에서 값이 바뀌는 경우(전송 후 비우기,
+  저장된 이름 복원)는 훅이 effect로 DOM에 되돌려 넣는다.
+- **`lang`을 JSX prop으로 주면 안 된다 (실제로 겪은 버그)**: wanakana의 `bind()`가 엘리먼트의
+  `lang`·`autocapitalize` 등을 바꿔놓고 원래 값을 기억했다가 `unbind()`에서 되돌린다. effect는
+  React가 DOM을 갱신한 **뒤에** 돌기 때문에, prop으로 주면 "일본어 → 한글" 전환 때 React가 쓴
+  `lang="ko"`를 cleanup의 `unbind()`가 `"ja"`로 되돌려버린다. 화면도 콘솔도 멀쩡하고 모바일
+  키보드 힌트만 조용히 틀린다. 그래서 `el.lang = script`를 bind/unbind가 끝난 뒤 effect 안에서
+  넣는다 — 그 자리여야 항상 마지막 말이 된다.
+- `unbind()`는 **바인딩한 적 없는 엘리먼트에 부르면 예외를 던진다.** 모드를 바꿀 때마다
+  cleanup이 돌므로 `if (japanese)`로 반드시 걸러야 한다.
+- 이름칸은 **`setName`에서 `trim()`하지 않는다**: 타이핑 중간마다 끝 공백이 잘려 "홍 길동"처럼
+  공백이 든 이름을 아예 칠 수 없었다. 프롬프트에 넣기 전에 `sanitizeInlineValue`가 trim·공백
+  정리를 하므로 store에서 또 할 이유도 없다.
 
 ## Framer Motion 드래그(스와이프 카드) 주의사항 (실제로 겪은 버그)
 `drag="x"` + `onDragEnd`로 스와이프를 구현할 때, **같은 스와이프 제스처에 대해 `onDragEnd`가
@@ -692,6 +821,18 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   품사 분류도 사전적 사실이라 이 프로젝트 규칙상 정적 데이터로 처리). `WordDetailPage`와
   `WordMeaningDialog` 둘 다 품사 칩을 그리므로, 새로 품사를 보여주는 화면을 또 만들 때도
   raw 코드를 그대로 쓰지 말고 이 함수를 재사용할 것.
+
+## 배포 (Vercel) — `vercel.json`을 지우지 말 것
+- Vercel에 정적 사이트로 올라간다(`@vercel/analytics`가 `App.tsx`에 붙어 있다). 빌드 결과물은
+  `index.html` 하나 + `assets/`뿐이고, `/gojuon` 같은 경로는 **파일이 아니라 브라우저 안에서만
+  도는 react-router 경로**다.
+- 그래서 `vercel.json`의 catch-all rewrite(`/(.*)` → `/index.html`)가 **반드시 있어야 한다**.
+  없으면 대문에서 클릭해 들어가는 건 되는데 **그 주소에서 새로고침하거나 링크를 직접 열면
+  Vercel이 404**를 낸다(실제로 그랬다 — 앱의 404가 아니라 `content-type: text/plain`인 Vercel의
+  정적 404다). 로컬에서는 `vite dev`도 `vite preview`도 알아서 index.html로 폴백하기 때문에
+  **이 버그는 운영에서만 보인다** — 로컬에서 멀쩡하다고 넘어가지 말 것.
+- 파일시스템이 rewrite보다 먼저라서 `/assets/*`·`/hero.png` 같은 실제 파일은 그대로 나간다.
+  대신 없는 파일을 요청해도 404 대신 index.html(200)이 돌아온다 — SPA에서는 정상이다.
 
 ## 데이터 파이프라인 (완료됨)
 `src/data/`의 사전/한자/획순 JSON은 이미 생성되어 있다. 원본을 다시 받거나 갱신하려면:
