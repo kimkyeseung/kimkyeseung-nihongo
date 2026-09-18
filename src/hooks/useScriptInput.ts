@@ -139,5 +139,11 @@ export function useScriptInput<T extends HTMLInputElement | HTMLTextAreaElement>
     /** input/textarea에 그대로 넘긴다. `value`·`onChange`는 주지 말 것(위 주석 참고). */
     ref: setEl,
     focus,
+    /**
+     * 실제 엘리먼트. 아직 안 붙었으면 null이다.
+     * "엘리먼트가 나타나는 시점"에 무언가 해야 할 때 effect 의존성으로 쓴다 — 조건부로
+     * 렌더되는 입력창은 붙는 시점이 렌더 한 박자 뒤라 `focus()`만으로는 놓친다.
+     */
+    el,
   };
 }

@@ -83,6 +83,26 @@ function TeacherPage() {
     listEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  /**
+   * 답변이 끝나 입력창이 돌아오면 커서를 되돌려준다 — 이어서 묻는 흐름이라 매번 다시 클릭하게
+   * 두면 성가시다.
+   *
+   * 두 단계로 나눈 이유: 답변 중에는 입력창이 아예 언마운트돼 있고, `isAnswering`이 false가 된
+   * **그 렌더에는 엘리먼트가 아직 붙기 전**이다(콜백 ref가 상태를 갱신하는 건 한 박자 뒤).
+   * 그래서 "포커스를 줘야 한다"는 표시만 먼저 해두고, 엘리먼트가 실제로 나타났을 때 처리한다.
+   * 첫 진입에는 아무 일도 없다 — 들어오자마자 모바일 키보드가 올라오면 예시 질문을 가린다.
+   */
+  const pendingFocusRef = useRef(false);
+  useEffect(() => {
+    if (isAnswering) pendingFocusRef.current = true;
+  }, [isAnswering]);
+
+  useEffect(() => {
+    if (isAnswering || !pendingFocusRef.current || !questionInput.el) return;
+    pendingFocusRef.current = false;
+    questionInput.el.focus();
+  }, [isAnswering, questionInput.el]);
+
   const handleAsk = useCallback(
     async (question: string) => {
       const text = question.trim();
