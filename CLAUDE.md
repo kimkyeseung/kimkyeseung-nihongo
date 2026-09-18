@@ -64,7 +64,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      xpRewards.ts(행동별 XP 값) + badges.ts(뱃지 정의) +
                      preloadAssets.ts(대문 프리로드) + gemmaModel.ts/gemmaEngine.ts(Gemma 4) +
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
-                     kanaWords.ts(오십음도 글자별 대표 단어 조회)
+                     kanaWords.ts(오십음도 글자별 대표 단어 조회) +
+                     scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기)
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함)
@@ -207,6 +208,25 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   클라이언트에서 직접 계산한다 — 일본어는 띄어쓰기가 없어 단어 단위 대신 문자 단위로 diff한다.
 - 브라우저 미지원 안내 화면은 `PromptApiUnsupportedNotice` 컴포넌트로 공용화했다 (회화
   페이지에서 추출). LLM을 쓰는 새 화면을 또 만들 때 이 컴포넌트를 재사용할 것 — 새로 만들지 말 것.
+- **표기 유지는 프롬프트로 못 막는다 (실제로 겪은 버그, 중요)**: "한자 변환 제안" 칩을 꺼도
+  (`keepKanaChoice: true`) 모델이 すき를 好き로 바꿔버렸다. 옵션 배선·세션 재생성은 정상이었고
+  순전히 모델이 말을 안 듣는 문제였다. 프롬프트로 ① 부정형("표기만 바꾸는 제안은 하지 마세요"),
+  ② 긍정형("학습자가 히라가나로 쓴 단어는 수정문에도 히라가나로"), ③ 제약을 `### 수정문` 섹션
+  설명 안으로 이동, ④ 「すきですか」→「すきですか」 예시 추가까지 전부 해봤지만 **결과가 거의
+  바뀌지 않았다**. 프롬프트는 ②~④ 형태로 남겨두되(없는 것보다는 낫다), 실제로 표기를 지키는
+  것은 `src/lib/scriptPreference.ts`의 `preserveLearnerScript`다 — 응답을 받은 뒤 수정문에서
+  "가나로 쓰면 원문에 더 가까워지는" 구간만 원문 표기로 되돌린다. 읽기가 같은 표기끼리만
+  바꾸므로 발음·뜻은 그대로고, 학습자가 한자로 쓴 말이나 새로 들어온 단어는 건드리지 않는다.
+  **교훈: 사전만 있으면 결정적으로 판단할 수 있는 것을 모델에게 시키지 말 것** — 읽기·품사를
+  LLM에게 맡기지 않는 이 프로젝트의 규칙과 같다. 되돌림이 일어나면 diff 아래에 그 사실을
+  한 줄로 알려준다(설명란은 여전히 한자 얘기를 할 수 있어서, 안 알려주면 앞뒤가 안 맞아 보인다).
+  - 되돌림 판정은 그리디 최장일치 분절(`segmentSentenceIntoWords`) + 편집 거리로 한다. 후보
+    읽기는 사전 표제어의 읽기, 뒤쪽 가나를 뗀 어간의 읽기("今日は"가 こんにちは로 잡히는 경우),
+    한 글자 한자의 KANJIDIC 훈독/음독 순이다. **읽기가 여러 개인 표기(行き = いき/ゆき)에서
+    엉뚱한 쪽을 집어넣지 않도록, 되돌린 결과가 원문에 실제로 들어있을 때만 채택한다**
+    (뒤따르는 가나 3글자까지 같이 확인). 이 가드를 빼면 いき를 ゆき로 바꿔놓는다.
+  - 참고: "수정문을 전부 히라가나로 써라"로 가면 학습자가 한자로 쓴 食べ物까지 たべもの로
+    바꿔버린다 — 목표는 "학습자 표기 유지"지 "가나 강제"가 아니다.
 
 ## WanaKana + React 통합 주의사항 (실제로 겪은 버그)
 `bind(inputRef.current, { IMEMode: "toHiragana" })`로 로마자→히라가나 변환을 붙인 input에

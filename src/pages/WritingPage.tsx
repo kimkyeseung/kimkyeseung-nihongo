@@ -14,7 +14,9 @@ import {
   buildWritingCorrectionUserPrompt,
   parseCorrectionResponse,
   type WritingCorrectionOptions,
+  type WritingCorrectionResult,
 } from "../lib/writingCorrection";
+import { preserveLearnerScript } from "../lib/scriptPreference";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -40,6 +42,20 @@ function OptionChip({
       {label}
     </button>
   );
+}
+
+/**
+ * "한자 변환 제안"이 꺼져 있으면 모델이 한자로 바꿔놓은 표기를 학습자가 쓴 대로 되돌린다.
+ * 프롬프트로는 끝내 막지 못해서(writingCorrection.ts 주석 참고) 응답을 받은 뒤 코드로 고친다.
+ */
+function applyScriptPreference(
+  result: WritingCorrectionResult,
+  original: string,
+  keepKanaChoice: boolean
+): { result: WritingCorrectionResult; scriptReverted: boolean } {
+  if (!keepKanaChoice) return { result, scriptReverted: false };
+  const { text, reverted } = preserveLearnerScript(original, result.corrected);
+  return { result: reverted ? { ...result, corrected: text } : result, scriptReverted: reverted };
 }
 
 function WritingPage() {
@@ -76,10 +92,14 @@ function WritingPage() {
   const systemPrompt = useMemo(() => buildWritingCorrectionSystemPrompt(options), [options]);
   const model = useAiModel(systemPrompt);
 
-  const result = useMemo(
-    () => (submittedText ? parseCorrectionResponse(rawResponse, submittedText) : null),
-    [rawResponse, submittedText]
-  );
+  const { result, scriptReverted } = useMemo(() => {
+    if (!submittedText) return { result: null, scriptReverted: false };
+    return applyScriptPreference(
+      parseCorrectionResponse(rawResponse, submittedText),
+      submittedText,
+      !showKanjiSuggestions
+    );
+  }, [rawResponse, submittedText, showKanjiSuggestions]);
 
   const handleSubmit = useCallback(async () => {
     const text = japaneseInput.value.trim();
@@ -96,7 +116,13 @@ function WritingPage() {
         setRawResponse(snapshot);
       }
       // 고칠 부분이 없으면(=정답) 축하 효과를, 있으면(=오답) 살짝 흔들리는 피드백을 준다.
-      const finalResult = parseCorrectionResponse(acc, text);
+      // 표기를 되돌리고 나면 "고칠 게 없는 문장"이 되는 경우가 있으니, 축하/흔들림 판정도
+      // 화면에 보여줄 최종 수정문으로 한다.
+      const { result: finalResult } = applyScriptPreference(
+        parseCorrectionResponse(acc, text),
+        text,
+        !showKanjiSuggestions
+      );
       if (finalResult.corrected.trim() === text.trim()) {
         celebrate();
       } else {
@@ -109,7 +135,15 @@ function WritingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [japaneseInput.value, isLoading, model, recordProgress, celebrate, reportError]);
+  }, [
+    japaneseInput.value,
+    isLoading,
+    model,
+    recordProgress,
+    celebrate,
+    reportError,
+    showKanjiSuggestions,
+  ]);
 
   function handleReset() {
     japaneseInput.setValue("");
@@ -245,6 +279,11 @@ function WritingPage() {
 
           <div className="mt-3">
             <WritingDiff original={submittedText ?? ""} corrected={result.corrected} />
+            {scriptReverted && (
+              <p className="mt-2 text-xs text-gray-400">
+                ‘한자 변환 제안’이 꺼져 있어, 한자로 바뀐 표기는 원문 그대로 되돌렸어요.
+              </p>
+            )}
           </div>
 
           {result.explanation && (
