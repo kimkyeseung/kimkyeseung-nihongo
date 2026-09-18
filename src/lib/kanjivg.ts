@@ -15,6 +15,12 @@ function loadKanjivg(): Promise<KanjivgData> {
   return kanjivgPromise;
 }
 
+/** 대문 페이지에서 미리 받아둘 때 쓴다(preloadAssets.ts). useStrokes와 같은 Promise를
+ *  데우므로, 나중에 획순을 처음 열어도 Suspense 없이 바로 그려진다. */
+export function preloadKanjivg(): Promise<KanjivgData> {
+  return loadKanjivg();
+}
+
 /** 한자의 획순 SVG path(d) 배열을 필순 그대로 반환한다. 데이터 없으면 빈 배열.
  *  최초 호출 시 데이터를 내려받는 동안 Suspense된다 — 호출부를 <Suspense>로 감쌀 것. */
 export function useStrokes(kanji: string): string[] {

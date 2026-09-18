@@ -2,13 +2,16 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { getKanjiByLevel } from "../lib/kanji";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
+import { useKanjiView } from "../stores/pageStateStore";
 import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import KanjiQuizSheet from "../components/KanjiQuizSheet";
-import { JLPT_LEVELS, type JlptLevel } from "../types/jlpt";
+import { JLPT_LEVELS } from "../types/jlpt";
 import type { KanjiEntry } from "../types/kanji";
 
 function KanjiPage() {
-  const [level, setLevel] = useState<JlptLevel>("N5");
+  // 보고 있던 급수는 페이지를 떠나도 유지된다(pageStateStore 주석 참고).
+  const level = useKanjiView((s) => s.level);
+  const setLevel = useKanjiView((s) => s.setLevel);
   const [selected, setSelected] = useState<KanjiEntry | null>(null);
   // 테스트를 열 때마다 문제를 새로 섞고 싶어서, "테스트" 버튼을 누를 때마다
   // quizSessionId를 올려 KanjiQuizSheet 내부 컴포넌트를 리마운트시키는 트리거로 쓴다.

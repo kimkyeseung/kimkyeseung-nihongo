@@ -83,6 +83,28 @@ type KanjiVgData = Record<string, string[]>; // 한자 -> path d 문자열 배�
 `<path d={d} />`를 배열 순서대로(또는 stroke-dasharray 애니메이션으로 하나씩) 그리면
 필순 애니메이션을 구현할 수 있다.
 
+### `kana-words.json` — 오십음도 글자별 대표 단어 (104자)
+
+```ts
+type KanaWords = Record<
+  string, // 히라가나 (요음은 "きゃ"처럼 두 글자)
+  {
+    hiragana: KanaWord[]; // 그 히라가나로 시작하는 단어 (최대 5개, 좋은 순)
+    katakana: KanaWord[]; // 그 가타카나로 시작하는 외래어(가타카나로만 쓰는 단어, 최대 5개)
+  }
+>;
+interface KanaWord { id: string; word: string; reading: string; meaning: string; }
+```
+
+`dictionary.json`에서 뽑아온다(별도 원본 없음). 오십음도 페이지가 2.9MB짜리 사전 청크를
+통째로 끌어오지 않도록 미리 작은 파일로 떠두는 것이 목적이다. 후보 정렬은
+"흔히 쓰는 단어 > 명사 > 낮은 JLPT 급수 > 짧은 읽기" 순이고 같은 표기는 한 번만 담는다.
+한 글자짜리 칸은 뒤에 작은 가나가 오는 단어를 제외한다(り의 예시로 りょこう가 뽑히면 안 되므로).
+자동 선정이 어색한 소수의 글자는 `build-kana-words.mjs`의 `OVERRIDES`에 첫 단어의 id를
+지정한다(나머지 자리는 그대로 자동). ん은 그 글자로 시작하는 단어가 없어 `match: "contains"`로
+ん이 들어간 단어에서 고른다. 8자(ぢ·づ 등)는 사전에 후보가 없어 양쪽 다 빈 배열이며,
+그 경우 UI에서 대표 단어 칸을 아예 그리지 않는다.
+
 ### `pos-tags.json`
 
 `dictionary.json`에 실제로 등장하는 품사 코드만 담은 `{ code: "영문 설명" }` 맵.

@@ -7,3 +7,4 @@ cd "$(dirname "$0")"
 node build-dictionary.mjs
 node build-kanji.mjs
 node build-kanjivg.mjs
+node build-kana-words.mjs

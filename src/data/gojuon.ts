@@ -6,6 +6,9 @@ export interface KanaCell {
   romaji: string;
 }
 
+/** 오십음도에서 지금 보고 있는 문자 체계. */
+export type ScriptMode = "hiragana" | "katakana";
+
 export interface KanaSection {
   id: string;
   label: string;

@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
+import AskTeacherButton from "../components/AskTeacherButton";
 import ClickableSentence from "../components/ClickableSentence";
+import CopyButton from "../components/CopyButton";
+import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
+import SpeakButton from "../components/SpeakButton";
 import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useUserProfileStore } from "../stores/userProfileStore";
@@ -92,7 +96,11 @@ function ConversationPage() {
   const isStreaming = useConversationSessionStore((s) => s.isStreaming);
   const chatStatus = useConversationSessionStore((s) => s.chatStatus);
   const chatDownloadProgress = useConversationSessionStore((s) => s.chatDownloadProgress);
+  const chatEngine = useConversationSessionStore((s) => s.chatEngine);
+  const chatBusyLabel = useConversationSessionStore((s) => s.chatBusyLabel);
   const startConversation = useConversationSessionStore((s) => s.startConversation);
+  const showTranslation = useConversationSessionStore((s) => s.showTranslation);
+  const setShowTranslation = useConversationSessionStore((s) => s.setShowTranslation);
   const resetConversation = useConversationSessionStore((s) => s.resetConversation);
   const sendMessage = useConversationSessionStore((s) => s.sendMessage);
 
@@ -121,7 +129,18 @@ function ConversationPage() {
   }
 
   if (chatStatus === "checking") {
-    return <p className="p-6 text-gray-400">Prompt API 지원 여부 확인 중...</p>;
+    return <p className="p-6 text-gray-400">AI 준비 상태 확인 중...</p>;
+  }
+
+  // Gemma 4를 고른 상태에서 못 쓰는 경우는 원인(모델 없음 / WebGPU 없음)도 해결법도 달라서
+  // Prompt API 안내와 다른 화면을 보여준다.
+  if (chatEngine === "gemma4" && (chatStatus === "model-missing" || chatStatus === "unsupported")) {
+    return (
+      <div>
+        <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
+        <GemmaEngineNotice reason={chatStatus} feature="회화 연습" />
+      </div>
+    );
   }
 
   if (chatStatus === "unsupported") {
@@ -175,6 +194,13 @@ function ConversationPage() {
         </label>
       </div>
 
+      {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
+      {chatBusyLabel && (
+        <div className="p-3">
+          <LoadingMascot label={chatBusyLabel} />
+        </div>
+      )}
+
       {chatDownloadProgress !== null && (
         <div className="p-3 text-xs text-gray-400">
           모델 다운로드 중... {Math.round(chatDownloadProgress * 100)}%
@@ -206,19 +232,42 @@ function ConversationPage() {
                 {m.role === "assistant" && m.text === "" && isStreaming ? (
                   <LoadingMascot />
                 ) : m.role === "assistant" ? (
-                  <ClickableSentence
-                    text={m.text}
-                    showFurigana={showFurigana}
-                    onWordClick={setSelectedWord}
-                    onKanjiClick={setSelectedKanji}
-                  />
+                  <>
+                    <ClickableSentence
+                      text={m.text}
+                      showFurigana={showFurigana}
+                      onWordClick={setSelectedWord}
+                      onKanjiClick={setSelectedKanji}
+                    />
+                    <SpeakButton text={m.text} label="상대 문장 발음 듣기" className="ml-1" />
+                    <CopyButton text={m.text} label="상대 문장 복사" className="ml-1" />
+                    <AskTeacherButton
+                      text={m.text}
+                      label="이 문장 선생님에게 물어보기"
+                      className="ml-1"
+                    />
+                  </>
                 ) : (
-                  m.text
+                  <>
+                    {m.text}
+                    <SpeakButton
+                      text={m.text}
+                      label="내 문장 발음 듣기"
+                      tone="onPrimary"
+                      className="ml-1"
+                    />
+                  </>
                 )}
               </motion.div>
               {m.role === "user" && (m.correction || m.correctionLoading) && (
                 <p className="mt-1 max-w-[80%] rounded-xl bg-info/10 px-3 py-1 text-xs text-info">
                   {m.correctionLoading ? "문법 확인 중..." : m.correction}
+                </p>
+              )}
+              {/* 번역은 AI 대사에만 붙인다 — 내가 쓴 문장은 뜻을 이미 알고 쓴 것이다. */}
+              {m.role === "assistant" && showTranslation && (m.translation || m.translationLoading) && (
+                <p className="mt-1 max-w-[80%] px-1 text-sm text-gray-500">
+                  {m.translationLoading ? "번역 중..." : m.translation}
                 </p>
               )}
             </div>
@@ -246,6 +295,19 @@ function ConversationPage() {
             />
           )}
         </div>
+        <button
+          type="button"
+          onClick={() => setShowTranslation(!showTranslation)}
+          aria-pressed={showTranslation}
+          title="AI 대사의 한국어 번역 보기"
+          className={`shrink-0 rounded-2xl border-2 px-3 py-2 text-sm font-bold ${
+            showTranslation
+              ? "border-info bg-info/10 text-info"
+              : "border-gray-100 bg-white text-gray-400"
+          }`}
+        >
+          번역
+        </button>
         <button
           onClick={handleSend}
           disabled={!japaneseInput.value.trim() || isStreaming}

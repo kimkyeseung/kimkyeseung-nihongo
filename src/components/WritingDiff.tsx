@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import SpeakButton from "./SpeakButton";
 import { diffChars } from "../lib/diff";
 
 function WritingDiff({ original, corrected }: { original: string; corrected: string }) {
@@ -8,7 +9,9 @@ function WritingDiff({ original, corrected }: { original: string; corrected: str
   if (!hasDiff) {
     return (
       <p className="font-ja text-lg leading-relaxed">
-        {corrected} <span className="text-sm text-primary">(수정할 부분 없음)</span>
+        {corrected}
+        <SpeakButton text={corrected} label="문장 발음 듣기" className="mx-1" />
+        <span className="text-sm text-primary">(수정할 부분 없음)</span>
       </p>
     );
   }
@@ -16,7 +19,10 @@ function WritingDiff({ original, corrected }: { original: string; corrected: str
   return (
     <div className="flex flex-col gap-2">
       <div>
-        <p className="text-xs text-gray-400">원문</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs text-gray-400">원문</p>
+          <SpeakButton text={original} label="원문 발음 듣기" />
+        </div>
         <p className="font-ja text-lg leading-relaxed">
           {tokens
             .filter((t) => t.type !== "added")
@@ -28,7 +34,10 @@ function WritingDiff({ original, corrected }: { original: string; corrected: str
         </p>
       </div>
       <div>
-        <p className="text-xs text-gray-400">수정문</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs text-gray-400">수정문</p>
+          <SpeakButton text={corrected} label="수정문 발음 듣기" />
+        </div>
         <p className="font-ja text-lg leading-relaxed">
           {tokens
             .filter((t) => t.type !== "removed")
