@@ -8,6 +8,7 @@ import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import SentenceActions from "../components/SentenceActions";
+import SentenceGrammar from "../components/SentenceGrammar";
 import SpeakButton from "../components/SpeakButton";
 import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
@@ -260,6 +261,8 @@ function ConversationPage() {
                       onKanjiClick={setSelectedKanji}
                     />
                     <SentenceActions text={m.text} subject="상대 문장" />
+                    {/* 사전에 없는 것(문형)은 커리큘럼이 들고 있다 — 걸리는 게 없으면 안 그린다. */}
+                    <SentenceGrammar text={m.text} />
                   </>
                 ) : (
                   <>

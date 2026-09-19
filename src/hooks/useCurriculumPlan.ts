@@ -13,7 +13,7 @@ import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
  * `use()` + Suspense를 쓰지 않은 이유: 이걸 쓰는 대문(`/`)은 Layout 밖이라
  * `AnimatedOutlet`의 Suspense 경계 안에 있지 않다.
  */
-function useCurriculum(): Curriculum | null {
+export function useCurriculum(): Curriculum | null {
   const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
   useEffect(() => {
     let alive = true;

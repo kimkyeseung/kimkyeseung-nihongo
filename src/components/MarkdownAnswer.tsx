@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import ClickableSentence from "./ClickableSentence";
 import KanjiDetailSheet from "./KanjiDetailSheet";
 import SentenceActions from "./SentenceActions";
+import SentenceGrammar from "./SentenceGrammar";
 import WordMeaningDialog from "./WordMeaningDialog";
 import type { WordEntry } from "../types/dictionary";
 import type { KanjiEntry } from "../types/kanji";
@@ -63,16 +64,21 @@ function MarkdownAnswer({ text }: { text: string }) {
               return <code className="rounded bg-gray-100 px-1 py-0.5 text-sm">{content}</code>;
             }
             return (
-              <span className="my-0.5 inline-flex flex-wrap items-center gap-1 rounded-xl bg-gray-50 px-2 py-1 align-middle">
-                <span className="font-ja text-lg">
-                  <ClickableSentence
-                    text={content}
-                    onWordClick={setSelectedWord}
-                    onKanjiClick={setSelectedKanji}
-                  />
+              // 예문 칩은 한 줄짜리 인라인 요소였는데, 문법 설명이 아래로 펼쳐지므로 세로로
+              // 쌓을 수 있게 열로 바꿨다(align-middle은 그대로 — 문장 중간에 놓이는 자리다).
+              <span className="my-0.5 inline-flex flex-col rounded-xl bg-gray-50 px-2 py-1 align-middle">
+                <span className="inline-flex flex-wrap items-center gap-1">
+                  <span className="font-ja text-lg">
+                    <ClickableSentence
+                      text={content}
+                      onWordClick={setSelectedWord}
+                      onKanjiClick={setSelectedKanji}
+                    />
+                  </span>
+                  {/* 칩 안이라 여백을 따로 주지 않는다(기본값 ml-1은 문장 뒤에 붙는 자리용). */}
+                  <SentenceActions text={content} subject="예문" className="" />
                 </span>
-                {/* 칩 안이라 여백을 따로 주지 않는다(기본값 ml-1은 문장 뒤에 붙는 자리용). */}
-                <SentenceActions text={content} subject="예문" className="" />
+                <SentenceGrammar text={content} />
               </span>
             );
           },

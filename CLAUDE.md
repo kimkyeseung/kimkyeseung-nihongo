@@ -111,7 +111,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        ChromeLink
                      기억/진도: MemoryFactPrompt(선생님 입력창 위 "이걸 기억해둘까요?" 확인 칩) ·
                        TodayPlanCard(대문 "오늘의 학습" — 시작 단계 묻기 + 추천 목록) ·
-                       TeacherHistorySidebar(선생님 대화 기록 — 넓은 화면 붙박이/375px 서랍)
+                       TeacherHistorySidebar(선생님 대화 기록 — 넓은 화면 붙박이/375px 서랍) ·
+                       SentenceGrammar(문장에 든 커리큘럼 문형을 칩으로 — 인라인으로 펼침)
                      입력: InputModeToggle(한·영 / 일본어 입력 전환 — 전용 절 참고)
                      버튼: SentenceActions(일본어 문장 옆 ⋮ 메뉴 — 발음/복사/선생님에게 묻기.
                        항목 추가는 여기서 할 것) → ActionMenu(케밥 메뉴 공용, 팝업은 body로 포털) ·
@@ -149,6 +150,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위)
                      커리큘럼: curriculum.ts(동적 import 조회) · curriculumProgress.ts(진도 계산) ·
+                       grammarPatterns.ts(문장에서 문형 찾기) ·
                        dailyPlan.ts(오늘의 추천 — 전부 순수 함수, LLM 안 씀)
                      학습자 기억: learnerMemoryDb.ts(IndexedDB — 이 앱의 유일한 사용처) ·
                        learnerProfile.ts(기록에서 취약/강점/수준을 결정적으로 계산) ·
@@ -157,7 +159,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
                      romajiInput.test.ts · dictionary.test.ts · learnerProfile.test.ts ·
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
-                     localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts
+                     localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
+                     grammarPatterns.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
@@ -1042,6 +1045,28 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   품사 분류도 사전적 사실이라 이 프로젝트 규칙상 정적 데이터로 처리). `WordDetailPage`와
   `WordMeaningDialog` 둘 다 품사 칩을 그리므로, 새로 품사를 보여주는 화면을 또 만들 때도
   raw 코드를 그대로 쓰지 말고 이 함수를 재사용할 것.
+
+## 문장 속 문법 패턴 (`grammarPatterns.ts`) 구현 노트
+- **사전은 단어만 안다.** 「〜のため」의 ため를 눌러도 나오는 건 為(good, advantage...)뿐이고,
+  정작 배우고 싶은 "~하기 위해서"는 문법이라 사전에 없다. 그 설명은 커리큘럼이 이미 들고
+  있으니 문장에서 문형을 찾아 칩으로 붙인다(`SentenceGrammar`). **LLM을 쓰지 않는다** —
+  커리큘럼에 적힌 것을 문자열로 대조하면 나오고, 모델에게 맡기면 없는 문법을 지어낸다.
+- `SentenceGrammar`는 **자기 안에서 다 끝낸다** — 다이얼로그 대신 인라인으로 펼치므로 부르는
+  쪽은 `text` 하나만 준다. 걸리는 게 없으면 아무것도 안 그린다. 지금 붙은 곳은 회화 말풍선,
+  선생님 답변의 예문 칩, 단어 상세의 생성 예문 셋이다(`SentenceActions`와 같은 자리).
+- **패턴 문자열은 모양이 제각각이다**: `〜たことがあります`(그대로 쓸 수 있음),
+  `〜ます/〜ません`(`/`로 갈라진 선택지), `形容詞의 과거형 (〜かったです)`(**진짜 형태는 괄호
+  안**), `동사 て형`(일본어 조각이 없음 → 버린다), `〜は〜です`(`〜`로 갈라지는 여러 조각).
+  `patternFragments`가 이걸 전부 다룬다.
+- **노이즈 기준은 커리큘럼 예문 123개에 돌려보고 정했다**(문장당 평균 1.22개). 손본 것 둘:
+  - `TOO_GENERIC`(です·ます·ません·ですか) — 정중형이라 거의 모든 문장에 있어서, 「〜は〜です」가
+    매번 1순위로 올라와 정작 그 문장에서 배울 문형(〜たら·〜ても)을 밀어냈다.
+  - `うが` — 「〜うが〜うが」(N1)가 **「ほうがいい」의 일부**에 걸렸다. 문자열 대조라 낱말
+    경계를 모른다. 새 오탐을 보면 여기에 한 줄 더할 것.
+- 정렬은 **구체적인 것 먼저**(길게 걸린 순)이고, 같은 자리를 가리키는 패턴은 하나만 남긴다
+  (「〜ても」와 「たとえ〜ても」가 같은 ても에 걸린다). 한 문장에 최대 3개.
+- **한계**: 「〜のため、」(に 없이)처럼 커리큘럼에 없는 활용형은 안 걸린다 — 커리큘럼이 들고
+  있는 건 `〜ために`뿐이다. 어간 수준까지 맞추려면 형태소 분석이 필요하다.
 
 ## 문장 속 단어 클릭 (`sentenceWords.ts`) 구현 노트
 - 문장을 사전과 그리디 최장일치로 대조해 클릭 가능한 구간으로 나눈다. 표기(`word`) 색인과
