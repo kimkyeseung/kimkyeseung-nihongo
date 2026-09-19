@@ -54,9 +54,22 @@ interface WordEntry {
   furigana: { ruby: string; rt: string }[] | null;
   pos: string[];        // 대표 품사 코드 (pos-tags.json에서 설명 조회)
   meaning: string;      // 대표 뜻 (목록 표시용)
+  koreanMeaning?: string[]; // 한국어 뜻풀이. **없을 수 있다** (아래 주석 참고)
+  usuallyKana?: true;   // JMDict `uk` — 표기는 한자인데 실제로는 가나로 쓰는 단어 (아래 주석 참고)
   senses: { pos: string[]; glosses: string[] }[]; // 전체 의미 (상세 페이지용)
 }
 ```
+
+**`koreanMeaning`은 전체의 약 47%(3,956/8,405)에만 있다.** 한국어 위키낱말사전에 표기가
+정확히 일치하는 항목이 있을 때만 채워지므로, 화면에서는 반드시 `displayMeaning()`을 거쳐
+없으면 영어로 폴백해야 한다. 읽기로는 매칭하지 않는다(동음이의어에 엉뚱한 뜻이 붙는다 —
+`build-dictionary.mjs`의 `loadKoreanGlosses` 주석 참고).
+
+**`usuallyKana`는 첫 번째 뜻에 `uk`가 붙었을 때만** `true`다(표기가 이미 가나면 아예 안 붙는다).
+문장을 단어로 쪼갤 때 **읽기로도 찾을지** 판단하는 데만 쓴다 — 이게 없으면 「〜のため」의
+ため(사전 표제어는 `為`)가 안 잡히고, 그렇다고 모든 읽기를 색인에 넣으면 활용 어미가 엉뚱한
+명사로 잡힌다. "하나라도 `uk`면"으로 판정하면 안 되는 이유(島)까지 CLAUDE.md의
+"문장 속 단어 클릭" 절에 적어뒀다.
 
 ### `kanji.json` — JLPT 급수가 확인된 상용/JLPT 한자 (총 2,135자)
 
@@ -109,3 +122,17 @@ interface KanaWord { id: string; word: string; reading: string; meaning: string;
 ### `pos-tags.json`
 
 `dictionary.json`에 실제로 등장하는 품사 코드만 담은 `{ code: "영문 설명" }` 맵.
+
+## 이 파이프라인이 만들지 않는 데이터
+
+`src/data/curriculum.json`(JLPT N5~N1 + Pre-N5 커리큘럼)은 **손으로 만든 데이터**다.
+공개 데이터셋에서 뽑아오는 것이 아니라 `download.sh`/`build-all.sh`와 무관하니,
+여기 스크립트로 다시 만들려 하지 말 것. 급수별 목표치·단원 구성·문법 포인트가 들어 있고
+참고한 곳은 파일 안 `meta.sources`에 적혀 있다(JLPT 공식 급수 기준 요약, jlptsensei,
+migaku). 단어/한자 목표치는 **JLPT가 공식 발표하는 수치가 아니라 추정치**이며 문법 포인트도
+각 급수의 핵심만 추린 것이라, 실제 시험 범위는 더 넓다.
+
+원본에서 네 군데를 고쳐서 넣었다(깨진 예문 `毎日japanese勉強を勉強します。`, 今年의 읽기
+`こんねん`, 〜つつ의 비문 `分かっていつつ`와 그 읽기). 같은 종류의 오류를
+`src/lib/curriculumProgress.test.ts`가 데이터 전체에 대해 검사하므로, 커리큘럼을 갱신하면
+`npm test`부터 돌려볼 것.
