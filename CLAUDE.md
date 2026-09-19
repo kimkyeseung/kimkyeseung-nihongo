@@ -111,8 +111,9 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        TodayPlanCard(대문 "오늘의 학습" — 시작 단계 묻기 + 추천 목록) ·
                        TeacherHistorySidebar(선생님 대화 기록 — 넓은 화면 붙박이/375px 서랍)
                      입력: InputModeToggle(한·영 / 일본어 입력 전환 — 전용 절 참고)
-                     버튼: SpeakButton(발음) + CopyButton(복사) + AskTeacherButton(선생님에게 묻기)
-                       — 셋 다 iconButtonClass.ts의 공용 클래스를 쓴다
+                     버튼: SentenceActions(일본어 문장 옆 ⋮ 메뉴 — 발음/복사/선생님에게 묻기.
+                       항목 추가는 여기서 할 것) → ActionMenu(케밥 메뉴 공용, 팝업은 body로 포털) ·
+                       SpeakButton(문장 옆 단독 발음 버튼) — iconButtonClass.ts의 공용 클래스를 쓴다
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + TeacherPage(선생님 — 자유 질문, 스펙 밖이지만 하단 네비에 포함)
                      + HomePage(대문 `/`) + AboutPage(정보/출처) + MemoryPage(`/memory` 선생님의
@@ -141,6 +142,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      xpRewards.ts(행동별 XP 값) + badges.ts(뱃지 정의) +
                      preloadAssets.ts(대문 프리로드) +
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
+                     clipboard.ts(권한 거부 시 execCommand 폴백이 있는 복사) +
                      localDate.ts(로컬 타임존 YYYY-MM-DD + 날짜 이름 — 스트릭·인사·대화 기록이 공유) +
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위)
@@ -400,10 +402,31 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   집어 번역하고, 끝나면 messages가 바뀌면서 다음 대사를 집는다(동시에 여러 요청을 던지지
   않으려는 것). 스트리밍 중엔 건드리지 않고, 토글을 나중에 켜도 지나간 대사까지 채워진다.
   실패한 대사를 무한 재시도하지 않도록 "이미 시도한 id"를 ref에 기억한다.
-- AI 대사에는 발음 버튼 옆에 **복사 버튼**(`CopyButton`)과 **선생님 버튼**(`AskTeacherButton`,
-  누르면 그 문장의 해석·문법 해설을 선생님 페이지에서 바로 물어본다)이 붙는다. 세 버튼은
-  `iconButtonClass.ts`의 공용 클래스를 쓰므로 크기·색이 어긋나지 않는다 — 같은 자리에 버튼을
-  더 만들 때도 이걸 쓸 것.
+- **일본어 문장 옆의 동작(발음·복사·선생님에게 묻기)은 `SentenceActions` 하나로 붙인다.**
+  ⋮ 버튼을 누르면 목록이 뜨는 케밥 메뉴이고, 부르는 쪽에서 버튼을 따로 나열하지 말 것 —
+  예전에는 세 자리(회화 말풍선·선생님 답변의 예문 칩·단어 상세의 생성 예문)가 같은 버튼 세
+  줄을 각자 복붙하고 있었고, **단어 상세만 발음 버튼 하나로 남아 있는 걸 한참 뒤에야 사용자가
+  알려줘서 발견했다**(버튼이 없는 건 콘솔에 안 찍힌다). 여기 하나만 고치면 세 자리에 동시에
+  반영된다.
+  - **항목 추가는 `SentenceActions`의 배열이나 `extraItems` prop으로 한다.** 버튼을 늘어놓지
+    않고 메뉴로 만든 것도 이 때문이다 — 동그란 버튼이 줄줄이 붙으면 375px에서 정작 문장을
+    밀어내 한 줄이 두 줄로 접힌다.
+  - 라벨은 `subject`가 정한다("예문", "상대 문장"...). 스크린리더가 메뉴를 구분하는 유일한
+    단서라, 한 화면에 문장이 여러 종류면 서로 다르게 줄 것.
+  - 말풍선 안의 **내 문장**은 예외로 `SpeakButton`만 붙는다(복사·질문은 내가 쓴 문장에 쓸 일이
+    없다). `SpeakButton`은 오십음도·단어 다이얼로그·작문 결과 등에서 여전히 단독으로 쓴다.
+- **`ActionMenu`의 팝업은 `createPortal`로 `document.body`에 그린다.** 이 메뉴가 붙는 자리는
+  전부 `overflow-y-auto`인 대화 영역 안이라 `absolute`로 띄우면 컨테이너 경계에서 잘리고,
+  `fixed`도 안전하지 않다 — **`AnimatedOutlet`이 페이지에 transform을 걸기 때문에 `fixed`가
+  뷰포트가 아니라 그 조상 기준이 된다.** body로 빼면 둘 다 피한다. 대신 스크롤하면 팝업만
+  제자리에 남으므로 **스크롤(capture)·리사이즈·바깥 클릭·Escape에 닫는다.**
+  - 위치는 `useLayoutEffect`에서 잡는다 — 팝업의 실제 크기를 알아야 화면 밖으로 나가는지
+    판단할 수 있고, `useEffect`면 잘못된 자리에 한 프레임 보였다가 튄다. 재기 전에는
+    `visibility: hidden`으로 둔다.
+  - 스크롤 리스너는 **반드시 capture(`true`)** 로 달 것. 실제로 스크롤되는 건 페이지가 아니라
+    안쪽 컨테이너인데 scroll 이벤트는 버블링하지 않는다.
+  - 복사처럼 결과를 알려야 하는 항목은 `doneLabel`을 준다. `onSelect`가 `false`를 돌려주면
+    건너뛴다 — 복사가 실패했는데 "복사했어요"라고 하면 안 된다.
   `navigator.clipboard`는 권한/보안 컨텍스트에 따라 거부되므로(이 프로젝트 미리보기
   브라우저에서 실제로 NotAllowedError) 임시 textarea + `execCommand("copy")` 폴백이 있다 —
   클립보드 복사를 새로 붙일 때 이 컴포넌트를 재사용할 것.

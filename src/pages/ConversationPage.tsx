@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
-import AskTeacherButton from "../components/AskTeacherButton";
 import ClickableSentence from "../components/ClickableSentence";
-import CopyButton from "../components/CopyButton";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
+import SentenceActions from "../components/SentenceActions";
 import SpeakButton from "../components/SpeakButton";
 import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
@@ -260,13 +259,7 @@ function ConversationPage() {
                       onWordClick={setSelectedWord}
                       onKanjiClick={setSelectedKanji}
                     />
-                    <SpeakButton text={m.text} label="상대 문장 발음 듣기" className="ml-1" />
-                    <CopyButton text={m.text} label="상대 문장 복사" className="ml-1" />
-                    <AskTeacherButton
-                      text={m.text}
-                      label="이 문장 선생님에게 물어보기"
-                      className="ml-1"
-                    />
+                    <SentenceActions text={m.text} subject="상대 문장" />
                   </>
                 ) : (
                   <>

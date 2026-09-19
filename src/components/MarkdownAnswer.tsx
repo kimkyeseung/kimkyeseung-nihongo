@@ -1,11 +1,9 @@
 import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import AskTeacherButton from "./AskTeacherButton";
 import ClickableSentence from "./ClickableSentence";
-import CopyButton from "./CopyButton";
 import KanjiDetailSheet from "./KanjiDetailSheet";
-import SpeakButton from "./SpeakButton";
+import SentenceActions from "./SentenceActions";
 import WordMeaningDialog from "./WordMeaningDialog";
 import type { WordEntry } from "../types/dictionary";
 import type { KanjiEntry } from "../types/kanji";
@@ -73,9 +71,8 @@ function MarkdownAnswer({ text }: { text: string }) {
                     onKanjiClick={setSelectedKanji}
                   />
                 </span>
-                <SpeakButton text={content} label="예문 발음 듣기" />
-                <CopyButton text={content} label="예문 복사" />
-                <AskTeacherButton text={content} label="이 예문 더 물어보기" />
+                {/* 칩 안이라 여백을 따로 주지 않는다(기본값 ml-1은 문장 뒤에 붙는 자리용). */}
+                <SentenceActions text={content} subject="예문" className="" />
               </span>
             );
           },

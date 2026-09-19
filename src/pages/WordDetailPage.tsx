@@ -6,6 +6,7 @@ import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
+import SentenceActions from "../components/SentenceActions";
 import SpeakButton from "../components/SpeakButton";
 import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useAiModel } from "../hooks/useAiModel";
@@ -143,7 +144,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
                   onKanjiClick={setSelectedKanji}
                   excludeWord={entry.word}
                 />
-                <SpeakButton text={ex.japanese} label="예문 발음 듣기" className="ml-1" />
+                <SentenceActions text={ex.japanese} subject="예문" />
               </p>
               {ex.korean && <p className="mt-1 text-sm text-gray-500">{ex.korean}</p>}
             </li>
