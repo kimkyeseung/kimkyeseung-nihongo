@@ -1,13 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import ClickableSentence from "../components/ClickableSentence";
+import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import SpeakButton from "../components/SpeakButton";
 import WordMeaningDialog from "../components/WordMeaningDialog";
-import { useLanguageModel } from "../hooks/useLanguageModel";
+import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { findWordById } from "../lib/dictionary";
 import { getKoreanReadingForWord } from "../lib/kanji";
@@ -27,7 +28,10 @@ const NO_EXAMPLES: WordExample[] = [];
 /** LLM으로 단어 활용 예문을 생성한다. 예문은 생성형 작업이라 LLM을 쓰지만, 후리가나는
  * FuriganaText가 사전 데이터에서만 가져와 오버레이한다(LLM이 읽기를 지어내지 않도록). */
 function WordExamples({ entry }: { entry: WordEntry }) {
-  const model = useLanguageModel("");
+  // **useLanguageModel을 직접 부르면 안 된다 (실제로 겪은 버그).** 그러면 Chrome 내장 AI만
+  // 보게 되어, Gemma를 받아 쓰는 브라우저에서 대문에는 ✅가 떠 있는데 이 화면만
+  // "내장 AI를 쓸 수 없어요"가 뜬다. 엔진을 갈아끼우는 창구는 useAiModel 하나뿐이다.
+  const model = useAiModel("");
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   // 생성해둔 예문은 단어별로 store에 남겨, 다른 탭에 갔다 와도 다시 만들지 않아도 되게 한다.
@@ -72,7 +76,18 @@ function WordExamples({ entry }: { entry: WordEntry }) {
 
   if (model.status === "checking") return null;
 
-  if (model.status === "unsupported") {
+  // Gemma를 골랐는데 못 쓰는 경우는 원인(모델 없음/WebGPU 없음)도 해결법도 달라 화면이 다르다.
+  if (model.engine === "gemma4" && (model.status === "model-missing" || model.status === "unsupported")) {
+    return (
+      <div className="mt-6">
+        <GemmaEngineNotice reason={model.status} feature="예문 생성" />
+      </div>
+    );
+  }
+
+  // "unavailable"은 API 객체는 있는데 모델을 못 쓰는 상태다(Whale 등 크로미움 포크, 플래그 꺼짐).
+  // 이것도 같이 봐야 한다 — 빼먹으면 화면은 멀쩡한데 누르는 순간 실패한다.
+  if (model.status === "unsupported" || model.status === "unavailable") {
     return (
       <div className="mt-6">
         <PromptApiUnsupportedNotice feature="LLM 예문 생성" />
@@ -83,6 +98,9 @@ function WordExamples({ entry }: { entry: WordEntry }) {
   return (
     <div className="mt-6">
       <p className="text-sm text-gray-400">예문</p>
+
+      {/* Gemma는 첫 사용 때 2GB를 GPU에 올린다 — 안내가 없으면 눌러도 한참 반응이 없어 보인다. */}
+      {model.busyLabel && <LoadingMascot label={model.busyLabel} />}
 
       {examples.length === 0 && (
         <button

@@ -58,6 +58,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   destroy한다. 스트리밍이 가능하면 `promptStreaming()`을 우선 사용한다.
   **페이지는 `useAiModel`만 쓴다** — 그 아래에서 Chrome 내장 Prompt API(`useLanguageModel`)와
   Gemma 4(`useGemmaSession`)를 갈아끼운다. 페이지에서 둘 중 하나를 직접 부르지 말 것.
+  **이 규칙은 실제로 한 번 깨졌다**: 단어 상세의 예문 생성이 `useLanguageModel`을 직접 불러서,
+  Gemma를 받아 쓰는 브라우저에서 **대문에는 ✅가 떠 있는데 그 화면만 "내장 AI를 쓸 수 없어요"**가
+  떴다. 같은 실수를 찾으려면 `grep -rn "useLanguageModel" src/pages src/components`가 비어야 한다.
 - 외부 데이터셋(JMDict/JMDict_Extended, KANJIDIC2, jlpt-kanji-dictionary, KanjiVG)은 전부
   CC BY-SA 계열이므로 **세 곳에 같은 출처를 표기한다**: `/about` 페이지, 루트 README,
   `scripts/data/README.md`. 하나가 바뀌면 셋 다 고칠 것.
