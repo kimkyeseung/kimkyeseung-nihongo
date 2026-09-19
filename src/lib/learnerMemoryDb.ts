@@ -35,7 +35,9 @@ export type StudyEventType =
   | "writing-corrected"
   | "writing-clean"
   | "teacher-question"
-  | "conversation-practice";
+  | "conversation-practice"
+  /** 오십음도에서 글자를 눌러 소리를 들어본 것. Pre-N5 유닛의 진도가 여기에 달려 있다. */
+  | "kana-studied";
 
 export interface StudyEvent {
   /** autoIncrement라 저장 전에는 없다. */

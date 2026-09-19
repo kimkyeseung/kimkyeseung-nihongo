@@ -4,6 +4,7 @@ import KanaDetailDialog from "../components/KanaDetailDialog";
 import { GOJUON_SECTIONS, type KanaCell, type ScriptMode } from "../data/gojuon";
 import { useJapaneseSpeech } from "../hooks/useJapaneseSpeech";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { useLearnerMemoryStore, recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useGojuonView } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 
@@ -18,8 +19,20 @@ function GojuonPage() {
   // 탭하면 상세 다이얼로그를 열면서 발음도 바로 들려준다 — 다이얼로그를 여느라 소리가
   // 한 박자 늦어지면 예전의 "누르면 바로 소리" 감각이 사라진다.
   function handleSelect(cell: KanaCell) {
+    const kana = mode === "hiragana" ? cell.hiragana : cell.katakana;
     setSelected(cell);
-    speak(mode === "hiragana" ? cell.hiragana : cell.katakana);
+    speak(kana);
+
+    // **XP는 그 글자를 처음 눌렀을 때만 준다.** 예전에는 탭할 때마다 무조건 줘서 한 글자를
+    // 연타하면 XP가 무한히 쌓였다 — 게이미피케이션 규칙("아직 안 된 상태 → 되는 상태로
+    // 바뀔 때만 지급")에 어긋나던 알려진 문제다. 이제 가나별 학습 기록이 생겨서 판단할 수
+    // 있다(Pre-N5 유닛의 진도도 이 기록으로 센다).
+    const alreadyStudied = useLearnerMemoryStore
+      .getState()
+      .events.some((e) => e.type === "kana-studied" && e.subject === kana);
+    if (alreadyStudied) return;
+
+    recordStudyEvent({ type: "kana-studied", subject: kana });
     recordProgress(XP_REWARDS.gojuonPlayed);
   }
 

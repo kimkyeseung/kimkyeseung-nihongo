@@ -18,6 +18,7 @@ const KanjiPage = lazy(() => import("./pages/KanjiPage"));
 const WritingPage = lazy(() => import("./pages/WritingPage"));
 const TeacherPage = lazy(() => import("./pages/TeacherPage"));
 const MemoryPage = lazy(() => import("./pages/MemoryPage"));
+const CurriculumPage = lazy(() => import("./pages/CurriculumPage"));
 const AboutPage = lazy(() => import("./pages/AboutPage"));
 const PromptApiDiagnosticsPage = lazy(() => import("./pages/PromptApiDiagnosticsPage"));
 
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       { path: "writing", element: <WritingPage /> },
       { path: "teacher", element: <TeacherPage /> },
       { path: "memory", element: <MemoryPage /> },
+      { path: "curriculum", element: <CurriculumPage /> },
       { path: "about", element: <AboutPage /> },
       { path: "diagnostics", element: <PromptApiDiagnosticsPage /> },
     ],

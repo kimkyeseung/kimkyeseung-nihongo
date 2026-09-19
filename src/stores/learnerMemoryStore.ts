@@ -12,8 +12,12 @@ import {
   type StudyEvent,
 } from "../lib/learnerMemoryDb";
 import { buildLearnerProfile, EMPTY_PROFILE, type LearnerProfile } from "../lib/learnerProfile";
-import { buildMemoryBlock } from "../lib/teacherPrompts";
+import { buildMemoryBlock, type TeacherCurriculumContext } from "../lib/teacherPrompts";
+import { buildCurriculumPlan } from "../lib/curriculumProgress";
+import { findLevel, findUnit, levelLabel, loadCurriculum } from "../lib/curriculum";
 import type { ExtractedFact } from "../lib/memoryExtraction";
+import { useCurriculumStore } from "./curriculumStore";
+import { useKanjiProgressStore } from "./kanjiProgressStore";
 
 interface LearnerMemoryState {
   /** IndexedDB에서 한 번 읽어왔는가. 이게 false인 동안 기억을 단정하지 말 것. */
@@ -32,8 +36,11 @@ interface LearnerMemoryState {
   promptMemory: string;
 
   load: () => Promise<void>;
-  /** 스냅샷을 지금 상태로 다시 만든다. 대화 중에는 부르지 말 것(위 주석 참고). */
-  refreshPromptMemory: () => void;
+  /**
+   * 스냅샷을 지금 상태로 다시 만든다. 대화 중에는 부르지 말 것(위 주석 참고).
+   * 커리큘럼을 동적 import로 읽어야 해서 비동기다.
+   */
+  refreshPromptMemory: () => Promise<void>;
   addPendingFacts: (facts: ExtractedFact[]) => Promise<void>;
   confirmFact: (id: string) => Promise<void>;
   rejectFact: (id: string) => Promise<void>;
@@ -42,9 +49,48 @@ interface LearnerMemoryState {
   clearAll: () => Promise<void>;
 }
 
-function recompute(events: StudyEvent[], facts: MemoryFact[]) {
+/**
+ * 지금 공부 중인 단원을 선생님 프롬프트에 넣을 형태로 뽑는다.
+ *
+ * 시작 단계를 아직 안 골랐으면 null — 그 상태에서 억지로 Pre-N5부터라고 알려주면, 이미
+ * N3인 사람에게 선생님이 히라가나 이야기를 하기 시작한다.
+ */
+async function currentUnitContext(events: StudyEvent[]): Promise<TeacherCurriculumContext | null> {
+  const { startLevel, manualUnits } = useCurriculumStore.getState();
+  if (!startLevel) return null;
+  try {
+    const curriculum = await loadCurriculum();
+    const plan = buildCurriculumPlan(curriculum, {
+      events,
+      learnedKanji: useKanjiProgressStore.getState().learned,
+      manualUnits,
+      startLevel,
+    });
+    const current = plan.current;
+    if (!current) return null;
+    const level = findLevel(curriculum, current.level);
+    const unit = findUnit(curriculum, current.level, current.unitNumber);
+    return {
+      levelLabel: level ? levelLabel(level) : current.level,
+      unitNumber: current.unitNumber,
+      unitTitle: current.title,
+      canDoGoals: current.canDoGoals,
+      grammarPatterns: (unit?.grammarPoints ?? []).map((g) => g.pattern),
+      remainingKanji: current.kanjiTodo,
+    };
+  } catch {
+    // 커리큘럼을 못 읽어도 나머지 기억은 그대로 쓴다.
+    return null;
+  }
+}
+
+function recompute(
+  events: StudyEvent[],
+  facts: MemoryFact[],
+  curriculum: TeacherCurriculumContext | null
+) {
   const profile = buildLearnerProfile(events);
-  return { profile, promptMemory: buildMemoryBlock(profile, facts) };
+  return { profile, promptMemory: buildMemoryBlock(profile, facts, curriculum) };
 }
 
 export const useLearnerMemoryStore = create<LearnerMemoryState>((set, get) => ({
@@ -58,12 +104,18 @@ export const useLearnerMemoryStore = create<LearnerMemoryState>((set, get) => ({
     // 오래된 이벤트 정리는 앱을 켤 때 한 번이면 충분하다(쓸 때마다 하면 전체 스캔이 붙는다).
     await pruneEvents();
     const [events, facts] = await Promise.all([loadEvents(), loadFacts()]);
-    set({ loaded: true, events, facts, ...recompute(events, facts) });
+    // 커리큘럼을 기다리느라 `loaded`가 늦어지지 않도록 프로필부터 먼저 올린다 — 대문의
+    // "오늘의 학습" 카드는 자기가 직접 커리큘럼을 읽으므로 여기서 기다릴 이유가 없다.
+    set({ loaded: true, events, facts, ...recompute(events, facts, null) });
+    await get().refreshPromptMemory();
   },
 
-  refreshPromptMemory: () => {
-    const { events, facts } = get();
-    set(recompute(events, facts));
+  refreshPromptMemory: async () => {
+    const { events } = get();
+    const curriculum = await currentUnitContext(events);
+    // 그 사이에 이벤트가 바뀌었을 수 있으므로 지금 상태를 다시 읽는다.
+    const latest = get();
+    set(recompute(latest.events, latest.facts, curriculum));
   },
 
   addPendingFacts: async (extracted) => {
@@ -94,7 +146,7 @@ export const useLearnerMemoryStore = create<LearnerMemoryState>((set, get) => ({
     set((s) => ({ facts: s.facts.map((f) => (f.id === id ? next : f)) }));
     // 사용자가 방금 "기억해도 좋다"고 한 것이라 바로 반영한다. 대화 도중이면 세션이 새로
     // 만들어지지만, 그게 곧 "이제부터 이걸 알고 있다"는 사용자의 기대다.
-    get().refreshPromptMemory();
+    void get().refreshPromptMemory();
   },
 
   rejectFact: async (id) => {
@@ -114,13 +166,13 @@ export const useLearnerMemoryStore = create<LearnerMemoryState>((set, get) => ({
     };
     await saveFact(fact);
     set((s) => ({ facts: [...s.facts, fact] }));
-    get().refreshPromptMemory();
+    void get().refreshPromptMemory();
   },
 
   removeFact: async (id) => {
     await deleteFactFromDb(id);
     set((s) => ({ facts: s.facts.filter((f) => f.id !== id) }));
-    get().refreshPromptMemory();
+    void get().refreshPromptMemory();
   },
 
   clearAll: async () => {

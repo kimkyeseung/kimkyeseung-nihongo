@@ -91,6 +91,19 @@ function MemoryPage() {
         </div>
       </div>
 
+      {/* 로드맵은 헤더 아이콘을 쓰지 않는다(Layout 주석 — 375px에서 아이콘은 둘이 한계).
+          "나에 대한 화면"끼리 서로 이어두면 어느 쪽으로 들어와도 두 번이면 닿는다. */}
+      <Link
+        to="/curriculum"
+        className="mt-3 flex items-center gap-2 rounded-2xl border-2 border-gray-100 px-3 py-2 text-sm text-gray-600"
+      >
+        <span className="text-base">🗺️</span>
+        <span className="flex-1">학습 로드맵에서 지금 진도 보기</span>
+        <span aria-hidden className="text-gray-300">
+          ›
+        </span>
+      </Link>
+
       {pending.length > 0 && (
         <Section title="확인해 주세요">
           <div className="flex flex-col gap-2">

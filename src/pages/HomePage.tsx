@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import AssetLoadingBar from "../components/AssetLoadingBar";
 import GemmaModelCard from "../components/GemmaModelCard";
+import TodayPlanCard from "../components/TodayPlanCard";
 import { useAssetPreload } from "../hooks/useAssetPreload";
 import { useGamificationStore } from "../stores/gamificationStore";
 
@@ -135,6 +136,10 @@ function HomePage() {
               : "먼저 시작하기 (계속 받는 중)"}
           </Link>
         </section>
+
+        {/* 다시 온 사람에게는 "오늘 뭘 할지"가 가장 먼저 보여야 한다. 처음 온 사람에게는
+            아래 소개를 먼저 읽히고, 시작 단계를 고르는 카드가 이 자리에 뜬다. */}
+        <TodayPlanCard />
 
         <GemmaModelCard />
 

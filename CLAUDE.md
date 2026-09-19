@@ -43,6 +43,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     나오고, 그게 선생님 프롬프트에 박혀 설명 난이도를 통째로 바꾼다.
   - 기억 추출 파싱(`memoryExtraction`의 `parseExtractedFacts`) — 형식을 어긴 줄을 살려두면
     모델의 잡담이 "기억"이 되어 **다음 대화에도 영구히 따라온다**.
+  - 커리큘럼 진도(`curriculumProgress`)·오늘의 추천(`dailyPlan`) — 어긋나도 화면에는 그럴듯한
+    퍼센트가 뜨고, 사용자는 엉뚱한 유닛을 공부하게 된다. 커리큘럼 데이터 자체의 검사(깨진
+    예문·읽기에 남은 한자·`KANJI_NOT_IN_APP` 동기화)도 여기에 같이 들어 있다.
 
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`verbConjugation`, `scriptPreference`, `kanjiQuiz`가 다음 후보다.)
@@ -104,15 +107,17 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        GemmaModelCard(대문 모델 다운로드/엔진 선택) ·
                        GemmaDownloadBar(Layout 상주 — 받는 중에만 어느 페이지에서나 뜨는 띠) ·
                        ChromeLink
-                     기억: MemoryFactPrompt(선생님 입력창 위 "이걸 기억해둘까요?" 확인 칩)
+                     기억/진도: MemoryFactPrompt(선생님 입력창 위 "이걸 기억해둘까요?" 확인 칩) ·
+                       TodayPlanCard(대문 "오늘의 학습" — 시작 단계 묻기 + 추천 목록)
                      입력: InputModeToggle(한·영 / 일본어 입력 전환 — 전용 절 참고)
                      버튼: SpeakButton(발음) + CopyButton(복사) + AskTeacherButton(선생님에게 묻기)
                        — 셋 다 iconButtonClass.ts의 공용 클래스를 쓴다
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + TeacherPage(선생님 — 자유 질문, 스펙 밖이지만 하단 네비에 포함)
                      + HomePage(대문 `/`) + AboutPage(정보/출처) + MemoryPage(`/memory` 선생님의
-                       기억 — 확인/수정/삭제) + PromptApiDiagnosticsPage(`/diagnostics` 자가진단)
-                       — 뒤 넷은 하단 네비게이션 밖
+                       기억 — 확인/수정/삭제) + CurriculumPage(`/curriculum` 학습 로드맵) +
+                       PromptApiDiagnosticsPage(`/diagnostics` 자가진단)
+                       — 뒤 다섯은 하단 네비게이션 밖
 src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLanguageModel(Prompt API) ·
                      useGemmaSession(Gemma 4) · useGemmaModel(모델 설치 상태 — 다운로드 자체는
                        lib/gemmaDownloadController.ts가 갖고 있다) · useAiCapability(안내 경로 확정) ·
@@ -137,23 +142,26 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위)
+                     커리큘럼: curriculum.ts(동적 import 조회) · curriculumProgress.ts(진도 계산) ·
+                       dailyPlan.ts(오늘의 추천 — 전부 순수 함수, LLM 안 씀)
                      학습자 기억: learnerMemoryDb.ts(IndexedDB — 이 앱의 유일한 사용처) ·
                        learnerProfile.ts(기록에서 취약/강점/수준을 결정적으로 계산) ·
                        memoryExtraction.ts(대화에서 개인적인 사실 추출·파싱)
                    테스트: promptSafety.test.ts · conversationPrompts.test.ts ·
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
                      romajiInput.test.ts · dictionary.test.ts · learnerProfile.test.ts ·
-                     memoryExtraction.test.ts
+                     memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
                      learnerMemoryStore(학습자 기억 — 저장은 IndexedDB, store는 그 거울 +
-                       모듈 함수 recordStudyEvent) ·
+                       모듈 함수 recordStudyEvent) · curriculumStore(시작 단계·수동 완료 유닛, persist) ·
                      conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태) ·
                      teacherChatStore(선생님 대화, 메모리 전용) ·
                      gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, gojuon.ts) — 완료
+                   + curriculum.json(JLPT 커리큘럼 — **손으로 만든 데이터**, scripts/data 파이프라인 밖)
 public/            favicon.svg, icons.svg, hero.png(대문 그림 1536×1024)
 src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입, opfs.ts(move 선언) — 완료
 scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립트 (완료, scripts/data/README.md 참고)
@@ -161,8 +169,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 
 하단 네비게이션 경로: `/gojuon` · `/dictionary`(+`/dictionary/:id`) · `/kanji` ·
 `/wordbook` · `/conversation` · `/writing` · `/teacher`(7개). 스펙 문서(japanese_app_prompt_1.md)의
-페이지 구성은 전부 최소 기능으로 구현됨. 하단 네비 **밖**에 네 개가 더 있다: `/`(대문),
+페이지 구성은 전부 최소 기능으로 구현됨. 하단 네비 **밖**에 다섯 개가 더 있다: `/`(대문),
 `/about`(정보/출처, 헤더 ⓘ 아이콘), `/memory`(선생님의 기억, 헤더 🧠 아이콘),
+`/curriculum`(학습 로드맵 — 헤더가 아니라 대문 카드와 `/memory`에서 링크),
 `/diagnostics`(자가진단, 미지원 안내에서 링크).
 남은 건 다듬기와 QA — 특히 **Chrome에서의 Gemma 추론 검증**(Safari에서는 확인됨)과
 브라우저별 안내 화면 실물 확인.
@@ -468,6 +477,59 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   `dangerouslySetInnerHTML`도 0건이라 모델이 HTML을 뱉어도 텍스트로 렌더된다.
   **`MarkdownAnswer`에 `rehype-raw`를 추가하지 말 것** — 그 순간 LLM 출력이 DOM이 된다.
 
+## 커리큘럼 / 오늘의 학습 (`/curriculum`) 구현 노트
+- `src/data/curriculum.json`은 **손으로 만든 데이터다** — `scripts/data/`의 다운로드·가공
+  파이프라인과 무관하니 `build-all.sh`로 다시 만들려 하지 말 것. Pre-N5 + N5~N1의 6단계 ×
+  10유닛이고, 유닛마다 학습목표(can-do)·어휘테마·핵심한자·문법포인트가 들어 있다.
+  원본에서 **네 군데를 고쳐서 넣었다**: N5 3단원의 깨진 예문(`毎日japanese勉強を勉強します。`
+  → `毎日日本語を勉強します。`), N4 7단원 今年의 읽기(`こんねん` → `ことし`), N3 9단원 〜つつ의
+  비문(`分かっていつつ` → `分かりつつも`, 읽기도 함께). 같은 종류의 오류를
+  `curriculumProgress.test.ts`가 데이터 전체에 대해 검사하므로, 커리큘럼을 갱신하면 거기부터
+  돌려볼 것.
+- **커리큘럼의 `vocabThemes`로 사전을 필터링할 수 없다.** 원본 메타 노트는 `dictionary.json`을
+  `theme in unit.vocabThemes`로 조회하라고 안내하지만 **`dictionary.json`에 `theme` 필드가
+  없다**. 그래서 단어 진도는 테마가 아니라 **급수 단위로 세고 유닛이 순서대로 할당량을 떼어
+  쓰는** 방식이다(`wordCountByLevel`). 테마는 화면에 "무슨 단어를 찾아보면 되는지" 알려주는
+  문구로만 쓴다.
+- **`kanjiFocus`의 급수와 `kanji.json`의 급수는 자주 다르다**(178자 중 111자). 시간 단원에
+  `曜`(N4)가 필요한 식이라 커리큘럼상으로는 자연스럽다 — 진도를 "급수별 목표"로 환산하지 말고
+  유닛의 kanjiFocus 목록 그대로 셀 것.
+- **`KANJI_NOT_IN_APP`(於·譬·俟)는 하드코딩이다.** kanji.json에 없어서 앱에서 학습할 방법이
+  아예 없는 글자들인데, 총계에 남겨두면 그 유닛이 영원히 100%가 안 돼 자동 완료가 막힌다.
+  목록을 계산하려면 kanji.json(444KB)을 import해야 해서 대문 진입 청크가 무거워지므로 상수로
+  두고, 대신 `curriculumProgress.test.ts`가 실제 데이터와 대조해 어긋나면 실패한다.
+- **`curriculum.json`은 동적 import로 지연 로드한다**(62KB). `curriculum.ts`·
+  `curriculumProgress.ts`는 **dictionary.ts·kanji.ts를 import하지 않는다** — 대문 카드가 이
+  계산을 쓰기 때문에, 하나라도 끌어오면 진입 청크가 MB 단위로 불어난다.
+- **시작 단계는 물어본다**(`curriculumStore.startLevel`). 기록만으로 추정하면 근거가 쌓이기
+  전까지 전원이 Pre-N5에서 시작하게 되어, 이미 N3인 사람이 앱을 켜자마자 히라가나 화면을 본다.
+  **기본값을 `"Pre-N5"`로 두지 말 것** — `null`이 "아직 안 물어봤다"는 뜻이고, 그때만 대문이
+  묻는다.
+- 유닛 완료는 **자동(기록으로 계산) + 수동("이미 아는 내용이에요")** 둘 다다. 자동 완료 결과는
+  **저장하지 않고** 매번 다시 계산한다 — 저장하면 학습 기록을 지웠을 때 진도만 남아 둘이
+  어긋난다. 수동 목록(`manualUnits`)만 persist한다.
+- 자동 완료 기준은 "해당하는 항목을 **전부** 채웠을 때"다. 80% 같은 애매한 기준으로 두면 아직
+  못 본 한자를 남긴 채 다음 유닛이 열린다. 대신 되돌아갈 길(수동 완료/해제)을 항상 같이 준다.
+- **뒤쪽 유닛을 먼저 끝내도 건너뛴 앞 유닛으로 되돌린다**(`plan.current`는 "맨 앞의 안 끝난
+  유닛"). 커리큘럼은 순서가 있는 물건이다.
+- "오늘의 학습" 추천(`dailyPlan.ts`)도 **LLM을 쓰지 않는다** — 뭐가 남았는지는 진도에서 빼면
+  나오고, 모델에게 맡기면 매번 다른 말을 하면서 정작 안 한 한자를 놓친다. 순서는
+  **복습 → 새 내용 → 연습**이고, 각 항목은 새 학습 화면을 만드는 대신 **이미 있는 화면으로
+  보낸다**(한자/사전/회화/작문/선생님). 문법 항목은 `teacherChatStore.requestQuestion()`으로
+  선생님에게 대신 물어봐 준다 — 회화 말풍선의 "선생님" 버튼과 같은 경로다.
+- **대신 물어보기는 기억 스냅샷이 확정된 뒤에 보내야 한다 (실제로 겪은 버그).** 스냅샷 갱신은
+  커리큘럼을 동적 import로 읽느라 비동기인데 `consumePendingQuestion` effect는 마운트 즉시
+  돌아서, 대문에서 "문법 배우기"로 넘어온 질문이 **지금 단원이 뭔지 모르는 선생님에게** 가
+  있었다. 나중에 스냅샷이 도착해도 소용없다 — 이미 만들어진 세션은 그때의 시스템 프롬프트를
+  들고 있다. TeacherPage의 `memoryFresh` 플래그가 이걸 막는다.
+- **헤더 아이콘은 둘(🧠·ⓘ)이 한계다.** 🗺️를 더했더니 375px에서 제목이 7px 모자라 잘렸고,
+  XP 자릿수가 늘면 더 밀린다(⭐ 213 → ⭐ 12,345). `/curriculum`은 대문 카드의 "전체 보기"와
+  `/memory`의 링크로 간다. 제목에는 `truncate`+`whitespace-nowrap`을 걸어 두 줄로 접히지
+  않게 했다 — 두 줄이 되면 헤더가 높아져 h-svh 레이아웃의 스크롤 영역이 줄어든다.
+- 오십음도의 **XP 무한 적립 버그를 여기서 같이 고쳤다**(알려진 문제였다). 이제 가나별
+  `kana-studied` 기록이 있어서 "그 글자를 처음 눌렀을 때만" 지급한다 — 게이미피케이션 규칙
+  그대로다. 같은 기록이 Pre-N5 유닛의 진도이기도 하다.
+
 ## 학습자 기억 (`/memory`) 구현 노트
 - 선생님이 "이 학습자가 누구인지"를 알고 설명을 맞추도록, 학습 기록과 개인적인 사실을 모아
   선생님 시스템 프롬프트에 붙인다. **이 프로젝트에서 IndexedDB를 쓰는 유일한 기능이다** —
@@ -723,10 +785,12 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   선정 규칙과 예외는 scripts/data/README.md 참고.
 - 가타카나 모드에서는 외래어(カップ), 히라가나 모드에서는 고유어/한자어(角)를 보여준다.
   한쪽이 비면 다른 쪽으로 폴백하고, 둘 다 없는 8자(ぢ·づ 등)는 대표 단어 칸을 아예 안 그린다.
-- **알려진 문제**(아직 안 고침): ① 탭할 때마다 `XP_REWARDS.gojuonPlayed`가 무조건 지급돼서
-  연타하면 XP가 무한히 쌓인다 — 게이미피케이션 규칙("전환될 때만 지급")과 어긋나므로 가나
-  학습 진도 스토어를 만들 때 "처음 들어본 글자"에만 주도록 함께 고칠 것. ② 375px 화면에서
-  표가 9px 넘쳐 마지막 열이 잘린다(셀 최소폭 3.5rem / 행 레이블 2rem을 줄이면 된다).
+- **XP는 그 글자를 처음 눌렀을 때만 준다.** 예전에는 탭할 때마다 무조건 지급해서 연타하면
+  XP가 무한히 쌓였다(게이미피케이션 규칙 "전환될 때만 지급"에 어긋나던 알려진 문제).
+  이제 `kana-studied` 기록이 있어 판단할 수 있고, 같은 기록이 Pre-N5 유닛의 진도이기도 하다
+  ("커리큘럼 / 오늘의 학습" 노트 참고).
+- **알려진 문제**(아직 안 고침): 375px 화면에서 표가 9px 넘쳐 마지막 열이 잘린다
+  (셀 최소폭 3.5rem / 행 레이블 2rem을 줄이면 된다).
 
 ## 발음 재생(TTS) 구현 노트
 - 문장/단어 끝의 🔊 버튼은 전부 `SpeakButton` 하나다(내부에서 `useJapaneseSpeech` 사용).

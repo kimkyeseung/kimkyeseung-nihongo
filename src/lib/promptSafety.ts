@@ -140,8 +140,14 @@ export const MEMORY_LINE_MAX_LENGTH = 80;
  * 특히 줄바꿈은 허용 목록에 없어서 자동으로 지워진다(`\p{Zs}`는 공백 분리자만 잡고 `\n`은
  * 안 잡는다). 줄바꿈이 남으면 기억 한 줄이 프롬프트의 새 지시 줄로 올라설 수 있다.
  * 따옴표·백틱·꺾쇠·중괄호·마크다운 기호도 전부 빠진다.
+ *
+ * **일본어 문장부호를 빠짐없이 넣을 것 (실제로 겪은 버그).** 처음에는 ASCII `~`만 넣었는데,
+ * 일본어가 쓰는 물결표는 U+301C(`〜`)라서 커리큘럼의 문법 패턴 `〜は〜です`가 선생님
+ * 프롬프트에 `はです`로 들어갔다. 화면도 콘솔도 멀쩡하고 **모델만 조용히 엉뚱한 것을
+ * 배운다.** 전각 물결표(U+FF5E `～`)도 같이 받아둔다.
  */
-const DISALLOWED_IN_MEMORY_LINE = /[^\p{L}\p{N}\p{M}\p{Zs}.,!?:;()·・~\-+/%'’…「」、。]/gu;
+const DISALLOWED_IN_MEMORY_LINE =
+  /[^\p{L}\p{N}\p{M}\p{Zs}.,!?:;()·・~〜～\-+/%'’…「」『』、。！？（）]/gu;
 
 /**
  * **모델이 뽑아낸 "기억"을 시스템 프롬프트에 끼워 넣기 전에 반드시 통과시킬 것.**
@@ -152,11 +158,16 @@ const DISALLOWED_IN_MEMORY_LINE = /[^\p{L}\p{N}\p{M}\p{Zs}.,!?:;()·・~\-+/%'�
  * 이름과 달리 **다음 대화에도 계속 따라온다** — 인젝션이 저장되는 셈이라 더 나쁘다.
  */
 export function sanitizeMemoryLine(value: string, maxLength = MEMORY_LINE_MAX_LENGTH): string {
-  return value
-    .replace(TAG_SHAPED, " ")
-    .replace(DISALLOWED_IN_MEMORY_LINE, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxLength)
-    .trim();
+  return (
+    value
+      .replace(TAG_SHAPED, " ")
+      // **빈 문자열이 아니라 공백으로 바꾼다.** 지워버리면 줄바꿈을 뺀 자리에서 앞뒤 낱말이
+      // 달라붙어("알려줘.예문" 같은 식) 모델이 한 단어로 읽는다. 바로 아래에서 어차피
+      // 연속 공백을 합치므로 남는 것도 없다.
+      .replace(DISALLOWED_IN_MEMORY_LINE, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, maxLength)
+      .trim()
+  );
 }

@@ -143,6 +143,8 @@ function describeEvent(event: StudyEvent): string | null {
       return `선생님에게 질문: ${event.subject}`;
     case "conversation-practice":
       return `${event.subject} 상황으로 회화 연습`;
+    case "kana-studied":
+      return `가나 ${event.subject} 발음을 들어봄`;
     default:
       return null;
   }

@@ -84,6 +84,24 @@ describe("sanitizeMemoryLine", () => {
     expect(sanitizeMemoryLine("12월에 JLPT N3 시험을 본다")).toBe("12월에 JLPT N3 시험을 본다");
     expect(sanitizeMemoryLine("敬語(けいご)를 배우고 싶다")).toBe("敬語(けいご)를 배우고 싶다");
   });
+
+  it("일본어 문법 패턴의 물결표를 지우지 않는다", () => {
+    // ASCII `~`만 허용하던 시절, 커리큘럼의 `〜は〜です`가 선생님 프롬프트에 `はです`로
+    // 들어갔다 — 화면도 콘솔도 멀쩡하고 모델만 조용히 엉뚱한 것을 배운다.
+    expect(sanitizeMemoryLine("〜は〜です")).toBe("〜は〜です");
+    expect(sanitizeMemoryLine("〜たことがあります")).toBe("〜たことがあります");
+    expect(sanitizeMemoryLine("～ませんか")).toBe("～ませんか");
+  });
+
+  it("일본어 문장부호가 든 예문도 살아남는다", () => {
+    expect(sanitizeMemoryLine("「もみじ」という言葉です。")).toBe("「もみじ」という言葉です。");
+    expect(sanitizeMemoryLine("本当ですか？ すごい！")).toBe("本当ですか？ すごい！");
+  });
+
+  it("줄바꿈을 뺀 자리에서 낱말이 달라붙지 않는다", () => {
+    // 빈 문자열로 지우던 시절엔 "알려줘.예문"처럼 붙어서 모델이 한 단어로 읽었다.
+    expect(sanitizeMemoryLine("문법을 알려줘\n예문도 보여줘")).toBe("문법을 알려줘 예문도 보여줘");
+  });
 });
 
 describe("looksLikePromptLeak", () => {

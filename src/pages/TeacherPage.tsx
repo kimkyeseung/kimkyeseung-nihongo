@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -133,6 +133,28 @@ function TeacherPage() {
   }, [messages]);
 
   /**
+   * 화면에 들어올 때 기억 스냅샷을 새로 만든다 — 그 사이에 진도가 나갔거나 시작 단계를
+   * 바꿨을 수 있다.
+   *
+   * 여기서 갱신해도 잃을 것이 없다: 이 페이지를 떠나면 어차피 `useAiModel`이 세션을
+   * destroy하므로(CLAUDE.md의 선생님 페이지 노트), 돌아왔을 때는 늘 새 세션이다.
+   * 대화 **도중에** 갱신하지 않는 것이 핵심이고, 그건 `recordStudyEvent`가 스냅샷을
+   * 건드리지 않는 것으로 지켜진다.
+   *
+   * 끝났다는 표시(`memoryFresh`)를 따로 두는 이유는 아래 "대신 물어보기" 때문이다.
+   */
+  const [memoryFresh, setMemoryFresh] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    refreshPromptMemory().finally(() => {
+      if (alive) setMemoryFresh(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [refreshPromptMemory]);
+
+  /**
    * 답변이 끝나 입력창이 돌아오면 커서를 되돌려준다 — 이어서 묻는 흐름이라 매번 다시 클릭하게
    * 두면 성가시다.
    *
@@ -203,11 +225,23 @@ function TeacherPage() {
     ]
   );
 
-  // 회화 말풍선 등에서 "선생님" 버튼으로 넘어온 질문을 받아 바로 물어본다.
+  /**
+   * 회화 말풍선이나 대문의 "오늘의 학습"에서 대신 넣어둔 질문을 받아 바로 물어본다.
+   *
+   * **기억 스냅샷이 확정된 뒤에만 물어본다 (실제로 겪은 버그).** 스냅샷 갱신은 커리큘럼을
+   * 동적 import로 읽느라 비동기인데, 이 effect는 마운트 즉시 돌기 때문에 그냥 두면 갱신이
+   * 끝나기 전에 세션이 만들어진다 — 대문에서 "문법 배우기"로 넘어온 질문이 **정작 지금
+   * 단원이 뭔지 모르는 선생님에게** 가 있었다. 나중에 스냅샷이 도착해도 소용없다: 이미
+   * 만들어진 세션은 그때의 시스템 프롬프트를 들고 있다.
+   *
+   * `memoryFresh`가 바뀌면 이 컴포넌트가 다시 렌더되고, 그 렌더의 `handleAsk`는 갱신된
+   * 프롬프트로 만들어진 `model`을 잡는다.
+   */
   useEffect(() => {
+    if (!memoryFresh) return;
     const question = consumePendingQuestion();
     if (question) handleAsk(question);
-  }, [pendingQuestion, consumePendingQuestion, handleAsk]);
+  }, [memoryFresh, pendingQuestion, consumePendingQuestion, handleAsk]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     // 자동완성 목록이 떠 있으면 화살표·Enter를 그쪽이 먼저 쓴다(회화 페이지와 같은 순서).
@@ -255,7 +289,7 @@ function TeacherPage() {
                 // 대화를 지우는 김에 기억 스냅샷도 새로 만든다. 지금까지 쌓인 학습 기록이
                 // 다음 대화부터 반영되는 자연스러운 지점이고, 대화가 비어 있으니 세션이
                 // 새로 만들어져도 잃을 맥락이 없다.
-                refreshPromptMemory();
+                void refreshPromptMemory();
               }}
               className="text-xs text-gray-400"
             >
