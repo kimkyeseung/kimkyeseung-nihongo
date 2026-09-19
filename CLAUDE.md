@@ -102,7 +102,9 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        FuriganaText, ClickableSentence, WritingDiff, BadgeSheet, GamificationBar,
                        KanaDetailDialog, WordMeaningDialog, JapaneseSuggestionList,
                        MarkdownAnswer(선생님 답변 렌더링), LoadingMascot, ProgressBar,
-                       AssetLoadingBar(대문 프리로드)
+                       AssetLoadingBar(대문 프리로드) ·
+                       SegmentedTabs(알약 세그먼트 탭 공용 — 오십음도·한자 급수·단어장 두 탭) ·
+                       SentencebookList(단어장의 문장 칸 목록)
                      AI 안내: PromptApiUnsupportedNotice(내장 AI 불가) ·
                        GemmaEngineNotice(Gemma를 골랐는데 못 쓸 때) ·
                        PromptApiTroubleshootDialog(런타임 실패) ·
@@ -114,8 +116,9 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        TeacherHistorySidebar(선생님 대화 기록 — 넓은 화면 붙박이/375px 서랍) ·
                        SentenceGrammar(문장에 든 커리큘럼 문형을 칩으로 — 인라인으로 펼침)
                      입력: InputModeToggle(한·영 / 일본어 입력 전환 — 전용 절 참고)
-                     버튼: SentenceActions(일본어 문장 옆 ⋮ 메뉴 — 발음/복사/선생님에게 묻기.
-                       항목 추가는 여기서 할 것) → ActionMenu(케밥 메뉴 공용, 팝업은 body로 포털) ·
+                     버튼: SentenceActions(일본어 문장 옆 ⋮ 메뉴 — 발음/단어장에 담기/복사/
+                       선생님에게 묻기. 항목 추가는 여기서 할 것) →
+                       ActionMenu(케밥 메뉴 공용, 팝업은 body로 포털) ·
                        SpeakButton(문장 옆 단독 발음 버튼) — iconButtonClass.ts의 공용 클래스를 쓴다
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + TeacherPage(선생님 — 자유 질문, 스펙 밖이지만 하단 네비에 포함)
@@ -127,7 +130,9 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
                      useGemmaSession(Gemma 4) · useGemmaModel(모델 설치 상태 — 다운로드 자체는
                        lib/gemmaDownloadController.ts가 갖고 있다) · useAiCapability(안내 경로 확정) ·
                      usePromptApiTroubleshoot(런타임 실패 진단)
-                   그 외: useJapaneseSpeech, useJapaneseInput(wanakana 입력 + 사전 자동완성),
+                   그 외: useSentenceDialogs(ClickableSentence에 딸리는 단어 뜻·한자 상세
+                     다이얼로그 배선 — 문장을 보여주는 화면은 전부 이걸 쓴다),
+                     useJapaneseSpeech, useJapaneseInput(wanakana 입력 + 사전 자동완성),
                      useScriptInput(입력 문자 전환), useWordSuggestions(사전 자동완성 — 위 둘이 공유),
                      useDebouncedValue, useAssetPreload
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, kanaWords.ts,
@@ -162,7 +167,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
                      grammarPatterns.test.ts
 src/stores/        Zustand 스토어:
-                     kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
+                     kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
+                     recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
                      learnerMemoryStore(학습자 기억 — 저장은 IndexedDB, store는 그 거울 +
                        모듈 함수 recordStudyEvent) · curriculumStore(시작 단계·수동 완료 유닛, persist) ·
@@ -211,6 +217,10 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   헤더 로고 링크뿐이다.
 - 항목이나 아이콘을 늘릴 거라면 375px에서 `nav.scrollWidth > clientWidth`와
   `header.scrollWidth > clientWidth`를 **직접 재볼 것.**
+- **알약 모양 세그먼트 탭은 `SegmentedTabs` 하나를 쓴다**(오십음도 히라가나/가타카나, 한자 급수,
+  단어장의 단어/문장·복습/목록). 네 자리가 같은 마크업을 복붙하고 있어서 모았다 — 375px에서
+  자리가 빠듯한 UI라 여백·글자 크기가 한 곳에 있어야 한다. 항목이 넘칠 수 있으면 `scrollable`,
+  칸을 n등분하려면 `fill`, 라벨 옆 숫자는 `hint`.
 
 ## 게이미피케이션 구현 노트
 - `useGamificationStore.recordProgress(xp)` 하나로 XP 지급과 스트릭(연속 학습일) 갱신을 같이
@@ -421,7 +431,7 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   집어 번역하고, 끝나면 messages가 바뀌면서 다음 대사를 집는다(동시에 여러 요청을 던지지
   않으려는 것). 스트리밍 중엔 건드리지 않고, 토글을 나중에 켜도 지나간 대사까지 채워진다.
   실패한 대사를 무한 재시도하지 않도록 "이미 시도한 id"를 ref에 기억한다.
-- **일본어 문장 옆의 동작(발음·복사·선생님에게 묻기)은 `SentenceActions` 하나로 붙인다.**
+- **일본어 문장 옆의 동작(발음·단어장에 담기·복사·선생님에게 묻기)은 `SentenceActions` 하나로 붙인다.**
   ⋮ 버튼을 누르면 목록이 뜨는 케밥 메뉴이고, 부르는 쪽에서 버튼을 따로 나열하지 말 것 —
   예전에는 세 자리(회화 말풍선·선생님 답변의 예문 칩·단어 상세의 생성 예문)가 같은 버튼 세
   줄을 각자 복붙하고 있었고, **단어 상세만 발음 버튼 하나로 남아 있는 걸 한참 뒤에야 사용자가
@@ -431,9 +441,22 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
     않고 메뉴로 만든 것도 이 때문이다 — 동그란 버튼이 줄줄이 붙으면 375px에서 정작 문장을
     밀어내 한 줄이 두 줄로 접힌다.
   - 라벨은 `subject`가 정한다("예문", "상대 문장"...). 스크린리더가 메뉴를 구분하는 유일한
-    단서라, 한 화면에 문장이 여러 종류면 서로 다르게 줄 것.
+    단서라, 한 화면에 문장이 여러 종류면 서로 다르게 줄 것. **이 값은 단어장에 담은 문장의
+    출처로도 남는다**(목록에서 "어디서 담았더라"를 알려주는 한 줄).
+  - "단어장에 문장 담기"는 담긴 상태면 "단어장에서 빼기"로 바뀐다(같은 항목의 토글). XP는
+    게이미피케이션 규칙대로 **안 담김 → 담김으로 바뀔 때만** 준다 — 담았다 뺐다를 반복해도
+    중복 지급되지 않는다. 자세한 건 "단어장의 문장 칸" 절 참고.
   - 말풍선 안의 **내 문장**은 예외로 `SpeakButton`만 붙는다(복사·질문은 내가 쓴 문장에 쓸 일이
     없다). `SpeakButton`은 오십음도·단어 다이얼로그·작문 결과 등에서 여전히 단독으로 쓴다.
+- **`ClickableSentence`를 쓰는 화면은 `useSentenceDialogs()`를 쓴다** — 단어 뜻(`WordMeaningDialog`)과
+  한자 상세(`KanjiDetailSheet`)를 여는 배선이 들어 있다. 같은 이유로 모았다: 네 곳(회화 말풍선·
+  선생님 답변의 예문 칩·단어 상세의 생성 예문·단어장의 담아둔 문장)이 state 두 개와 다이얼로그
+  두 개를 각자 복붙하고 있었고, **한 자리에만 한자 다이얼로그를 안 붙여도 콘솔은 조용하다.**
+  ```tsx
+  const { handlers, dialogs } = useSentenceDialogs();
+  <ClickableSentence text={text} {...handlers} />   // 문장이 여러 개여도 훅은 하나만
+  {dialogs}                                         // 화면 맨 끝에 한 번만
+  ```
 - **`ActionMenu`의 팝업은 `createPortal`로 `document.body`에 그린다.** 이 메뉴가 붙는 자리는
   전부 `overflow-y-auto`인 대화 영역 안이라 `absolute`로 띄우면 컨테이너 경계에서 잘리고,
   `fixed`도 안전하지 않다 — **`AnimatedOutlet`이 페이지에 transform을 걸기 때문에 `fixed`가
@@ -461,6 +484,24 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   `window.LanguageModel`이 있다 보니 아래 온보딩 다이얼로그도 정상적으로는 안 뜬다 —
   검증할 땐 `PromptApiOnboardingDialog.tsx`의 `show` 계산식을 잠깐 `true ||`로 강제한 뒤
   꼭 원복할 것 (실제로 이렇게 확인했음).
+
+## 단어장의 문장 칸 (`sentencebookStore`) 구현 노트
+- 단어장 페이지는 **상단 탭으로 단어 칸/문장 칸**이 나뉜다. 문장 칸에는 회화 상대의 대사·선생님
+  답변의 예문처럼 "통째로 다시 보고 싶은 문장"이 쌓인다. 담는 입구는 `SentenceActions`의
+  ⋮ 메뉴 하나뿐이라 **새 화면에 문장을 그릴 때 그 컴포넌트만 붙이면 담기도 따라온다.**
+- **복습(SRS)은 단어 칸에만 있다.** 문장 칸은 목록뿐이고 `복습/목록` 토글도 그 탭에서는
+  감춘다 — 문장은 카드 스와이프로 "안다/모른다"를 가릴 대상이 아니라 다시 읽을 거리다.
+  나중에 문장 복습을 붙이게 되면 `srs.ts`를 재사용할 것(단어와 같은 계산).
+- 저장은 **단어와 다른 persist 키(`sentencebook`)** 다. 단어 목록과 엮일 이유가 없고, 담을
+  때마다 단어장 전체를 다시 직렬화하지 않는다. 둘 다 사용자가 직접 담는 것이라 개수가 폭주하지
+  않으므로 localStorage로 충분하다("저장소 선택" 규칙 그대로 — IndexedDB로 넓히지 말 것).
+- **id는 정규화한 문장 자체**다(`sentenceKey` — 앞뒤/연속 공백만 정리). 같은 문장을 두 번 담지
+  않게 하려는 것이고, 그 이상 손대면(구두점 제거 등) 다른 문장이 같은 것으로 합쳐진다.
+- 목록(`SentencebookList`)은 회화 말풍선과 **같은 장치**로 그린다 — `ClickableSentence`(사전
+  후리가나·단어 탭) + `useSentenceDialogs`(단어 뜻·한자 상세) + `SentenceActions` +
+  `SentenceGrammar`. 문장을 보여주는 화면을 새로 만들 때 이 조합을 그대로 재사용할 것.
+- 담은 문장은 `recordStudyEvent`로 남기지 **않는다.** 학습자 프로필(취약/강한 한자·어휘 수준)은
+  단어·한자 단위로 세는 값이라 문장 이벤트를 새 타입으로 들이면 그 계산이 흔들린다.
 
 ## 첫 접속 안내 다이얼로그 (`PromptApiOnboardingDialog`)
 - 첫 접속 시 이 브라우저에서 AI 기능을 **쓸 수 없을 때만** 한 번 안내한다. 내용은
@@ -865,7 +906,7 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   하는" 상태를 만들 땐 `useState`가 아니라 여기에 스토어를 하나 추가할 것.**
 - 나누는 기준(회화의 `conversationSessionStore`와 동일):
   - **persist**: 설정처럼 다음에도 같은 값을 쓰고 싶은 것 — 오십음도 히라가나/가타카나,
-    한자 급수, 단어장 복습/목록 탭·그룹 필터, 작문 옵션 칩. 새로고침해도 남는다.
+    한자 급수, 단어장 단어/문장 탭·복습/목록 탭·그룹 필터, 작문 옵션 칩. 새로고침해도 남는다.
   - **메모리 전용**: 방금 그 자리에서 만든 내용 — 사전 검색어·결과, 작문 입력/응답,
     단어별 LLM 예문, 단어장 복습 큐. 탭 이동에는 살아남고 새로고침하면 사라진다
     (오래된 결과가 되살아나는 쪽이 더 이상하다).

@@ -2,12 +2,16 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useWordbookStore, type WordbookEntry } from "../stores/wordbookStore";
+import { useSentencebookStore } from "../stores/sentencebookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useConfettiStore } from "../stores/confettiStore";
 import { findWordById } from "../lib/dictionary";
 import { XP_REWARDS } from "../lib/xpRewards";
+import SegmentedTabs from "../components/SegmentedTabs";
+import SentencebookList from "../components/SentencebookList";
 import WordbookCard from "../components/WordbookCard";
+import { dangerChipClass } from "../components/iconButtonClass";
 import { ALL_GROUP, useWordbookReview, useWordbookView } from "../stores/pageStateStore";
 
 // 큐가 아직 없을 때 매번 새 배열을 만들면 아래 useMemo가 렌더마다 다시 계산된다.
@@ -265,7 +269,7 @@ function WordList({ entries }: { entries: WordbookEntry[] }) {
               </button>
               <button
                 onClick={() => removeWord(entry.wordId)}
-                className="rounded-full bg-danger/10 px-2 py-1 text-xs text-danger"
+                className={dangerChipClass}
                 aria-label="단어장에서 삭제"
               >
                 삭제
@@ -323,7 +327,10 @@ function WordList({ entries }: { entries: WordbookEntry[] }) {
 
 function WordbookPage() {
   const entriesMap = useWordbookStore((s) => s.entries);
-  // 복습/목록 탭과 그룹 필터는 페이지를 떠나도 유지된다(pageStateStore 주석 참고).
+  const sentenceCount = useSentencebookStore((s) => Object.keys(s.entries).length);
+  // 단어/문장 탭, 복습/목록 탭, 그룹 필터는 페이지를 떠나도 유지된다(pageStateStore 주석 참고).
+  const tab = useWordbookView((s) => s.tab);
+  const setTab = useWordbookView((s) => s.setTab);
   const mode = useWordbookView((s) => s.mode);
   const setMode = useWordbookView((s) => s.setMode);
   const activeGroup = useWordbookView((s) => s.activeGroup);
@@ -342,34 +349,44 @@ function WordbookPage() {
     <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl text-primary">🗂️ 단어장</h2>
-        <div className="flex rounded-full bg-gray-100 p-1">
-          {(
-            [
+        {/* 복습/목록은 단어 칸에만 있는 구분이다 — 문장 칸에서는 자리를 비운다. */}
+        {tab === "word" && (
+          <SegmentedTabs
+            options={[
               { key: "review", label: "복습" },
               { key: "list", label: "목록" },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => setMode(opt.key)}
-              className={`rounded-full px-4 py-1.5 text-sm ${
-                mode === opt.key ? "bg-primary text-white" : "text-gray-500"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
+        )}
       </div>
 
-      <div className="mt-4">
-        <GroupChips activeGroup={activeGroup} onSelect={setActiveGroup} />
-      </div>
+      <SegmentedTabs
+        className="mt-4"
+        fill
+        options={[
+          { key: "word", label: "단어", hint: String(allEntries.length) },
+          { key: "sentence", label: "문장", hint: String(sentenceCount) },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
-      {mode === "review" ? (
-        <ReviewDeck key={activeGroup} group={activeGroup} entries={filteredEntries} />
+      {tab === "sentence" ? (
+        <SentencebookList />
       ) : (
-        <WordList entries={filteredEntries} />
+        <>
+          <div className="mt-4">
+            <GroupChips activeGroup={activeGroup} onSelect={setActiveGroup} />
+          </div>
+
+          {mode === "review" ? (
+            <ReviewDeck key={activeGroup} group={activeGroup} entries={filteredEntries} />
+          ) : (
+            <WordList entries={filteredEntries} />
+          )}
+        </>
       )}
     </div>
   );

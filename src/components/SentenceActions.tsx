@@ -5,6 +5,9 @@ import { useJapaneseSpeech } from "../hooks/useJapaneseSpeech";
 import { copyToClipboard } from "../lib/clipboard";
 import { toSpeechText } from "../lib/speechText";
 import { buildSentenceExplanationQuestion } from "../lib/teacherPrompts";
+import { XP_REWARDS } from "../lib/xpRewards";
+import { useGamificationStore } from "../stores/gamificationStore";
+import { sentenceKey, useSentencebookStore } from "../stores/sentencebookStore";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
 
 /**
@@ -45,6 +48,13 @@ function SentenceActions({
   const requestQuestion = useTeacherChatStore((s) => s.requestQuestion);
   const { speak, isSupported } = useJapaneseSpeech();
 
+  // 담긴 문장인지에 따라 "담기 ↔ 빼기"로 바뀌는 항목이라, 스토어를 구독해 다시 그린다.
+  const key = sentenceKey(text);
+  const saved = useSentencebookStore((s) => Boolean(s.entries[key]));
+  const addSentence = useSentencebookStore((s) => s.addSentence);
+  const removeSentence = useSentencebookStore((s) => s.removeSentence);
+  const recordProgress = useGamificationStore((s) => s.recordProgress);
+
   // 화면 문자열에는 "일본어 (한국어 번역)"처럼 한글이 섞인 항목이 있어서, 읽히기 전에
   // 일본어만 남긴다(speechText.ts). 남는 게 없으면 발음 항목 자체를 빼버린다.
   const speechText = toSpeechText(text);
@@ -62,6 +72,22 @@ function SentenceActions({
           },
         ]
       : []),
+    {
+      id: "wordbook",
+      icon: "🗂️",
+      label: saved ? "단어장에서 빼기" : "단어장에 문장 담기",
+      // 담을 때만 알려준다 — 빼는 건 메뉴 글자가 바뀌는 것으로 이미 드러난다.
+      doneLabel: saved ? undefined : "단어장에 담았어요",
+      onSelect: () => {
+        if (saved) {
+          removeSentence(key);
+          return;
+        }
+        // 게이미피케이션 규칙: "아직 안 담긴 → 담긴"으로 바뀔 때만 XP를 준다.
+        // 담았다 뺐다를 반복해도 중복 지급되지 않는다.
+        if (addSentence(text, subject)) recordProgress(XP_REWARDS.sentenceAdded);
+      },
+    },
     {
       id: "copy",
       icon: "📋",

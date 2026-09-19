@@ -25,3 +25,9 @@ export function iconButtonClass(
 ): string {
   return `inline-flex shrink-0 items-center justify-center rounded-full align-middle transition-colors ${SIZE_CLASS[size]} ${TONE_CLASS[tone]} ${className}`;
 }
+
+/**
+ * 목록 항목의 "삭제" 같은 작은 글자 버튼. 단어장의 단어·문장 목록이 같은 모양을 쓰므로
+ * 한 곳에 둔다 — 같은 성격의 버튼을 또 만들면 이걸 쓸 것.
+ */
+export const dangerChipClass = "rounded-full bg-danger/10 px-2 py-1 text-xs text-danger";

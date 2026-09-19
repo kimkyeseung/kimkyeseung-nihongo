@@ -4,6 +4,7 @@ export const XP_REWARDS = {
   kanjiLearned: 10,
   kanjiQuizCompleted: 5,
   wordAdded: 5,
+  sentenceAdded: 5,
   wordReviewed: 5,
   conversationMessage: 5,
   teacherQuestion: 5,

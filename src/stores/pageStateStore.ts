@@ -43,17 +43,23 @@ export const useKanjiView = create<KanjiView>()(
 export const ALL_GROUP = "all";
 
 interface WordbookView {
+  /** 상단 탭 — 단어장의 단어 칸/문장 칸. */
+  tab: "word" | "sentence";
   mode: "review" | "list";
   activeGroup: string;
+  setTab: (tab: "word" | "sentence") => void;
   setMode: (mode: "review" | "list") => void;
   setActiveGroup: (activeGroup: string) => void;
 }
 
+// 옛 저장값에는 `tab`이 없지만 persist의 기본 merge가 얕은 병합이라 초기값("word")이 남는다.
 export const useWordbookView = create<WordbookView>()(
   persist(
     (set) => ({
+      tab: "word",
       mode: "review",
       activeGroup: ALL_GROUP,
+      setTab: (tab) => set({ tab }),
       setMode: (mode) => set({ mode }),
       setActiveGroup: (activeGroup) => set({ activeGroup }),
     }),
