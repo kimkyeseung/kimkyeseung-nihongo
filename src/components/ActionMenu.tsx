@@ -60,7 +60,6 @@ function ActionMenu({
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const [doneId, setDoneId] = useState<string | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -146,13 +145,33 @@ function ActionMenu({
     close(false);
   }
 
+  /**
+   * 화살표로 항목을 오간다. **강조 상태를 따로 들고 있지 않고 DOM 포커스를 옮긴다** —
+   * 예전에는 `activeIndex` state로 강조했는데 마우스 이벤트로는 갱신하지 않아서, 열자마자
+   * 첫 항목(발음 듣기)에 강조가 박힌 채 **마우스를 올려도 따라오지 않았다.** 포커스를 옮기면
+   * 강조(:focus-visible)와 Enter가 가리키는 항목이 언제나 같은 것이라 어긋날 수가 없다.
+   */
+  function focusItemAt(index: number) {
+    const nodes = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+    if (!nodes?.length) return;
+    nodes[(index + nodes.length) % nodes.length].focus();
+  }
+
   function handleMenuKeyDown(e: React.KeyboardEvent) {
+    const nodes = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+    const current = nodes.indexOf(document.activeElement as HTMLButtonElement);
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => (i + 1) % items.length);
+      focusItemAt(current + 1);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((i) => (i - 1 + items.length) % items.length);
+      focusItemAt(current - 1);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      focusItemAt(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      focusItemAt(nodes.length - 1);
     }
   }
 
@@ -166,7 +185,6 @@ function ActionMenu({
         // 문장 자체가 클릭 가능한 화면(ClickableSentence)에서 같이 눌리지 않게
         onClick={(e) => {
           e.stopPropagation();
-          setActiveIndex(0);
           setOpen((v) => !v);
         }}
         aria-label={label}
@@ -208,14 +226,15 @@ function ActionMenu({
                     role="menuitem"
                     // 목록이 뜨자마자 키보드로 오갈 수 있도록 첫 항목에 포커스를 준다.
                     autoFocus={i === 0}
-                    onFocus={() => setActiveIndex(i)}
                     onClick={(e) => {
                       e.stopPropagation();
                       void handleSelect(item);
                     }}
-                    className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm whitespace-nowrap ${
-                      activeIndex === i ? "bg-primary/10 text-primary" : "text-gray-700"
-                    }`}
+                    // 강조는 :hover와 :focus-visible에 맡긴다. **:focus가 아니라
+                    // :focus-visible인 것이 핵심** — 마우스로 열면 첫 항목이 포커스를 받지만
+                    // 브라우저가 "키보드로 온 포커스가 아니다"라고 판단해 강조하지 않는다.
+                    // :focus로 두면 마우스 사용자에게는 첫 항목이 켜진 채로 보인다.
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm whitespace-nowrap text-gray-700 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none"
                   >
                     <span aria-hidden className="text-base leading-none">
                       {done ? "✅" : item.icon}
