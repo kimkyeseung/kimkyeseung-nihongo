@@ -15,6 +15,11 @@ import type { JlptLevel } from "../types/jlpt";
 const DB_NAME = "learner-memory";
 // v1 → v2: 선생님 대화를 날짜별로 남기는 `messages` 스토어를 더했다. `onupgradeneeded`는
 // 스토어가 없을 때만 만들므로 새로 깔린 브라우저와 v1을 쓰던 브라우저가 같은 코드로 올라온다.
+//
+// **이 값은 "코드가 요구하는 최소 버전"이지 실제 버전이 아니다.** 스토어가 빠진 DB를 만나면
+// `openDb`가 스스로 한 칸 더 올려 고치므로(아래 주석), 브라우저의 실제 버전은 이보다 높을 수
+// 있다. 그래서 여는 쪽은 **버전을 붙이지 않고** 먼저 열어야 한다 — 낮은 버전을 붙이면
+// VersionError로 전부 no-op이 된다.
 const DB_VERSION = 2;
 const EVENT_STORE = "events";
 const FACT_STORE = "facts";
@@ -91,17 +96,59 @@ export interface MemoryFact {
  */
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 
+/** 있어야 하는 스토어 전부. 하나라도 없으면 그 스토어를 쓰는 기능이 통째로 조용히 죽는다. */
+const REQUIRED_STORES = [EVENT_STORE, FACT_STORE, MESSAGE_STORE];
+
+function hasAllStores(db: IDBDatabase): boolean {
+  return REQUIRED_STORES.every((name) => db.objectStoreNames.contains(name));
+}
+
+/**
+ * **버전이 올라갔는데 스토어가 없는 DB를 스스로 고친다 (실제로 겪은 버그, 중요).**
+ *
+ * `onupgradeneeded`는 버전이 오를 때만 돈다. 그래서 업그레이드가 중간에 끊기거나(다른 탭이
+ * 막아서 `onblocked`), 개발 중 `DB_VERSION`만 오른 코드로 HMR이 한 번 돌면 **"버전은 2인데
+ * `messages` 스토어는 없는"** 상태가 굳어버린다. 그 뒤로는 업그레이드가 다시 돌지 않으니
+ * 영영 안 생기고, `withStore`가 NotFoundError를 삼키므로 **화면도 콘솔도 멀쩡한데 저장만
+ * 안 된다** — 선생님 대화가 새로고침 한 번에 통째로 사라지는 증상으로 나타났다(재현 확인함).
+ *
+ * 그래서 연 다음 스토어가 다 있는지 직접 확인하고, 없으면 **지금 버전보다 하나 위로** 다시
+ * 열어 `onupgradeneeded`를 한 번 더 태운다(기존 데이터는 그대로 남는다).
+ *
+ * 처음 여는 것이 `open(DB_NAME)`(버전 없이)인 것이 핵심이다 — 버전을 붙여 열면 저장된 버전이
+ * 그보다 높을 때 `VersionError`로 떨어져 **모든 기능이 no-op이 된다.** 버전 없이 열면 현재
+ * 버전 그대로 열리므로, 우리가 필요한 만큼만 위로 올릴 수 있다.
+ */
 function openDb(): Promise<IDBDatabase | null> {
   if (dbPromise) return dbPromise;
 
-  dbPromise = new Promise((resolve) => {
+  dbPromise = (async () => {
+    const current = await rawOpen();
+    if (!current) return null;
+
+    const complete = hasAllStores(current);
+    if (complete && current.version >= DB_VERSION) return current;
+
+    // 스토어가 빠졌으면 무조건 한 칸 올려야 `onupgradeneeded`가 돈다(같은 버전으로는 안 돈다).
+    const target = complete ? DB_VERSION : Math.max(DB_VERSION, current.version + 1);
+    // 여는 동안 `dbPromise`를 비우지 않는다 — 비우면 다른 호출이 동시에 또 열고, 그 연결이
+    // 바로 이 업그레이드를 막아버린다(위의 `onblocked`가 정확히 그 상황이다).
+    current.close();
+    return await rawOpen(target);
+  })();
+
+  return dbPromise;
+}
+
+function rawOpen(version?: number): Promise<IDBDatabase | null> {
+  return new Promise((resolve) => {
     if (typeof indexedDB === "undefined") {
       resolve(null);
       return;
     }
     let request: IDBOpenDBRequest;
     try {
-      request = indexedDB.open(DB_NAME, DB_VERSION);
+      request = version === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version);
     } catch {
       resolve(null);
       return;
@@ -152,8 +199,6 @@ function openDb(): Promise<IDBDatabase | null> {
       resolve(null);
     };
   });
-
-  return dbPromise;
 }
 
 function runRequest<T>(request: IDBRequest<T>): Promise<T | null> {
