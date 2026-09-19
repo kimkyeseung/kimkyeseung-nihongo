@@ -35,7 +35,13 @@ import { useInputScriptPrefs, useTeacherGreeting } from "../stores/pageStateStor
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useLearnerMemoryStore, recordStudyEvent } from "../stores/learnerMemoryStore";
-import { useTeacherChatStore } from "../stores/teacherChatStore";
+import {
+  useActiveMessages,
+  useIsViewingToday,
+  useTeacherChatStore,
+} from "../stores/teacherChatStore";
+import { formatDayLabel, localDateKey } from "../lib/localDate";
+import TeacherHistorySidebar from "../components/TeacherHistorySidebar";
 
 /**
  * 이보다 짧은 답변에서는 기억할 만한 개인적인 사실이 나올 일이 없다. 추출은 추론이 한 번 더
@@ -106,16 +112,28 @@ function TeacherPage() {
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   const recordProgress = useGamificationStore((s) => s.recordProgress);
 
-  const messages = useTeacherChatStore((s) => s.messages);
+  const messages = useActiveMessages();
+  const viewingToday = useIsViewingToday();
+  const activeDate = useTeacherChatStore((s) => s.activeDate);
+  const historyLoaded = useTeacherChatStore((s) => s.loaded);
+  const loadHistory = useTeacherChatStore((s) => s.load);
+  const openDate = useTeacherChatStore((s) => s.openDate);
   const input = useTeacherChatStore((s) => s.input);
   const isAnswering = useTeacherChatStore((s) => s.isAnswering);
   const setInput = useTeacherChatStore((s) => s.setInput);
   const ask = useTeacherChatStore((s) => s.ask);
   const appendAnswer = useTeacherChatStore((s) => s.appendAnswer);
   const finishAnswer = useTeacherChatStore((s) => s.finishAnswer);
-  const clear = useTeacherChatStore((s) => s.clear);
+  const clearToday = useTeacherChatStore((s) => s.clearToday);
   const pendingQuestion = useTeacherChatStore((s) => s.pendingQuestion);
   const consumePendingQuestion = useTeacherChatStore((s) => s.consumePendingQuestion);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // 지난 대화를 IndexedDB에서 읽어온다. 한 번만 부르면 되고, 실패해도 조용히 넘어간다.
+  useEffect(() => {
+    if (historyLoaded) return;
+    void loadHistory();
+  }, [historyLoaded, loadHistory]);
 
   const script = useInputScriptPrefs((s) => s.teacher);
   const setScript = useInputScriptPrefs((s) => s.setTeacher);
@@ -250,7 +268,8 @@ function TeacherPage() {
         appendAnswer(assistantId, "(답변을 만드는 중 오류가 발생했습니다)");
         reportError(err);
       } finally {
-        finishAnswer();
+        // 여기서 답변이 IndexedDB에 한 번 저장된다(스트리밍 중에는 저장하지 않는다).
+        finishAnswer(assistantId);
       }
     },
     [
@@ -319,158 +338,202 @@ function TeacherPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-gray-100 p-3">
-        <h2 className="text-lg text-primary">🧑‍🏫 선생님</h2>
-        <div className="flex items-center gap-3">
-          {messages.length > 0 && (
+    // min-h-0가 없으면 flex 아이템이 내용물 높이만큼 늘어나 사이드바·대화 영역의 자체 스크롤이
+    // 죽는다(Layout의 <main>과 같은 flexbox 함정).
+    <div className="flex h-full min-h-0">
+      <TeacherHistorySidebar open={historyOpen} onClose={() => setHistoryOpen(false)} />
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex items-center justify-between gap-2 border-b border-gray-100 p-3">
+          <div className="flex min-w-0 items-center gap-2">
+            {/* 좁은 화면에서만 서랍을 여는 버튼 — 넓은 화면에는 사이드바가 이미 보인다. */}
             <button
-              onClick={() => {
-                clear();
-                // 대화를 지우는 김에 기억 스냅샷도 새로 만든다. 지금까지 쌓인 학습 기록이
-                // 다음 대화부터 반영되는 자연스러운 지점이고, 대화가 비어 있으니 세션이
-                // 새로 만들어져도 잃을 맥락이 없다.
-                void refreshPromptMemory();
-              }}
-              className="text-xs text-gray-400"
+              onClick={() => setHistoryOpen(true)}
+              aria-label="대화 기록 열기"
+              className="shrink-0 rounded-xl px-1.5 py-1 text-lg leading-none text-gray-400 sm:hidden"
             >
-              대화 지우기
+              ☰
             </button>
-          )}
-          <Link to="/memory" className="text-xs text-gray-400" title="선생님이 기억하고 있는 것">
-            🧠 기억
-          </Link>
-        </div>
-      </div>
-
-      {model.downloadProgress !== null && (
-        <div className="p-3 text-xs text-gray-400">
-          모델 다운로드 중... {Math.round(model.downloadProgress * 100)}%
-          <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${model.downloadProgress * 100}%` }}
-            />
-          </div>
-        </div>
-      )}
-      {model.busyLabel && (
-        <div className="p-3">
-          <LoadingMascot label={model.busyLabel} />
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto p-3">
-        {/* 오늘 첫 방문에만 뜨는 인사. 모델이 아니라 앱이 한다 — 프롬프트에 맡기면 매 답변마다
-            인사로 시작하고, "하루에 한 번만"은 모델이 지킬 수 있는 규칙이 아니다(이전 답변을
-            셀 수 없다). 날짜로 판단할 수 있는 건 코드가 한다. */}
-        {greeting && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-3 flex items-start gap-2 rounded-2xl bg-primary/5 px-4 py-3"
-          >
-            <span className="text-xl leading-none">🧑‍🏫</span>
-            <p className="font-mixed text-sm text-gray-700">{greeting}</p>
-          </motion.div>
-        )}
-
-        {messages.length === 0 && (
-          <div className="mt-6 flex flex-col items-center gap-3">
-            <p className="text-center text-sm text-gray-400">
-              일본어에 대해 궁금한 걸 한국어로 물어보세요! 🗻
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {TEACHER_SAMPLE_QUESTIONS.map((question) => (
-                <button
-                  key={question}
-                  onClick={() => handleAsk(question)}
-                  className="rounded-full border-2 border-gray-100 bg-white px-3 py-1.5 text-sm text-gray-500"
-                >
-                  {question}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-3">
-          {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={
-                  m.role === "user"
-                    ? "max-w-[80%] rounded-2xl bg-primary px-4 py-2 text-white"
-                    : "w-full rounded-2xl bg-gray-50 px-4 py-3 text-gray-800"
-                }
-              >
-                {m.role === "assistant" && m.text === "" ? (
-                  <LoadingMascot label="선생님이 생각하는 중..." />
-                ) : m.role === "assistant" ? (
-                  <MarkdownAnswer text={m.text} />
-                ) : (
-                  m.text
-                )}
-              </motion.div>
-            </div>
-          ))}
-        </div>
-        <div ref={listEndRef} />
-      </div>
-
-      {/* 답변을 받는 동안에는 입력 영역을 통째로 감춘다 — 어차피 보낼 수 없는 상태이고,
-          "생각하는 중" 마스코트에 시선이 가도록 비워두는 편이 낫다. */}
-      {!isAnswering && (
-        <div className="border-t border-gray-100 p-3">
-          {/* 방금 대화에서 건진 "기억해둘까요?" 확인. 입력창 바로 위라 자연스럽게 눈에 들어오고,
-              답변 중에는 입력 영역과 함께 사라진다. */}
-          <MemoryFactPrompt />
-          <div className="flex justify-end pb-2">
-            <InputModeToggle value={script} onChange={setScript} />
-          </div>
-          <div className="flex items-center gap-2">
-            {/* 자동완성 목록이 이 칸을 기준으로 뜨므로 relative가 필요하다. */}
-            <div className="relative min-w-0 flex-1">
-              {/* value/onChange를 주지 않는다 — 값은 useScriptInput이 네이티브 리스너로 읽어
-                  store에 올린다(변환이 바꾼 값을 React 합성 onChange가 놓치기 때문). */}
-              <input
-                ref={questionInput.ref}
-                onFocus={() => suggestions.setShowSuggestions(true)}
-                // 목록의 버튼을 누르는 순간 blur가 먼저 와서 목록이 사라지면 클릭이 죽는다.
-                // (목록 쪽에서도 onMouseDown을 막지만, 여기서 한 박자 늦추는 게 회화 페이지와
-                //  같은 방식이다.)
-                onBlur={() => setTimeout(() => suggestions.setShowSuggestions(false), 150)}
-                onKeyDown={handleKeyDown}
-                placeholder={QUESTION_PLACEHOLDER[script]}
-                className="w-full rounded-2xl border-2 border-gray-100 px-4 py-2 font-mixed focus:border-primary/40 focus:outline-none"
-              />
-              {suggestions.showSuggestions && (
-                // 이 입력창은 화면 맨 아래에 붙어 있어서 목록을 위로 띄운다.
-                <JapaneseSuggestionList
-                  placement="above"
-                  suggestions={suggestions.suggestions}
-                  activeIndex={suggestions.activeIndex}
-                  onSelect={suggestions.selectSuggestion}
-                />
+            <h2 className="truncate text-lg text-primary">
+              🧑‍🏫 선생님
+              {!viewingToday && (
+                <span className="ml-2 text-sm text-gray-400">
+                  {formatDayLabel(activeDate, localDateKey())}
+                </span>
               )}
-            </div>
-            <button
-              onClick={() => handleAsk(input)}
-              disabled={!input.trim()}
-              aria-label="질문 보내기"
-              title="질문 보내기"
-              className="btn-press flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white disabled:bg-gray-200"
-              style={{ ["--btn-shadow" as string]: "#3d9401" }}
-            >
-              <PaperPlaneIcon />
-            </button>
+            </h2>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            {/* 지난 날짜를 보는 중에는 "오늘로" 버튼이 대화 지우기 자리를 대신한다 —
+                읽기 전용 화면에서 빠져나갈 길이 사이드바뿐이면 답답하다. */}
+            {!viewingToday ? (
+              <button
+                onClick={() => void openDate(localDateKey())}
+                className="text-xs text-info"
+              >
+                오늘로 →
+              </button>
+            ) : (
+              messages.length > 0 && (
+                <button
+                  onClick={() => {
+                    void clearToday();
+                    // 대화를 지우는 김에 기억 스냅샷도 새로 만든다. 지금까지 쌓인 학습 기록이
+                    // 다음 대화부터 반영되는 자연스러운 지점이고, 대화가 비어 있으니 세션이
+                    // 새로 만들어져도 잃을 맥락이 없다.
+                    void refreshPromptMemory();
+                  }}
+                  className="text-xs text-gray-400"
+                >
+                  대화 지우기
+                </button>
+              )
+            )}
+            <Link to="/memory" className="text-xs text-gray-400" title="선생님이 기억하고 있는 것">
+              🧠 기억
+            </Link>
           </div>
         </div>
-      )}
 
-      <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
+        {model.downloadProgress !== null && (
+          <div className="p-3 text-xs text-gray-400">
+            모델 다운로드 중... {Math.round(model.downloadProgress * 100)}%
+            <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${model.downloadProgress * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+        {model.busyLabel && (
+          <div className="p-3">
+            <LoadingMascot label={model.busyLabel} />
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {/* 지난 날짜는 읽기만 한다. 왜 이어서 못 쓰는지 한 줄로 말해주지 않으면 입력창이
+              사라진 게 고장처럼 보인다. */}
+          {!viewingToday && (
+            <p className="mb-3 rounded-2xl bg-gray-50 px-4 py-2 text-center text-xs text-gray-400">
+              지난 대화는 읽기만 할 수 있어요. 이어서 물어보려면 오늘로 돌아가세요.
+            </p>
+          )}
+
+          {/* 오늘 첫 방문에만 뜨는 인사. 모델이 아니라 앱이 한다 — 프롬프트에 맡기면 매 답변마다
+              인사로 시작하고, "하루에 한 번만"은 모델이 지킬 수 있는 규칙이 아니다(이전 답변을
+              셀 수 없다). 날짜로 판단할 수 있는 건 코드가 한다. */}
+          {viewingToday && greeting && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-3 flex items-start gap-2 rounded-2xl bg-primary/5 px-4 py-3"
+            >
+              <span className="text-xl leading-none">🧑‍🏫</span>
+              <p className="font-mixed text-sm text-gray-700">{greeting}</p>
+            </motion.div>
+          )}
+
+          {messages.length === 0 && viewingToday && (
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <p className="text-center text-sm text-gray-400">
+                일본어에 대해 궁금한 걸 한국어로 물어보세요! 🗻
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {TEACHER_SAMPLE_QUESTIONS.map((question) => (
+                  <button
+                    key={question}
+                    onClick={() => handleAsk(question)}
+                    className="rounded-full border-2 border-gray-100 bg-white px-3 py-1.5 text-sm text-gray-500"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3">
+            {messages.map((m) => (
+              <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={
+                    m.role === "user"
+                      ? "max-w-[80%] rounded-2xl bg-primary px-4 py-2 text-white"
+                      : "w-full rounded-2xl bg-gray-50 px-4 py-3 text-gray-800"
+                  }
+                >
+                  {m.role === "assistant" && m.text === "" ? (
+                    <LoadingMascot label="선생님이 생각하는 중..." />
+                  ) : m.role === "assistant" ? (
+                    <MarkdownAnswer text={m.text} />
+                  ) : (
+                    m.text
+                  )}
+                </motion.div>
+              </div>
+            ))}
+          </div>
+          <div ref={listEndRef} />
+        </div>
+
+        {/* 답변을 받는 동안에는 입력 영역을 통째로 감춘다 — 어차피 보낼 수 없는 상태이고,
+            "생각하는 중" 마스코트에 시선이 가도록 비워두는 편이 낫다.
+            **지난 날짜에서도 감춘다** — 지난 대화는 읽기 전용이다(store의 `ask`가 오늘로
+            돌려보내긴 하지만, 입력창을 남겨두면 그 날짜에 이어 쓰는 것처럼 보인다). */}
+        {!isAnswering && viewingToday && (
+          <div className="border-t border-gray-100 p-3">
+            {/* 방금 대화에서 건진 "기억해둘까요?" 확인. 입력창 바로 위라 자연스럽게 눈에 들어오고,
+                답변 중에는 입력 영역과 함께 사라진다. */}
+            <MemoryFactPrompt />
+            <div className="flex justify-end pb-2">
+              <InputModeToggle value={script} onChange={setScript} />
+            </div>
+            <div className="flex items-center gap-2">
+              {/* 자동완성 목록이 이 칸을 기준으로 뜨므로 relative가 필요하다. */}
+              <div className="relative min-w-0 flex-1">
+                {/* value/onChange를 주지 않는다 — 값은 useScriptInput이 네이티브 리스너로 읽어
+                    store에 올린다(변환이 바꾼 값을 React 합성 onChange가 놓치기 때문). */}
+                <input
+                  ref={questionInput.ref}
+                  onFocus={() => suggestions.setShowSuggestions(true)}
+                  // 목록의 버튼을 누르는 순간 blur가 먼저 와서 목록이 사라지면 클릭이 죽는다.
+                  // (목록 쪽에서도 onMouseDown을 막지만, 여기서 한 박자 늦추는 게 회화 페이지와
+                  //  같은 방식이다.)
+                  onBlur={() => setTimeout(() => suggestions.setShowSuggestions(false), 150)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={QUESTION_PLACEHOLDER[script]}
+                  className="w-full rounded-2xl border-2 border-gray-100 px-4 py-2 font-mixed focus:border-primary/40 focus:outline-none"
+                />
+                {suggestions.showSuggestions && (
+                  // 이 입력창은 화면 맨 아래에 붙어 있어서 목록을 위로 띄운다.
+                  <JapaneseSuggestionList
+                    placement="above"
+                    suggestions={suggestions.suggestions}
+                    activeIndex={suggestions.activeIndex}
+                    onSelect={suggestions.selectSuggestion}
+                  />
+                )}
+              </div>
+              <button
+                onClick={() => handleAsk(input)}
+                disabled={!input.trim()}
+                aria-label="질문 보내기"
+                title="질문 보내기"
+                className="btn-press flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white disabled:bg-gray-200"
+                style={{ ["--btn-shadow" as string]: "#3d9401" }}
+              >
+                <PaperPlaneIcon />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
+      </div>
     </div>
   );
 }

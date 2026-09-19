@@ -1,10 +1,10 @@
-// 학습자 기억의 저장 계층. 이 프로젝트에서 **유일하게 IndexedDB를 쓰는 곳**이다.
+// 학습 기록·기억·선생님 대화의 저장 계층. 이 프로젝트에서 **유일하게 IndexedDB를 쓰는 곳**이다.
 //
-// 왜 localStorage가 아닌가: 여기 쌓이는 학습 이벤트(퀴즈 오답, 복습 결과, 첨삭 지적)는
-// 개수에 상한이 없다. Zustand `persist`는 스토어가 바뀔 때마다 **전체를 JSON으로 다시
-// 직렬화해서** localStorage에 쓰기 때문에, 이벤트가 수천 개가 되면 퀴즈 한 문제 풀 때마다
-// 수백 KB를 재직렬화하게 된다. 게다가 localStorage는 도메인당 5MB가 공유 한도라 단어장·
-// 스트릭 같은 기존 상태까지 같이 터진다. IndexedDB는 레코드 하나만 추가하면 된다.
+// 왜 localStorage가 아닌가: 여기 쌓이는 것(퀴즈 오답, 복습 결과, 첨삭 지적, 날마다 이어지는
+// 선생님 대화)은 전부 개수에 상한이 없다. Zustand `persist`는 스토어가 바뀔 때마다 **전체를
+// JSON으로 다시 직렬화해서** localStorage에 쓰기 때문에, 레코드가 수천 개가 되면 퀴즈 한 문제
+// 풀 때마다 수백 KB를 재직렬화하게 된다. 게다가 localStorage는 도메인당 5MB가 공유 한도라
+// 단어장·스트릭 같은 기존 상태까지 같이 터진다. IndexedDB는 레코드 하나만 추가하면 된다.
 //
 // 반대로 **사용자 상태(단어장·스트릭/XP·설정)는 계속 localStorage에 둔다** — 작고, 통째로
 // 읽고 쓰는 게 자연스럽고, 이미 그렇게 돌아가고 있다. IndexedDB를 여기 말고 다른 데로
@@ -13,12 +13,22 @@
 import type { JlptLevel } from "../types/jlpt";
 
 const DB_NAME = "learner-memory";
-const DB_VERSION = 1;
+// v1 → v2: 선생님 대화를 날짜별로 남기는 `messages` 스토어를 더했다. `onupgradeneeded`는
+// 스토어가 없을 때만 만들므로 새로 깔린 브라우저와 v1을 쓰던 브라우저가 같은 코드로 올라온다.
+const DB_VERSION = 2;
 const EVENT_STORE = "events";
 const FACT_STORE = "facts";
+const MESSAGE_STORE = "messages";
 
 /** 이벤트를 몇 개까지 들고 있을지. 넘치면 오래된 것부터 버린다. */
 const MAX_EVENTS = 1000;
+
+/**
+ * 대화를 며칠치까지 남길지. 일기처럼 쌓이는 게 목적이라 넉넉히 두되, 무한히 늘어나게 두지는
+ * 않는다. **하루 단위로 통째로 지운다** — 메시지 개수로 자르면 반쪽짜리 날짜가 남아서,
+ * 지난 기록을 열었을 때 대화가 중간부터 시작한다.
+ */
+const MAX_CHAT_DAYS = 180;
 
 export type StudyEventType =
   | "kanji-quiz-correct"
@@ -105,12 +115,42 @@ function openDb(): Promise<IDBDatabase | null> {
       if (!db.objectStoreNames.contains(FACT_STORE)) {
         db.createObjectStore(FACT_STORE, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(MESSAGE_STORE)) {
+        const store = db.createObjectStore(MESSAGE_STORE, { keyPath: "id" });
+        // 날짜별로 꺼내 쓰는 게 전부라 `date` 하나만 인덱싱한다.
+        store.createIndex("date", "date");
+      }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      /**
+       * **다른 탭에게 버전 업그레이드를 양보한다 (실제로 겪은 버그).**
+       *
+       * IndexedDB의 버전 업그레이드는 단독 접근을 요구한다. 앱을 두 탭에 열어두면 옛 탭의
+       * 연결이 새 탭의 업그레이드를 막고, 막힌 쪽은 `onblocked`로 떨어져 **새 스토어가 영영
+       * 안 생긴 채 조용히 no-op**이 된다(v2에서 대화 기록을 더할 때 실제로 그랬다 — 화면도
+       * 콘솔도 멀쩡한데 저장만 안 됐다).
+       *
+       * 그래서 업그레이드 요청이 오면 이 연결을 바로 닫고 캐시를 비운다. 다음 호출이 새 버전으로
+       * 다시 연다.
+       */
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      // 브라우저가 연결을 끊는 경우(저장소 정리 등)에도 캐시를 비워 다음 호출이 다시 열게 한다.
+      db.onclose = () => {
+        dbPromise = null;
+      };
+      resolve(db);
+    };
     request.onerror = () => resolve(null);
-    // 다른 탭이 옛 버전을 붙들고 있으면 upgrade가 영원히 안 끝난다. 기다리다 앱이 멈추느니
-    // 기억 없이 도는 쪽이 낫다.
-    request.onblocked = () => resolve(null);
+    // 상대 탭이 응답하지 않아 끝내 막히면, 기다리다 앱이 멈추느니 이번만 없는 셈 치고 넘어간다.
+    // **캐시는 비워둔다** — 그대로 두면 그 탭은 다시 시도조차 못 하고 영영 no-op이 된다.
+    request.onblocked = () => {
+      dbPromise = null;
+      resolve(null);
+    };
   });
 
   return dbPromise;
@@ -181,8 +221,70 @@ export async function deleteFact(id: string): Promise<void> {
   await withStore(FACT_STORE, "readwrite", (store) => runRequest(store.delete(id)));
 }
 
-/** /memory 페이지의 "기억 전부 지우기". 되돌릴 수 없으므로 화면에서 한 번 더 확인받는다. */
+/**
+ * /memory 페이지의 "기억 전부 지우기". 되돌릴 수 없으므로 화면에서 한 번 더 확인받는다.
+ *
+ * **선생님 대화는 지우지 않는다** — 그건 학습자가 쓴 일기에 가깝고, "선생님이 뭘 기억하는지"와
+ * 는 다른 물건이다. 대화는 선생님 화면에서 날짜별로 지운다.
+ */
 export async function clearAllMemory(): Promise<void> {
   await withStore(EVENT_STORE, "readwrite", (store) => runRequest(store.clear()));
   await withStore(FACT_STORE, "readwrite", (store) => runRequest(store.clear()));
+}
+
+// ─── 선생님 대화 (날짜별) ────────────────────────────────────────────────────
+
+export interface StoredMessage {
+  id: string;
+  /** 로컬 타임존 `YYYY-MM-DD`. 하루가 곧 대화 한 묶음이다(세션 개념을 따로 두지 않는다). */
+  date: string;
+  role: "user" | "assistant";
+  text: string;
+  at: number;
+}
+
+/**
+ * 메시지 하나를 저장한다(같은 id면 덮어쓴다).
+ *
+ * **스트리밍 도중에 부르지 말 것.** 답변은 청크마다 바뀌는데 그때마다 쓰면 한 번의 답변에
+ * 수백 번 저장하게 된다. 다 받은 뒤 한 번만 부른다(teacherChatStore 참고).
+ */
+export async function saveMessage(message: StoredMessage): Promise<void> {
+  await withStore(MESSAGE_STORE, "readwrite", (store) => runRequest(store.put(message)));
+}
+
+/** 그 날짜의 대화를 시간순으로. */
+export async function loadMessagesForDate(date: string): Promise<StoredMessage[]> {
+  const rows = await withStore(MESSAGE_STORE, "readonly", (store) =>
+    runRequest(store.index("date").getAll(IDBKeyRange.only(date)) as IDBRequest<StoredMessage[]>)
+  );
+  if (!rows) return [];
+  return rows.sort((a, b) => a.at - b.at);
+}
+
+/** 대화가 있는 날짜들, **최근 날짜부터**. 사이드바 목록이 이걸 그대로 쓴다. */
+export async function loadChatDates(): Promise<string[]> {
+  const rows = await withStore(MESSAGE_STORE, "readonly", (store) =>
+    runRequest(store.getAll() as IDBRequest<StoredMessage[]>)
+  );
+  if (!rows) return [];
+  // `YYYY-MM-DD`는 문자열 정렬이 곧 날짜 정렬이다.
+  return [...new Set(rows.map((r) => r.date))].sort().reverse();
+}
+
+export async function deleteMessagesForDate(date: string): Promise<void> {
+  await withStore(MESSAGE_STORE, "readwrite", async (store) => {
+    const keys = await runRequest(
+      store.index("date").getAllKeys(IDBKeyRange.only(date)) as IDBRequest<string[]>
+    );
+    for (const key of keys ?? []) store.delete(key);
+    return null;
+  });
+}
+
+/** 오래된 날짜를 통째로 버린다. 앱을 켤 때 한 번이면 충분하다. */
+export async function pruneChatDays(keepDays = MAX_CHAT_DAYS): Promise<void> {
+  const dates = await loadChatDates();
+  if (dates.length <= keepDays) return;
+  for (const date of dates.slice(keepDays)) await deleteMessagesForDate(date);
 }

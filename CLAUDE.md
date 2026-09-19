@@ -72,8 +72,8 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   CC BY-SA 계열이므로 **세 곳에 같은 출처를 표기한다**: `/about` 페이지, 루트 README,
   `scripts/data/README.md`. 하나가 바뀌면 셋 다 고칠 것.
 - **저장소 선택**: 사용자 상태(단어장·스트릭/XP·설정)는 localStorage(Zustand `persist`),
-  GB 단위 바이너리(Gemma 모델 파일)는 OPFS, **끝없이 쌓이는 학습 기록·기억은 IndexedDB**에
-  둔다("Gemma 4 엔진" / "학습자 기억" 노트 참고).
+  GB 단위 바이너리(Gemma 모델 파일)는 OPFS, **끝없이 쌓이는 학습 기록·기억·선생님 대화는
+  IndexedDB**에 둔다("Gemma 4 엔진" / "학습자 기억" / "선생님 대화 기록" 노트 참고).
   **사전 데이터는 어디에도 저장하지 않는다** — 정적 JSON을 동적 import로 불러오면 브라우저
   HTTP 캐시가 알아서 맡는다("번들 최적화" 노트 참고).
   IndexedDB를 쓰는 곳은 `learnerMemoryDb.ts` **하나뿐**이다 — 다른 데로 넓히지 말 것.
@@ -108,7 +108,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        GemmaDownloadBar(Layout 상주 — 받는 중에만 어느 페이지에서나 뜨는 띠) ·
                        ChromeLink
                      기억/진도: MemoryFactPrompt(선생님 입력창 위 "이걸 기억해둘까요?" 확인 칩) ·
-                       TodayPlanCard(대문 "오늘의 학습" — 시작 단계 묻기 + 추천 목록)
+                       TodayPlanCard(대문 "오늘의 학습" — 시작 단계 묻기 + 추천 목록) ·
+                       TeacherHistorySidebar(선생님 대화 기록 — 넓은 화면 붙박이/375px 서랍)
                      입력: InputModeToggle(한·영 / 일본어 입력 전환 — 전용 절 참고)
                      버튼: SpeakButton(발음) + CopyButton(복사) + AskTeacherButton(선생님에게 묻기)
                        — 셋 다 iconButtonClass.ts의 공용 클래스를 쓴다
@@ -140,7 +141,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      xpRewards.ts(행동별 XP 값) + badges.ts(뱃지 정의) +
                      preloadAssets.ts(대문 프리로드) +
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
-                     localDate.ts(로컬 타임존 YYYY-MM-DD — 스트릭과 선생님 인사가 공유) +
+                     localDate.ts(로컬 타임존 YYYY-MM-DD + 날짜 이름 — 스트릭·인사·대화 기록이 공유) +
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위)
                      커리큘럼: curriculum.ts(동적 import 조회) · curriculumProgress.ts(진도 계산) ·
@@ -151,14 +152,15 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                    테스트: promptSafety.test.ts · conversationPrompts.test.ts ·
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
                      romajiInput.test.ts · dictionary.test.ts · learnerProfile.test.ts ·
-                     memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts
+                     memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
+                     localDate.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
                      learnerMemoryStore(학습자 기억 — 저장은 IndexedDB, store는 그 거울 +
                        모듈 함수 recordStudyEvent) · curriculumStore(시작 단계·수동 완료 유닛, persist) ·
                      conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태) ·
-                     teacherChatStore(선생님 대화, 메모리 전용) ·
+                     teacherChatStore(선생님 대화 — 날짜별, IndexedDB 저장) ·
                      gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, gojuon.ts) — 완료
@@ -579,6 +581,35 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   저장됐는지 보고 지울 수 없으면, 잘못된 기억 하나가 왜 선생님이 이상하게 구는지 알 수 없는
   채로 남는다.
 
+## 선생님 대화 기록 (`messages` 스토어) 구현 노트
+- **하루가 대화 한 묶음이다.** 세션을 따로 나누지 않고 `YYYY-MM-DD`(로컬 타임존)로 묶으며,
+  왼쪽 사이드바가 날짜 목록이다. 오늘만 이어서 쓸 수 있고 **지난 날짜는 읽기 전용**이다 —
+  입력창을 감추는 것만으로 끝내지 말고 `teacherChatStore.ask`가 **항상 오늘에 쓰도록** 한 번 더
+  막아둔다(자정을 넘긴 탭처럼 화면 상태가 낡은 경우까지 걸린다).
+- **스트리밍 중에는 저장하지 않는다.** 답변은 청크마다 바뀌므로 그때마다 쓰면 한 번의 답변에
+  수백 번 저장한다. 화면은 store가 들고, 저장은 `finishAnswer`가 끝에 한 번만 한다(질문은
+  물어본 즉시 저장 — 답변을 받다 브라우저가 죽어도 물어본 사실은 남는 편이 낫다).
+- **IndexedDB 버전을 올릴 때 `onversionchange`를 반드시 붙일 것 (실제로 겪은 버그).**
+  버전 업그레이드는 단독 접근을 요구해서, 앱이 두 탭에 열려 있으면 옛 탭의 연결이 새 탭의
+  업그레이드를 막는다. 막힌 쪽은 `onblocked`로 떨어져 **새 스토어가 영영 안 생긴 채 조용히
+  no-op**이 된다 — 화면도 콘솔도 멀쩡한데 저장만 안 된다(v2에서 실제로 그랬다). 지금은
+  업그레이드 요청이 오면 기존 연결이 스스로 닫고 캐시를 비워 다음 호출이 새 버전으로 다시 연다.
+  `onblocked`에서도 캐시를 비운다 — 안 그러면 그 탭은 재시도조차 못 한다.
+- **`DB_VERSION`을 올리는 편집과 스토어를 만드는 편집을 나누지 말 것.** 개발 중에 그 사이로
+  HMR이 한 번 돌면 "버전은 2인데 스토어는 없는" 상태가 만들어져, 그 뒤로는 업그레이드가 다시
+  돌지 않아 영영 안 생긴다(개발 브라우저에서 실제로 겪었다 — DB를 지워야 복구된다).
+  한 커밋에서 같이 바꿀 것.
+- `MAX_CHAT_DAYS`(180)는 **날짜 개수**지 달력상의 기간이 아니다 — 주 1회 공부하는 사람이면
+  3년 넘게 남는다. 자를 때도 **하루를 통째로** 지운다. 메시지 개수로 자르면 반쪽짜리 날짜가
+  남아서 지난 기록이 중간부터 시작한다.
+- `clearAllMemory()`(/memory의 "전부 지우기")는 **대화를 지우지 않는다.** 대화는 학습자가 쓴
+  일기에 가깝고 "선생님이 뭘 기억하는지"와는 다른 물건이다 — 날짜별로 사이드바에서 지운다.
+- 사이드바는 넓은 화면에서 붙박이, 375px에서는 서랍이다. 붙박이로 두면 대화 영역이 200px대까지
+  좁아져 예문 한 줄이 서너 줄로 접힌다.
+- 날짜 이름(`formatDayLabel`)은 **`todayKey`를 인자로 받는다** — 안에서 `new Date()`를 부르면
+  테스트할 수 없고, 자정을 넘긴 화면이 조용히 어제를 "오늘"이라고 부른다. 어제 판정도 문자열이
+  아니라 날짜 연산으로 한다(달·해가 바뀌는 날 틀린다). `localDate.test.ts`가 고정한다.
+
 ## 선생님 답변 분량·인사 (실제로 겪은 문제)
 - **인사는 모델이 아니라 앱이 한다.** 프롬프트에 맡겼더니 매 답변이 "안녕하세요! 일본어 공부를
   도와드릴 선생님입니다 😊"로 시작해서 금세 지겨워졌다. **"하루에 한 번만"은 모델이 지킬 수
@@ -621,9 +652,11 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 질문 입력창의 **기본은 한글**이다 — 여기서 치는 건 한국어 질문이다(회화/작문과 다름).
   다만 일본어로 묻고 싶을 수도 있어서 `InputModeToggle`로 문자를 바꿀 수 있고, **"일본어"를
   고른 동안에만** wanakana가 붙는다("입력 문자 전환 토글" 절 참고). 회화의 이름칸도 같다.
-- 대화는 `teacherChatStore`(메모리 전용)에 있어 탭을 옮겨도 남지만, **답변 스트리밍 중에
-  나가면 세션이 destroy되어 생성은 끊긴다**(작문 첨삭과 같은 절충). 백그라운드에서도 계속
-  받으려면 회화의 `ConversationSessionController`처럼 Layout 상주 컨트롤러가 필요하다.
+- **대화는 일기처럼 날짜별로 쌓인다** — 세션 개념을 따로 두지 않고 하루가 곧 대화 한 묶음이며,
+  지난 날짜는 읽기 전용이다. 저장은 IndexedDB(`learnerMemoryDb.ts`의 `messages` 스토어).
+  자세한 내용은 "선생님 대화 기록" 절 참고. **답변 스트리밍 중에 나가면 세션이 destroy되어
+  생성은 끊긴다**(작문 첨삭과 같은 절충). 백그라운드에서도 계속 받으려면 회화의
+  `ConversationSessionController`처럼 Layout 상주 컨트롤러가 필요하다.
 - **다른 화면에서 대신 질문 보내기**: `AskTeacherButton`이 `teacherChatStore.requestQuestion()`에
   질문을 넣고 `/teacher`로 이동하면, TeacherPage가 마운트되면서 `consumePendingQuestion()`으로
   꺼내 바로 물어본다. **꺼내는 즉시 store를 비우는 게 중요하다** — StrictMode에서 effect가 두 번
