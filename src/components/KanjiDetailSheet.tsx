@@ -8,6 +8,7 @@ import { getKoreanReadingForWord } from "../lib/kanji";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
+import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import type { KanjiEntry } from "../types/kanji";
 
@@ -23,6 +24,7 @@ function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClos
     if (!isLearned) {
       // 학습 완료로 "표시할 때"만 XP 지급 + 축하 효과 (되돌릴 때는 아무 일도 없음)
       recordProgress(XP_REWARDS.kanjiLearned);
+      recordStudyEvent({ type: "kanji-learned", subject: entry.kanji, level: entry.jlptLevel });
       celebrate();
     }
     toggleLearned(entry.kanji);

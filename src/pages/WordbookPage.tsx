@@ -3,6 +3,7 @@ import { AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useWordbookStore, type WordbookEntry } from "../stores/wordbookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useConfettiStore } from "../stores/confettiStore";
 import { findWordById } from "../lib/dictionary";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -138,6 +139,11 @@ function ReviewDeck({ group, entries }: { group: string; entries: WordbookEntry[
     if (direction === "right") {
       review(wordId, true);
       recordProgress(XP_REWARDS.wordReviewed);
+      // 왼쪽(삭제)은 기록하지 않는다 — "이 단어는 이제 필요 없다"이지 "모르겠다"가 아니다.
+      const word = findWordById(wordId);
+      if (word) {
+        recordStudyEvent({ type: "word-review-known", subject: word.word, level: word.jlptLevel });
+      }
       celebrate();
     } else {
       const entry = entries.find((e) => e.wordId === wordId) ?? null;

@@ -39,6 +39,10 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     잡아도 콘솔은 조용하고 사용자가 쓰던 문장만 망가진다.
   - 한글 검색 랭킹(`dictionary`의 `koreanTokens`/`scoreKorean`) — 틀려도 결과가 0건이 되는 게
     아니라 **순서만 엉망이 되어서**, 화면에는 뭔가 나오는데 찾던 단어가 안 보인다.
+  - 학습자 프로필 요약(`learnerProfile`) — 틀리면 엉뚱한 급수/엉뚱한 취약 한자가 그럴듯하게
+    나오고, 그게 선생님 프롬프트에 박혀 설명 난이도를 통째로 바꾼다.
+  - 기억 추출 파싱(`memoryExtraction`의 `parseExtractedFacts`) — 형식을 어긴 줄을 살려두면
+    모델의 잡담이 "기억"이 되어 **다음 대화에도 영구히 따라온다**.
 
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`verbConjugation`, `scriptPreference`, `kanjiQuiz`가 다음 후보다.)
@@ -65,9 +69,11 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   CC BY-SA 계열이므로 **세 곳에 같은 출처를 표기한다**: `/about` 페이지, 루트 README,
   `scripts/data/README.md`. 하나가 바뀌면 셋 다 고칠 것.
 - **저장소 선택**: 사용자 상태(단어장·스트릭/XP·설정)는 localStorage(Zustand `persist`),
-  GB 단위 바이너리(Gemma 모델 파일)는 OPFS에 둔다 — "Gemma 4 엔진" 노트 참고.
+  GB 단위 바이너리(Gemma 모델 파일)는 OPFS, **끝없이 쌓이는 학습 기록·기억은 IndexedDB**에
+  둔다("Gemma 4 엔진" / "학습자 기억" 노트 참고).
   **사전 데이터는 어디에도 저장하지 않는다** — 정적 JSON을 동적 import로 불러오면 브라우저
-  HTTP 캐시가 알아서 맡는다("번들 최적화" 노트 참고). IndexedDB는 쓰지 않는다.
+  HTTP 캐시가 알아서 맡는다("번들 최적화" 노트 참고).
+  IndexedDB를 쓰는 곳은 `learnerMemoryDb.ts` **하나뿐**이다 — 다른 데로 넓히지 말 것.
 
 ## 타입 컨벤션
 - `interface`보다 필요한 곳엔 명시적 타입 사용 (예: `WordEntry`, `KanjiEntry`)
@@ -98,14 +104,15 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        GemmaModelCard(대문 모델 다운로드/엔진 선택) ·
                        GemmaDownloadBar(Layout 상주 — 받는 중에만 어느 페이지에서나 뜨는 띠) ·
                        ChromeLink
+                     기억: MemoryFactPrompt(선생님 입력창 위 "이걸 기억해둘까요?" 확인 칩)
                      입력: InputModeToggle(한·영 / 일본어 입력 전환 — 전용 절 참고)
                      버튼: SpeakButton(발음) + CopyButton(복사) + AskTeacherButton(선생님에게 묻기)
                        — 셋 다 iconButtonClass.ts의 공용 클래스를 쓴다
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + TeacherPage(선생님 — 자유 질문, 스펙 밖이지만 하단 네비에 포함)
-                     + HomePage(대문 `/`) + AboutPage(정보/출처) +
-                       PromptApiDiagnosticsPage(`/diagnostics` 자가진단)
-                       — 뒤 셋은 하단 네비게이션 밖
+                     + HomePage(대문 `/`) + AboutPage(정보/출처) + MemoryPage(`/memory` 선생님의
+                       기억 — 확인/수정/삭제) + PromptApiDiagnosticsPage(`/diagnostics` 자가진단)
+                       — 뒤 넷은 하단 네비게이션 밖
 src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLanguageModel(Prompt API) ·
                      useGemmaSession(Gemma 4) · useGemmaModel(모델 설치 상태 — 다운로드 자체는
                        lib/gemmaDownloadController.ts가 갖고 있다) · useAiCapability(안내 경로 확정) ·
@@ -130,12 +137,18 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위)
+                     학습자 기억: learnerMemoryDb.ts(IndexedDB — 이 앱의 유일한 사용처) ·
+                       learnerProfile.ts(기록에서 취약/강점/수준을 결정적으로 계산) ·
+                       memoryExtraction.ts(대화에서 개인적인 사실 추출·파싱)
                    테스트: promptSafety.test.ts · conversationPrompts.test.ts ·
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
-                     romajiInput.test.ts · dictionary.test.ts
+                     romajiInput.test.ts · dictionary.test.ts · learnerProfile.test.ts ·
+                     memoryExtraction.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
+                     learnerMemoryStore(학습자 기억 — 저장은 IndexedDB, store는 그 거울 +
+                       모듈 함수 recordStudyEvent) ·
                      conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태) ·
                      teacherChatStore(선생님 대화, 메모리 전용) ·
                      gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
@@ -148,8 +161,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 
 하단 네비게이션 경로: `/gojuon` · `/dictionary`(+`/dictionary/:id`) · `/kanji` ·
 `/wordbook` · `/conversation` · `/writing` · `/teacher`(7개). 스펙 문서(japanese_app_prompt_1.md)의
-페이지 구성은 전부 최소 기능으로 구현됨. 하단 네비 **밖**에 세 개가 더 있다: `/`(대문),
-`/about`(정보/출처, 헤더 ⓘ 아이콘), `/diagnostics`(자가진단, 미지원 안내에서 링크).
+페이지 구성은 전부 최소 기능으로 구현됨. 하단 네비 **밖**에 네 개가 더 있다: `/`(대문),
+`/about`(정보/출처, 헤더 ⓘ 아이콘), `/memory`(선생님의 기억, 헤더 🧠 아이콘),
+`/diagnostics`(자가진단, 미지원 안내에서 링크).
 남은 건 다듬기와 QA — 특히 **Chrome에서의 Gemma 추론 검증**(Safari에서는 확인됨)과
 브라우저별 안내 화면 실물 확인.
 
@@ -453,6 +467,54 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - XSS는 별개로 안전하다: `react-markdown`에 `rehype-raw`를 쓰지 않고
   `dangerouslySetInnerHTML`도 0건이라 모델이 HTML을 뱉어도 텍스트로 렌더된다.
   **`MarkdownAnswer`에 `rehype-raw`를 추가하지 말 것** — 그 순간 LLM 출력이 DOM이 된다.
+
+## 학습자 기억 (`/memory`) 구현 노트
+- 선생님이 "이 학습자가 누구인지"를 알고 설명을 맞추도록, 학습 기록과 개인적인 사실을 모아
+  선생님 시스템 프롬프트에 붙인다. **이 프로젝트에서 IndexedDB를 쓰는 유일한 기능이다** —
+  학습 이벤트는 개수에 상한이 없는데, Zustand `persist`는 스토어가 바뀔 때마다 전체를 다시
+  직렬화해서 localStorage에 쓰기 때문에 퀴즈 한 문제마다 수백 KB를 재직렬화하게 된다.
+  나머지(단어장·스트릭·설정)는 계속 localStorage다.
+- **두 갈래를 확실히 나눈다.**
+  - **학습 기록(`learnerProfile.ts`)** — 취약/강한 한자, 어휘 수준, 마지막에 공부한 것.
+    전부 이벤트를 세면 나오는 값이라 **LLM을 쓰지 않는다**(사전적 사실을 LLM에게 맡기지 않는
+    규칙과 같다). 전부 순수 함수이고 `learnerProfile.test.ts`가 고정한다.
+  - **개인적인 사실(`memoryExtraction.ts`)** — 시험 일정·직업·공부 목적. 자유 텍스트를 읽어야
+    해서 LLM에게 맡기는 유일한 부분이고, **선생님 세션과 분리된 세션에서 단발성으로** 돌린다
+    (회화의 문법 교정·번역과 같은 이유 — 추출 지시문이 수업 맥락을 오염시키면 안 된다).
+- **뽑아낸 사실은 사용자가 수락해야 쓴다**(`status: "pending" | "confirmed"`). 온디바이스
+  모델은 선생님이 설명한 내용을 학습자 이야기로 착각하곤 하는데, 기억은 **다음 대화에도 계속
+  따라오므로** 잘못 들어가면 그 위에서 오래 쌓인다. 확인 칩은 선생님 입력창 위에 뜨고, 수락하지
+  않고 떠나도 pending 그대로 남아 `/memory`에서 다시 볼 수 있다.
+- **기억은 시스템 프롬프트에 들어가므로 `sanitizeMemoryLine`을 반드시 통과시킨다.** 출처를 잘
+  볼 것 — 학습자 입력 → 모델 요약 → 시스템 프롬프트라, 중간에 모델이 끼어 있어도 내용의 출처는
+  학습자다. 이름(`sanitizeInlineValue`)과 달리 **한 번 들어가면 계속 따라오는 자리**라 인젝션이
+  저장되는 셈이고, 그래서 더 위험하다. 허용 목록 방식인 것도 같은 이유다.
+- **`looksLikePromptLeak`에는 `TEACHER_SYSTEM_PROMPT`(고정 부분)만 넘길 것.** 기억 블록까지
+  넘기면 선생님이 "12월 N3 시험 준비하신다고 하셨죠"처럼 **정상적으로** 되받기만 해도 12글자
+  조각이 두 개 맞아떨어져 멀쩡한 답변이 거절 문구로 바뀌고 세션까지 버려진다. 게다가 기억은
+  학습자 본인의 정보라 흘러도 유출이 아니다 — 지켜야 할 건 역할 이탈뿐이다.
+  (`promptSafety.test.ts`에 오탐 테스트가 있다.)
+- **프롬프트에 들어가는 기억은 스냅샷이다**(`learnerMemoryStore.promptMemory`). 실시간으로
+  반영하면 시스템 프롬프트 문자열이 바뀌어 `useAiModel`이 세션을 새로 만들기 때문에, **대화
+  도중에 한자 퀴즈 하나만 풀어도 선생님 세션이 통째로 날아간다.** 갱신은 명시적인 지점에서만
+  한다 — 앱을 켤 때(Layout), 기억을 직접 수락·추가·삭제했을 때, 대화를 지웠을 때.
+  `recordStudyEvent`는 프로필만 다시 계산하고 스냅샷은 건드리지 않는다.
+- `recordStudyEvent`는 **훅이 아니라 모듈 함수**다 — 퀴즈 시트·단어 다이얼로그·작문 페이지처럼
+  여기저기서 한 줄로 부르는 자리라 훅이면 부르는 쪽마다 배선이 붙는다(`gemmaDownloadController`와
+  같은 판단). 실패해도 조용히 넘어간다.
+- **이벤트에 급수(`level`)와 표시 문자열을 기록 시점에 같이 넣을 것.** 나중에 `dictionary.ts`로
+  다시 찾으면 2.9MB짜리 사전 청크가 진입 번들까지 딸려온다("번들 최적화" 노트). 어휘 수준
+  추정은 이 `level` 값이 유일한 근거다.
+- **"모르겠다" 신호는 단어장 스와이프에 없다** — 왼쪽은 삭제, 오른쪽은 학습 완료뿐이다. 그래서
+  약한 어휘는 `word-looked-up`(문장 속 단어를 탭해 뜻을 열어본 것)으로 잡는다. 단어장에
+  "모르겠다" 스와이프를 추가하게 되면 그쪽도 같이 기록할 것.
+- IndexedDB를 못 여는 환경(사생활 보호 모드 등)에서는 **전부 조용히 no-op**이 된다 — 기억이
+  안 쌓일 뿐 학습 기능은 그대로 돌아간다. 다른 탭이 옛 버전을 붙들고 있는 `onblocked`도 같다.
+- `/memory`는 하단 네비게이션 밖이다(헤더 🧠 아이콘 + 선생님 화면 링크) — `/about`과 같은
+  규칙이고, 하단 네비는 이미 7칸이라 375px에서 더 넣을 자리가 없다. 이 화면이 꼭 있어야 하는
+  이유는 **기억이 사용자 모르게 쌓이고 다음 대화에 계속 영향을 주기 때문**이다. 무엇이
+  저장됐는지 보고 지울 수 없으면, 잘못된 기억 하나가 왜 선생님이 이상하게 구는지 알 수 없는
+  채로 남는다.
 
 ## 선생님 페이지(`/teacher`) 구현 노트
 - 회화가 "일본어로 롤플레이"라면 여기는 **"한국어로 물어보는 수업"**이다. 문법·표현을 자유롭게

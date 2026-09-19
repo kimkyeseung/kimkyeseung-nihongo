@@ -4,6 +4,7 @@ import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useUserProfileStore } from "../stores/userProfileStore";
 import { useConversationSessionStore } from "../stores/conversationSessionStore";
+import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import {
   GRAMMAR_CORRECTION_REFUSAL,
@@ -132,6 +133,8 @@ function ConversationSessionController() {
 
   const startConversation = useCallback((s: Scenario, l: Level) => {
     hasSentOpeningRef.current = false;
+    // "마지막에 공부한 것"에 회화도 들어가야 선생님이 맥락을 이어받는다.
+    recordStudyEvent({ type: "conversation-practice", subject: s.label, detail: l.label });
     useConversationSessionStore.setState({ scenario: s, level: l, messages: [] });
   }, []);
 

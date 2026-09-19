@@ -20,6 +20,7 @@ import {
 import { looksLikePromptLeak } from "../lib/promptSafety";
 import { preserveLearnerScript } from "../lib/scriptPreference";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useConfettiStore } from "../stores/confettiStore";
 import { useWritingDraft, useWritingOptions } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -150,8 +151,15 @@ function WritingPage() {
         !showKanjiSuggestions
       );
       if (finalResult.corrected.trim() === text.trim()) {
+        recordStudyEvent({ type: "writing-clean", subject: text });
         celebrate();
       } else {
+        // 지적 요지는 설명의 첫 줄만 남긴다 — 통째로 넣으면 선생님 프롬프트가 첨삭 전문으로
+        // 뒤덮인다. 어차피 프롬프트에 들어가기 전에 sanitizeMemoryLine이 한 번 더 자른다.
+        const point = (finalResult.grammarPoints[0] ?? finalResult.explanation.split("\n")[0] ?? "")
+          .trim()
+          .slice(0, 120);
+        recordStudyEvent({ type: "writing-corrected", subject: text, detail: point || undefined });
         setShake(true);
         setTimeout(() => setShake(false), 500);
       }

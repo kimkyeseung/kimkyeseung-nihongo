@@ -1,6 +1,7 @@
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link, NavLink, useLocation, useOutlet } from "react-router-dom";
+import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 import GamificationBar from "./GamificationBar";
 import Confetti from "./Confetti";
 import BadgeWatcher from "./BadgeWatcher";
@@ -53,6 +54,14 @@ function AnimatedOutlet() {
 }
 
 function Layout() {
+  // 기억은 IndexedDB에 있어 읽는 데 한 박자가 걸린다. 선생님 페이지에 들어간 뒤에 읽기
+  // 시작하면 시스템 프롬프트가 도중에 바뀌면서 세션이 새로 만들어지므로, 앱을 켤 때 미리
+  // 당겨둔다. 한 번만 부르면 되고(store가 스냅샷을 들고 있다) 실패해도 조용히 넘어간다.
+  const loadMemory = useLearnerMemoryStore((s) => s.load);
+  useEffect(() => {
+    void loadMemory();
+  }, [loadMemory]);
+
   return (
     <div className="flex h-svh flex-col">
       <header className="flex items-center justify-between gap-2 border-b-4 border-primary/20 bg-white px-4 py-3 sm:px-6 sm:py-4">
@@ -64,6 +73,16 @@ function Layout() {
         </Link>
         <div className="flex items-center gap-2">
           <GamificationBar />
+          {/* /memory도 /about과 같은 취급 — 스펙에 없는 페이지는 하단 네비에 욱여넣지 않고
+              헤더 아이콘으로만 노출한다(하단 네비는 이미 7칸이라 375px에서 자리도 없다). */}
+          <Link
+            to="/memory"
+            aria-label="선생님의 기억"
+            title="선생님의 기억"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-50"
+          >
+            🧠
+          </Link>
           <Link
             to="/about"
             aria-label="정보 및 출처"

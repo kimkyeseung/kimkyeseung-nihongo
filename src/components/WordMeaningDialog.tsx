@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import SpeakButton from "./SpeakButton";
@@ -5,6 +6,7 @@ import { getKoreanReadingForWord } from "../lib/kanji";
 import { translatePos } from "../lib/posTags";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useWordbookStore } from "../stores/wordbookStore";
 import type { WordEntry } from "../types/dictionary";
 
@@ -15,9 +17,25 @@ function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose:
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const koreanReading = word ? getKoreanReadingForWord(word.word) : null;
 
+  // 문장을 읽다 단어를 탭해 뜻을 열어본 것 자체가 "이 단어를 몰랐다"는 신호다 — 단어장
+  // 스와이프에는 "모르겠다" 경로가 없어서(왼쪽은 삭제) 지금 이 앱에서 가장 쓸 만한 약점
+  // 신호가 이것이다(learnerMemoryDb.ts의 word-looked-up 주석 참고).
+  useEffect(() => {
+    if (!word) return;
+    recordStudyEvent({
+      type: "word-looked-up",
+      subject: word.word,
+      detail: word.reading,
+      level: word.jlptLevel,
+    });
+  }, [word]);
+
   function handleToggleWordbook() {
     if (!word) return;
-    if (!inWordbook) recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
+    if (!inWordbook) {
+      recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
+      recordStudyEvent({ type: "word-added", subject: word.word, level: word.jlptLevel });
+    }
     toggleWord(word.id);
   }
 

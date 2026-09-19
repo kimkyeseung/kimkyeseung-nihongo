@@ -17,6 +17,7 @@ import { detectAdjectiveType, getVerbTeForm } from "../lib/verbConjugation";
 import { translatePos } from "../lib/posTags";
 import { useWordbookStore } from "../stores/wordbookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useWordExamples } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import type { WordEntry } from "../types/dictionary";
@@ -190,7 +191,11 @@ function WordDetailPage() {
 
   function handleToggleWordbook() {
     if (!entry) return;
-    if (!inWordbook) recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
+    if (!inWordbook) {
+      recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
+      // 급수를 같이 남긴다 — 어휘 수준 추정의 주된 근거다(learnerProfile.ts).
+      recordStudyEvent({ type: "word-added", subject: entry.word, level: entry.jlptLevel });
+    }
     toggleWord(entry.id);
   }
 

@@ -4,6 +4,7 @@ import { buildKanjiQuiz } from "../lib/kanjiQuiz";
 import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
+import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import type { KanjiEntry } from "../types/kanji";
 
@@ -32,7 +33,16 @@ function QuizContent({ pool, onClose }: { pool: KanjiEntry[]; onClose: () => voi
   function handleSelect(choiceIndex: number) {
     if (selected !== null) return;
     setSelected(choiceIndex);
-    if (choiceIndex === current.answerIndex) {
+    const correct = choiceIndex === current.answerIndex;
+    // 취약/강한 한자 판정의 유일한 근거다(learnerProfile.ts). 급수를 같이 넣어야 어휘 수준
+    // 추정에도 쓰인다.
+    recordStudyEvent({
+      type: correct ? "kanji-quiz-correct" : "kanji-quiz-wrong",
+      subject: current.kanji.kanji,
+      detail: current.choices[current.answerIndex],
+      level: current.kanji.jlptLevel,
+    });
+    if (correct) {
       setScore((s) => s + 1);
       celebrate();
     }
@@ -43,6 +53,11 @@ function QuizContent({ pool, onClose }: { pool: KanjiEntry[]; onClose: () => voi
     if (markComplete && !learned.includes(current.kanji.kanji)) {
       toggleLearned(current.kanji.kanji);
       recordProgress(XP_REWARDS.kanjiLearned);
+      recordStudyEvent({
+        type: "kanji-learned",
+        subject: current.kanji.kanji,
+        level: current.kanji.jlptLevel,
+      });
       celebrate();
     }
     if (index + 1 >= questions.length) {

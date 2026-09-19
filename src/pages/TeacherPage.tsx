@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import InputModeToggle from "../components/InputModeToggle";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
 import MarkdownAnswer from "../components/MarkdownAnswer";
+import MemoryFactPrompt from "../components/MemoryFactPrompt";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import { useAiModel } from "../hooks/useAiModel";
@@ -16,13 +18,26 @@ import {
   TEACHER_REFUSAL_ANSWER,
   TEACHER_SAMPLE_QUESTIONS,
   TEACHER_SYSTEM_PROMPT,
+  buildTeacherSystemPrompt,
   buildTeacherUserPrompt,
 } from "../lib/teacherPrompts";
+import {
+  MEMORY_EXTRACTION_SYSTEM_PROMPT,
+  buildMemoryExtractionPrompt,
+  parseExtractedFacts,
+} from "../lib/memoryExtraction";
 import { looksLikePromptLeak } from "../lib/promptSafety";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useInputScriptPrefs } from "../stores/pageStateStore";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { useLearnerMemoryStore, recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
+
+/**
+ * 이보다 짧은 답변에서는 기억할 만한 개인적인 사실이 나올 일이 없다. 추출은 추론이 한 번 더
+ * 도는 일이라(Gemma/Safari에서는 체감된다) 값어치 없는 호출은 아예 걸지 않는다.
+ */
+const MIN_ANSWER_LENGTH_FOR_EXTRACTION = 40;
 
 /** 보내기 버튼의 종이비행기. 이 프로젝트에 아이콘 세트가 없어 인라인 SVG로 둔다(currentColor 상속). */
 function PaperPlaneIcon() {
@@ -31,6 +46,29 @@ function PaperPlaneIcon() {
       <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a1 1 0 00-1.39 1.02l1.2 5.4L14 12l-10.79 1.98-1.2 5.4a1 1 0 001.39 1.02z" />
     </svg>
   );
+}
+
+/**
+ * 방금 주고받은 대화에서 기억할 만한 사실을 뽑아 "확인 대기"로 넣어둔다.
+ *
+ * 스트리밍이 아니라 단발성 `prompt()`다 — 화면에 흘려 보여줄 게 아니라 다 받은 뒤 한 번에
+ * 파싱하면 되기 때문. 결과는 바로 저장되지 않고 사용자가 수락해야 선생님이 쓴다
+ * (learnerMemoryDb.ts의 MemoryFact.status 주석 참고).
+ */
+async function extractFacts(
+  extractor: { prompt: (input: string) => Promise<string> },
+  question: string,
+  answer: string,
+  addPendingFacts: (facts: ReturnType<typeof parseExtractedFacts>) => Promise<void>
+) {
+  try {
+    const raw = await extractor.prompt(buildMemoryExtractionPrompt(question, answer));
+    const facts = parseExtractedFacts(raw);
+    if (facts.length > 0) await addPendingFacts(facts);
+  } catch {
+    // 부가 기능이라 조용히 넘어간다. 여기서 실패를 화면에 띄우면 수업과 상관없는 오류로
+    // 사용자를 놀라게 할 뿐이다.
+  }
 }
 
 /** 지금 고른 문자로 예시를 보여준다 — 한글 예시만 띄우면 일본어 모드에서 어색하다. */
@@ -49,7 +87,18 @@ const QUESTION_PLACEHOLDER: Record<InputScript, string> = {
  * 고른 동안에만 wanakana가 붙는다(useScriptInput.ts 참고).
  */
 function TeacherPage() {
-  const model = useAiModel(TEACHER_SYSTEM_PROMPT);
+  // 기억 블록은 store가 들고 있는 **스냅샷**이라 대화 중에는 바뀌지 않는다. 실시간으로
+  // 반영하면 퀴즈 하나 풀 때마다 시스템 프롬프트가 바뀌어 선생님 세션이 통째로 날아간다
+  // (learnerMemoryStore의 promptMemory 주석 참고).
+  const promptMemory = useLearnerMemoryStore((s) => s.promptMemory);
+  const refreshPromptMemory = useLearnerMemoryStore((s) => s.refreshPromptMemory);
+  const addPendingFacts = useLearnerMemoryStore((s) => s.addPendingFacts);
+  const systemPrompt = useMemo(() => buildTeacherSystemPrompt(promptMemory), [promptMemory]);
+
+  const model = useAiModel(systemPrompt);
+  // 기억 추출은 수업 맥락을 오염시키면 안 되므로 세션을 따로 둔다 — 회화의 문법 교정·번역과
+  // 같은 이유다.
+  const extractor = useAiModel(MEMORY_EXTRACTION_SYSTEM_PROMPT);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   const recordProgress = useGamificationStore((s) => s.recordProgress);
 
@@ -109,12 +158,17 @@ function TeacherPage() {
       if (!text || isAnswering) return;
       const { assistantId } = ask(text);
       recordProgress(XP_REWARDS.teacherQuestion);
+      recordStudyEvent({ type: "teacher-question", subject: text });
       try {
         let acc = "";
         for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(text))) {
           acc += chunk;
           // 지시문을 그대로 읊기 시작하면 거기서 끊는다 — 프롬프트로 "말하지 말라"고 시키는
           // 것만으로는 막히지 않아서, 받은 답을 코드에서 한 번 더 본다(promptSafety.ts 주석 참고).
+          //
+          // **고정 지시문(TEACHER_SYSTEM_PROMPT)만 넘긴다.** 실제로 모델에게 준 시스템
+          // 프롬프트에는 기억 블록이 붙어 있지만, 그것까지 넘기면 선생님이 학습자의 기억을
+          // 정상적으로 되받기만 해도 유출로 오인한다(teacherPrompts.ts 주석 참고).
           if (looksLikePromptLeak(acc, TEACHER_SYSTEM_PROMPT)) {
             appendAnswer(assistantId, TEACHER_REFUSAL_ANSWER);
             // 화면만 바꾸고 끝내면 오염된 턴이 히스토리에 남아 다음 질문에서 이어받을 수 있다.
@@ -123,6 +177,12 @@ function TeacherPage() {
           }
           appendAnswer(assistantId, acc);
         }
+
+        // 답변이 끝난 뒤에 기억할 만한 사실이 있었는지 따로 물어본다. 답변을 기다리게 하지
+        // 않으려고 await하지 않는다 — 실패해도 수업에는 아무 영향이 없는 부가 기능이다.
+        if (acc.length >= MIN_ANSWER_LENGTH_FOR_EXTRACTION) {
+          void extractFacts(extractor, text, acc, addPendingFacts);
+        }
       } catch (err) {
         appendAnswer(assistantId, "(답변을 만드는 중 오류가 발생했습니다)");
         reportError(err);
@@ -130,7 +190,17 @@ function TeacherPage() {
         finishAnswer();
       }
     },
-    [isAnswering, ask, recordProgress, model, appendAnswer, finishAnswer, reportError]
+    [
+      isAnswering,
+      ask,
+      recordProgress,
+      model,
+      extractor,
+      addPendingFacts,
+      appendAnswer,
+      finishAnswer,
+      reportError,
+    ]
   );
 
   // 회화 말풍선 등에서 "선생님" 버튼으로 넘어온 질문을 받아 바로 물어본다.
@@ -177,11 +247,25 @@ function TeacherPage() {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-2 border-b border-gray-100 p-3">
         <h2 className="text-lg text-primary">🧑‍🏫 선생님</h2>
-        {messages.length > 0 && (
-          <button onClick={clear} className="text-xs text-gray-400">
-            대화 지우기
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {messages.length > 0 && (
+            <button
+              onClick={() => {
+                clear();
+                // 대화를 지우는 김에 기억 스냅샷도 새로 만든다. 지금까지 쌓인 학습 기록이
+                // 다음 대화부터 반영되는 자연스러운 지점이고, 대화가 비어 있으니 세션이
+                // 새로 만들어져도 잃을 맥락이 없다.
+                refreshPromptMemory();
+              }}
+              className="text-xs text-gray-400"
+            >
+              대화 지우기
+            </button>
+          )}
+          <Link to="/memory" className="text-xs text-gray-400" title="선생님이 기억하고 있는 것">
+            🧠 기억
+          </Link>
+        </div>
       </div>
 
       {model.downloadProgress !== null && (
@@ -251,6 +335,9 @@ function TeacherPage() {
           "생각하는 중" 마스코트에 시선이 가도록 비워두는 편이 낫다. */}
       {!isAnswering && (
         <div className="border-t border-gray-100 p-3">
+          {/* 방금 대화에서 건진 "기억해둘까요?" 확인. 입력창 바로 위라 자연스럽게 눈에 들어오고,
+              답변 중에는 입력 영역과 함께 사라진다. */}
+          <MemoryFactPrompt />
           <div className="flex justify-end pb-2">
             <InputModeToggle value={script} onChange={setScript} />
           </div>

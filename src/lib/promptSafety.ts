@@ -128,3 +128,35 @@ export function sanitizeInlineValue(value: string, maxLength = INLINE_VALUE_MAX_
     .trim()
     .slice(0, maxLength);
 }
+
+/** 시스템 프롬프트의 "기억" 블록에 들어가는 한 줄의 최대 길이. */
+export const MEMORY_LINE_MAX_LENGTH = 80;
+
+/**
+ * 이름보다는 길어야 하지만(「12월에 JLPT N3 시험을 본다」) 여전히 문장부호 몇 개까지만
+ * 남긴다. `sanitizeInlineValue`와 마찬가지로 **허용 목록**이다 — 새로운 우회 표기가 나와도
+ * 뚫리지 않는 쪽은 "무엇을 막을까"가 아니라 "무엇을 남길까"를 정하는 쪽이다.
+ *
+ * 특히 줄바꿈은 허용 목록에 없어서 자동으로 지워진다(`\p{Zs}`는 공백 분리자만 잡고 `\n`은
+ * 안 잡는다). 줄바꿈이 남으면 기억 한 줄이 프롬프트의 새 지시 줄로 올라설 수 있다.
+ * 따옴표·백틱·꺾쇠·중괄호·마크다운 기호도 전부 빠진다.
+ */
+const DISALLOWED_IN_MEMORY_LINE = /[^\p{L}\p{N}\p{M}\p{Zs}.,!?:;()·・~\-+/%'’…「」、。]/gu;
+
+/**
+ * **모델이 뽑아낸 "기억"을 시스템 프롬프트에 끼워 넣기 전에 반드시 통과시킬 것.**
+ *
+ * 이 값의 출처를 잘 볼 것: 학습자가 친 질문 → 모델이 요약 → 시스템 프롬프트. 중간에 모델이
+ * 끼어 있어도 **내용의 출처는 결국 학습자 입력**이라, 걸러내지 않으면 "기억해둘 사실"인 척
+ * 하는 지시문이 모델이 가장 신뢰하는 자리에 영구히 박힌다. 게다가 이건 한 번 쓰고 마는
+ * 이름과 달리 **다음 대화에도 계속 따라온다** — 인젝션이 저장되는 셈이라 더 나쁘다.
+ */
+export function sanitizeMemoryLine(value: string, maxLength = MEMORY_LINE_MAX_LENGTH): string {
+  return value
+    .replace(TAG_SHAPED, " ")
+    .replace(DISALLOWED_IN_MEMORY_LINE, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength)
+    .trim();
+}
