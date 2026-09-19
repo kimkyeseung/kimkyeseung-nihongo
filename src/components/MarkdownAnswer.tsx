@@ -1,13 +1,9 @@
-import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ClickableSentence from "./ClickableSentence";
-import KanjiDetailSheet from "./KanjiDetailSheet";
 import SentenceActions from "./SentenceActions";
 import SentenceGrammar from "./SentenceGrammar";
-import WordMeaningDialog from "./WordMeaningDialog";
-import type { WordEntry } from "../types/dictionary";
-import type { KanjiEntry } from "../types/kanji";
+import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 
 const HAS_JAPANESE = /[぀-ヿ㐀-䶿一-鿿]/;
 
@@ -21,8 +17,7 @@ const HAS_JAPANESE = /[぀-ヿ㐀-䶿一-鿿]/;
  * (코드나 기호) 평범한 코드 칩으로 둔다.
  */
 function MarkdownAnswer({ text }: { text: string }) {
-  const [selectedWord, setSelectedWord] = useState<WordEntry | null>(null);
-  const [selectedKanji, setSelectedKanji] = useState<KanjiEntry | null>(null);
+  const { handlers, dialogs } = useSentenceDialogs();
 
   return (
     <>
@@ -69,11 +64,7 @@ function MarkdownAnswer({ text }: { text: string }) {
               <span className="my-0.5 inline-flex flex-col rounded-xl bg-gray-50 px-2 py-1 align-middle">
                 <span className="inline-flex flex-wrap items-center gap-1">
                   <span className="font-ja text-lg">
-                    <ClickableSentence
-                      text={content}
-                      onWordClick={setSelectedWord}
-                      onKanjiClick={setSelectedKanji}
-                    />
+                    <ClickableSentence text={content} {...handlers} />
                   </span>
                   {/* 칩 안이라 여백을 따로 주지 않는다(기본값 ml-1은 문장 뒤에 붙는 자리용). */}
                   <SentenceActions text={content} subject="예문" className="" />
@@ -87,8 +78,7 @@ function MarkdownAnswer({ text }: { text: string }) {
         {text}
       </Markdown>
 
-      <WordMeaningDialog word={selectedWord} onClose={() => setSelectedWord(null)} />
-      <KanjiDetailSheet entry={selectedKanji} onClose={() => setSelectedKanji(null)} />
+      {dialogs}
     </>
   );
 }

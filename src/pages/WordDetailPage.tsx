@@ -2,16 +2,16 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import ClickableSentence from "../components/ClickableSentence";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
-import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import SentenceActions from "../components/SentenceActions";
 import SentenceGrammar from "../components/SentenceGrammar";
 import SpeakButton from "../components/SpeakButton";
-import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
+import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
+import type { WordEntry } from "../types/dictionary";
 import { findWordById } from "../lib/dictionary";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import { buildExamplePrompt, parseExampleResponse, type ExampleDifficulty, type WordExample } from "../lib/wordExamples";
@@ -22,8 +22,6 @@ import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useWordExamples } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
-import type { WordEntry } from "../types/dictionary";
-import type { KanjiEntry } from "../types/kanji";
 
 // zustand 셀렉터가 매번 새 배열을 만들면 스냅샷이 계속 달라지므로 빈 목록은 하나를 돌려쓴다.
 const NO_EXAMPLES: WordExample[] = [];
@@ -42,8 +40,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
   const setExamples = useWordExamples((s) => s.setExamples);
   // null = 생성 중이 아님. 문자열이면 지금 스트리밍 중인 배치의 원문(완료되면 examples에 합쳐짐).
   const [streamingRaw, setStreamingRaw] = useState<string | null>(null);
-  const [selectedWord, setSelectedWord] = useState<WordEntry | null>(null);
-  const [selectedKanji, setSelectedKanji] = useState<KanjiEntry | null>(null);
+  const { handlers: sentenceHandlers, dialogs: sentenceDialogs } = useSentenceDialogs();
 
   const isLoading = streamingRaw !== null;
   const streamingExamples = useMemo(
@@ -141,8 +138,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
               <p className="font-ja text-lg">
                 <ClickableSentence
                   text={ex.japanese}
-                  onWordClick={setSelectedWord}
-                  onKanjiClick={setSelectedKanji}
+                  {...sentenceHandlers}
                   excludeWord={entry.word}
                 />
                 <SentenceActions text={ex.japanese} subject="예문" />
@@ -177,8 +173,7 @@ function WordExamples({ entry }: { entry: WordEntry }) {
       )}
 
       <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
-      <WordMeaningDialog word={selectedWord} onClose={() => setSelectedWord(null)} />
-      <KanjiDetailSheet entry={selectedKanji} onClose={() => setSelectedKanji(null)} />
+      {sentenceDialogs}
     </div>
   );
 }

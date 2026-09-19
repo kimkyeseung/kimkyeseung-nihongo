@@ -5,6 +5,7 @@ import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
 import { useKanjiView } from "../stores/pageStateStore";
 import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import KanjiQuizSheet from "../components/KanjiQuizSheet";
+import SegmentedTabs from "../components/SegmentedTabs";
 import { JLPT_LEVELS } from "../types/jlpt";
 import type { KanjiEntry } from "../types/kanji";
 
@@ -36,19 +37,15 @@ function KanjiPage() {
     <div className="p-4 sm:p-6">
       <h2 className="text-xl text-primary">漢 한자 공부</h2>
 
-      <div className="mt-4 flex gap-1 overflow-x-auto rounded-full bg-gray-100 p-1">
-        {JLPT_LEVELS.map((lv) => (
-          <button
-            key={lv}
-            onClick={() => setLevel(lv)}
-            className={`min-w-14 shrink-0 rounded-full px-4 py-1.5 text-sm transition-colors ${
-              level === lv ? "bg-primary text-white" : "text-gray-500"
-            }`}
-          >
-            {lv}
-          </button>
-        ))}
-      </div>
+      {/* 급수 5칸은 375px에 겨우 들어간다(재보면 딱 맞다) — 글자가 길어지거나 화면이 더
+          좁아지면 바로 넘치므로 scrollable을 유지한다. */}
+      <SegmentedTabs
+        className="mt-4"
+        scrollable
+        options={JLPT_LEVELS.map((lv) => ({ key: lv, label: lv }))}
+        value={level}
+        onChange={setLevel}
+      />
 
       <div className="mt-3 flex items-center justify-between gap-2">
         <p className="text-sm text-gray-400">

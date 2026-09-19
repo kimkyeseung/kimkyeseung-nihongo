@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import KanaDetailDialog from "../components/KanaDetailDialog";
+import SegmentedTabs from "../components/SegmentedTabs";
 import { GOJUON_SECTIONS, type KanaCell, type ScriptMode } from "../data/gojuon";
 import { useJapaneseSpeech } from "../hooks/useJapaneseSpeech";
 import { useGamificationStore } from "../stores/gamificationStore";
@@ -41,24 +42,14 @@ function GojuonPage() {
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl text-primary">あ 오십음도</h2>
 
-        <div className="flex rounded-full bg-gray-100 p-1">
-          {(
-            [
-              { key: "hiragana", label: "히라가나" },
-              { key: "katakana", label: "가타카나" },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => setMode(opt.key)}
-              className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
-                mode === opt.key ? "bg-primary text-white" : "text-gray-500"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedTabs
+          options={[
+            { key: "hiragana", label: "히라가나" },
+            { key: "katakana", label: "가타카나" },
+          ]}
+          value={mode}
+          onChange={setMode}
+        />
       </div>
 
       {!isSupported && (

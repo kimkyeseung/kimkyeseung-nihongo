@@ -4,14 +4,13 @@ import { motion } from "framer-motion";
 import ClickableSentence from "../components/ClickableSentence";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
-import KanjiDetailSheet from "../components/KanjiDetailSheet";
 import LoadingMascot from "../components/LoadingMascot";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import SentenceActions from "../components/SentenceActions";
 import SentenceGrammar from "../components/SentenceGrammar";
 import SpeakButton from "../components/SpeakButton";
-import WordMeaningDialog from "../components/WordMeaningDialog";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
+import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import { useUserProfileStore } from "../stores/userProfileStore";
 import { useConversationSessionStore } from "../stores/conversationSessionStore";
 import { LEVELS, SCENARIOS, type Level, type Scenario } from "../lib/conversationPrompts";
@@ -19,8 +18,6 @@ import { INLINE_VALUE_MAX_LENGTH } from "../lib/promptSafety";
 import InputModeToggle from "../components/InputModeToggle";
 import { useScriptInput, type InputScript } from "../hooks/useScriptInput";
 import { useInputScriptPrefs } from "../stores/pageStateStore";
-import type { WordEntry } from "../types/dictionary";
-import type { KanjiEntry } from "../types/kanji";
 
 /** 고른 문자에 맞춘 예시. 일본어 모드에서 한글 안내만 뜨면 어색하다. */
 const NAME_PLACEHOLDER: Record<InputScript, string> = {
@@ -125,8 +122,7 @@ function ConversationPage() {
 
   const japaneseInput = useJapaneseInput<HTMLInputElement>();
   const listEndRef = useRef<HTMLDivElement>(null);
-  const [selectedWord, setSelectedWord] = useState<WordEntry | null>(null);
-  const [selectedKanji, setSelectedKanji] = useState<KanjiEntry | null>(null);
+  const { handlers: sentenceHandlers, dialogs: sentenceDialogs } = useSentenceDialogs();
 
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -257,8 +253,7 @@ function ConversationPage() {
                     <ClickableSentence
                       text={m.text}
                       showFurigana={showFurigana}
-                      onWordClick={setSelectedWord}
-                      onKanjiClick={setSelectedKanji}
+                      {...sentenceHandlers}
                     />
                     <SentenceActions text={m.text} subject="상대 문장" />
                     {/* 사전에 없는 것(문형)은 커리큘럼이 들고 있다 — 걸리는 게 없으면 안 그린다. */}
@@ -334,8 +329,7 @@ function ConversationPage() {
         </button>
       </div>
 
-      <WordMeaningDialog word={selectedWord} onClose={() => setSelectedWord(null)} />
-      <KanjiDetailSheet entry={selectedKanji} onClose={() => setSelectedKanji(null)} />
+      {sentenceDialogs}
     </div>
   );
 }
