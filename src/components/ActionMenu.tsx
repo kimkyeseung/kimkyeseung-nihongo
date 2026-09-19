@@ -59,7 +59,13 @@ function ActionMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
-  const [doneId, setDoneId] = useState<string | null>(null);
+  /**
+   * 누른 뒤 잠깐 보여줄 문구. **id만 들고 있다가 렌더에서 `item.doneLabel`을 다시 읽으면 안
+   * 된다 (실제로 겪은 버그)** — "단어장에 담기 ↔ 빼기"처럼 누르면 자기 자신이 토글되는 항목은
+   * 그 사이 props가 이미 다음 상태로 바뀌어 있어서, 담은 직후 `doneLabel`이 사라지고 **✅만
+   * 남은 빈 줄**이 잠깐 보였다. 선택한 순간의 문구를 그대로 들고 있는다.
+   */
+  const [done, setDone] = useState<{ id: string; label: string } | null>(null);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -68,7 +74,7 @@ function ActionMenu({
   const close = useCallback((returnFocus = true) => {
     setOpen(false);
     setPosition(null);
-    setDoneId(null);
+    setDone(null);
     if (returnFocus) triggerRef.current?.focus();
   }, []);
 
@@ -136,9 +142,10 @@ function ActionMenu({
   }, [open, close]);
 
   async function handleSelect(item: ActionMenuItem) {
+    // `item`은 누를 때의 렌더에서 닫힌 값이라, onSelect가 상태를 바꿔도 여기 문구는 그대로다.
     const result = await item.onSelect();
     if (item.doneLabel && result !== false) {
-      setDoneId(item.id);
+      setDone({ id: item.id, label: item.doneLabel });
       closeTimerRef.current = setTimeout(() => close(false), DONE_LABEL_MS);
       return;
     }
@@ -218,7 +225,7 @@ function ActionMenu({
               className="z-40 min-w-44 overflow-hidden rounded-2xl border-2 border-gray-100 bg-white py-1 shadow-lg"
             >
               {items.map((item, i) => {
-                const done = doneId === item.id;
+                const doneLabel = done?.id === item.id ? done.label : null;
                 return (
                   <button
                     key={item.id}
@@ -237,9 +244,9 @@ function ActionMenu({
                     className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm whitespace-nowrap text-gray-700 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none"
                   >
                     <span aria-hidden className="text-base leading-none">
-                      {done ? "✅" : item.icon}
+                      {doneLabel ? "✅" : item.icon}
                     </span>
-                    <span className="font-mixed">{done ? item.doneLabel : item.label}</span>
+                    <span className="font-mixed">{doneLabel ?? item.label}</span>
                   </button>
                 );
               })}
