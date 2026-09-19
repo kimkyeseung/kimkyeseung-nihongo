@@ -240,6 +240,8 @@ function TeacherPage() {
       const { assistantId } = ask(text);
       recordProgress(XP_REWARDS.teacherQuestion);
       recordStudyEvent({ type: "teacher-question", subject: text });
+      // 실패 안내문은 화면에만 남기고 기록에는 넣지 않는다(finishAnswer 주석 참고).
+      let failed = false;
       try {
         let acc = "";
         for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(text))) {
@@ -265,11 +267,13 @@ function TeacherPage() {
           void extractFacts(extractor, text, acc, addPendingFacts);
         }
       } catch (err) {
+        failed = true;
         appendAnswer(assistantId, "(답변을 만드는 중 오류가 발생했습니다)");
         reportError(err);
       } finally {
         // 여기서 답변이 IndexedDB에 한 번 저장된다(스트리밍 중에는 저장하지 않는다).
-        finishAnswer(assistantId);
+        // 실패했으면 화면에만 남기고 저장은 건너뛴다.
+        finishAnswer(assistantId, { persist: !failed });
       }
     },
     [
@@ -296,12 +300,17 @@ function TeacherPage() {
    *
    * `memoryFresh`가 바뀌면 이 컴포넌트가 다시 렌더되고, 그 렌더의 `handleAsk`는 갱신된
    * 프롬프트로 만들어진 `model`을 잡는다.
+   *
+   * **지난 대화를 다 읽어온 뒤에 물어본다(`historyLoaded`)** — 읽기도 비동기라, 먼저 물어보면
+   * 뒤늦게 끝난 `load()`가 방금 던진 질문을 덮을 수 있었다. store 쪽에서도 합치도록 고쳤지만
+   * (teacherChatStore의 `load` 주석), 애초에 순서를 지키는 편이 낫다. IndexedDB를 못 쓰는
+   * 환경에서도 `load()`는 끝에 반드시 `loaded`를 세우므로 여기서 멈춰 서지 않는다.
    */
   useEffect(() => {
-    if (!memoryFresh) return;
+    if (!memoryFresh || !historyLoaded) return;
     const question = consumePendingQuestion();
     if (question) handleAsk(question);
-  }, [memoryFresh, pendingQuestion, consumePendingQuestion, handleAsk]);
+  }, [memoryFresh, historyLoaded, pendingQuestion, consumePendingQuestion, handleAsk]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     // 자동완성 목록이 떠 있으면 화살표·Enter를 그쪽이 먼저 쓴다(회화 페이지와 같은 순서).
