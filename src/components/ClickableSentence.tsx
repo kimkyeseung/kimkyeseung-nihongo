@@ -1,5 +1,5 @@
 import { Fragment, useMemo } from "react";
-import { segmentSentenceIntoWords } from "../lib/sentenceWords";
+import { rubyFor, segmentSentenceIntoWords } from "../lib/sentenceWords";
 import type { WordEntry } from "../types/dictionary";
 import type { KanjiEntry } from "../types/kanji";
 
@@ -34,15 +34,17 @@ function ClickableSentence({
     <>
       {segments.map((seg, i) => {
         if (seg.word) {
-          const content =
-            showFurigana && seg.word.furigana
-              ? seg.word.furigana.map((f, j) => (
-                  <ruby key={j}>
-                    {f.ruby}
-                    <rt>{f.rt}</rt>
-                  </ruby>
-                ))
-              : seg.text;
+          // **`seg.word.furigana`를 직접 쓰지 말 것.** 그건 표제어의 표기를 설명하는 것이라,
+          // 가나로 쓴 자리(ため ↔ 為)에 그대로 그리면 화면의 문장이 바뀐다(rubyFor 주석 참고).
+          const ruby = showFurigana ? rubyFor(seg) : null;
+          const content = ruby
+            ? ruby.map((f, j) => (
+                <ruby key={j}>
+                  {f.ruby}
+                  <rt>{f.rt}</rt>
+                </ruby>
+              ))
+            : seg.text;
 
           if (seg.word.word === excludeWord) {
             return (

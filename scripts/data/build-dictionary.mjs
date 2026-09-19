@@ -112,16 +112,31 @@ function main() {
     const reading = primaryKana?.text ?? primaryKanji?.text;
     if (!word || !reading) continue;
 
-    const senses = (w.sense ?? [])
-      .filter((s) => s.gloss?.some((g) => g.lang === "eng"))
-      .map((s) => {
-        for (const p of s.partOfSpeech) usedPosCodes.add(p);
-        return {
-          pos: s.partOfSpeech,
-          glosses: s.gloss.filter((g) => g.lang === "eng").map((g) => g.text),
-        };
-      });
+    const rawSenses = (w.sense ?? []).filter((s) => s.gloss?.some((g) => g.lang === "eng"));
+    const senses = rawSenses.map((s) => {
+      for (const p of s.partOfSpeech) usedPosCodes.add(p);
+      return {
+        pos: s.partOfSpeech,
+        glosses: s.gloss.filter((g) => g.lang === "eng").map((g) => g.text),
+      };
+    });
     if (senses.length === 0) continue;
+
+    /**
+     * JMDict의 `uk`(usually written using kana alone) 태그. **표기는 한자인데 실제로는
+     * 가나로 쓰는 단어**(為 → ため, 事 → こと)를 가려낸다.
+     *
+     * 왜 필요한가: 문장을 클릭 가능한 단어로 쪼갤 때(sentenceWords.ts) 표기만으로 찾으면
+     * 「〜のため」의 ため가 안 잡혀 조동사 た가 걸린다. 그렇다고 모든 읽기를 색인에 넣으면
+     * ます→増す, した→舌처럼 **활용 어미가 엉뚱한 명사로** 잡힌다. `uk`가 붙은 항목만
+     * 읽기로도 찾게 하면 둘 다 피한다.
+     *
+     * **첫 번째 뜻에 붙었을 때만 참으로 본다 (실제로 확인하고 고친 판정).** "하나라도 있으면"
+     * 으로 하면 島가 걸린다 — 島는 sense0이 "island"(한자로 쓴다)이고 uk는 은어인 "구역"
+     * 뜻에만 붙어 있다. 그 탓에 「勉強します」의 しま가 島로 잡혔다. 物도 같은 경우다.
+     * 반면 為·事·彼処·下さい는 첫 뜻부터 uk다.
+     */
+    const usuallyKana = Boolean(rawSenses[0]?.misc?.includes("uk"));
 
     // 표기가 정확히 같을 때만 붙인다(loadKoreanGlosses 주석 참고).
     const koreanMeaning = koreanGlosses.get(word);
@@ -135,6 +150,8 @@ function main() {
       furigana: word === primaryKanji?.text ? (primaryKanji?.furigana ?? null) : null,
       pos: senses[0].pos,
       meaning: senses[0].glosses[0],
+      // 표기가 이미 가나면 읽기 색인에 넣을 이유가 없으니 플래그도 달지 않는다(용량 절감).
+      ...(usuallyKana && word !== reading ? { usuallyKana: true } : {}),
       ...(koreanMeaning ? { koreanMeaning } : {}),
       senses,
     });

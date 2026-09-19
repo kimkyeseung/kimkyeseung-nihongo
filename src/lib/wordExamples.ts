@@ -44,17 +44,32 @@ export interface WordExample {
 }
 
 /** 모델이 지정한 포맷을 안 따르면(예: 스텁/구형 모델) 안 깨지도록, 매치 실패 시 전체 응답을 예문 하나로 폴백한다. */
+/**
+ * 모델이 강조하려고 붙인 마크다운 기호를 떼어낸다.
+ *
+ * **예문은 마크다운으로 렌더링되지 않는다** — `ClickableSentence`가 글자 단위로 사전과
+ * 대조해 후리가나를 입히는 자리라 원문 그대로 화면에 나간다. 그래서 모델이
+ * 「**氏名**を記入」처럼 쓰면 별표가 그대로 보이고(실제로 그랬다), 게다가 단어 분절에서도
+ * `**氏名**`가 한 덩어리로 잡혀 氏名을 눌러도 아무 일이 없다. 발음 버튼에 넘어가면
+ * TTS가 별표를 읽으려 들기도 한다.
+ */
+function stripEmphasis(text: string): string {
+  return text.replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1").replace(/[*_`]/g, "");
+}
+
 export function parseExampleResponse(raw: string): WordExample[] {
   const blocks = raw.split(/###\s*예문/).slice(1);
   const examples: WordExample[] = [];
   for (const block of blocks) {
     const translationMatch = block.match(/###\s*번역\s*\n?([\s\S]*?)(?=###|$)/);
-    const japanese = (translationMatch ? block.slice(0, translationMatch.index) : block).trim();
-    const korean = translationMatch?.[1]?.trim() ?? "";
+    const japanese = stripEmphasis(
+      (translationMatch ? block.slice(0, translationMatch.index) : block).trim()
+    ).trim();
+    const korean = stripEmphasis(translationMatch?.[1]?.trim() ?? "").trim();
     if (japanese) examples.push({ japanese, korean });
   }
   if (examples.length === 0 && raw.trim()) {
-    examples.push({ japanese: raw.trim(), korean: "" });
+    examples.push({ japanese: stripEmphasis(raw.trim()).trim(), korean: "" });
   }
   return examples;
 }

@@ -43,6 +43,8 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     나오고, 그게 선생님 프롬프트에 박혀 설명 난이도를 통째로 바꾼다.
   - 기억 추출 파싱(`memoryExtraction`의 `parseExtractedFacts`) — 형식을 어긴 줄을 살려두면
     모델의 잡담이 "기억"이 되어 **다음 대화에도 영구히 따라온다**.
+  - 문장 분절(`sentenceWords`) — 엉뚱한 단어가 붙어도 콘솔은 멀쩡하고, 눌러본 사용자만
+    "왜 ため가 과거형이지?" 하고 만다(실제로 그렇게 보고받았다).
   - 커리큘럼 진도(`curriculumProgress`)·오늘의 추천(`dailyPlan`) — 어긋나도 화면에는 그럴듯한
     퍼센트가 뜨고, 사용자는 엉뚱한 유닛을 공부하게 된다. 커리큘럼 데이터 자체의 검사(깨진
     예문·읽기에 남은 한자·`KANJI_NOT_IN_APP` 동기화)도 여기에 같이 들어 있다.
@@ -155,7 +157,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
                      romajiInput.test.ts · dictionary.test.ts · learnerProfile.test.ts ·
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
-                     localDate.test.ts
+                     localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·recentSearchesStore·gamificationStore·
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
@@ -166,6 +168,8 @@ src/stores/        Zustand 스토어:
                      gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, gojuon.ts) — 완료
+                     · dictionary.json의 `usuallyKana`는 JMDict `uk`(보통 가나로 쓰는 단어) —
+                       문장 분절이 읽기로도 찾을지 판단하는 데만 쓴다
                    + curriculum.json(JLPT 커리큘럼 — **손으로 만든 데이터**, scripts/data 파이프라인 밖)
 public/            favicon.svg, icons.svg, hero.png(대문 그림 1536×1024)
 src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입, opfs.ts(move 선언) — 완료
@@ -1038,6 +1042,31 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   품사 분류도 사전적 사실이라 이 프로젝트 규칙상 정적 데이터로 처리). `WordDetailPage`와
   `WordMeaningDialog` 둘 다 품사 칩을 그리므로, 새로 품사를 보여주는 화면을 또 만들 때도
   raw 코드를 그대로 쓰지 말고 이 함수를 재사용할 것.
+
+## 문장 속 단어 클릭 (`sentenceWords.ts`) 구현 노트
+- 문장을 사전과 그리디 최장일치로 대조해 클릭 가능한 구간으로 나눈다. 표기(`word`) 색인과
+  읽기(`reading`) 색인 **둘 다** 쓰되, 같은 길이면 표기가 이긴다.
+- **읽기 색인이 없으면 가나로 쓴 단어를 놓친다 (실제로 보고받은 버그).** `ため`는 사전에
+  `word: "為"` / `reading: "ため"`로 들어 있어 표기만으로는 안 잡히고, 그리디가 길이 1까지
+  내려가 **조동사 `た`**를 집었다 — 「〜のため」를 눌렀는데 "과거를 나타냄"이 떴다.
+- **그렇다고 모든 읽기를 넣으면 더 나빠진다 (실제로 해보고 되돌렸다).** 일본어 활용 어미는
+  전부 가나라 온갖 명사의 읽기와 부딪힌다: `します`→`しま(縞)`+`す(酢)`, `寝たほう`→`たほう(他方)`,
+  `ました`→`ます(増す)`+`した(舌)`. **`common`으로도 안 걸러진다** — 전부 common이다.
+- 그래서 JMDict의 **`uk`(usually written using kana alone)** 태그를 `build-dictionary.mjs`가
+  `usuallyKana`로 가져오고, 그 항목만 읽기로 찾는다. 판정은 **첫 번째 뜻에 `uk`가 붙었을 때만**
+  참이다 — "하나라도 있으면"으로 하면 島가 걸린다(첫 뜻은 "island"고 uk는 은어인 "구역" 뜻에만
+  붙어 있다). 為·事·彼処·下さい는 첫 뜻부터 uk다.
+- 추가 가드 둘: **한 글자 읽기는 안 넣는다**(為(す) 하나가 모든 です·ます를 오염시켰다),
+  그리고 `NOT_A_STANDALONE_READING`(`まし`·`まれ`) — 커리큘럼 예문 123개를 전수로 훑어
+  실제로 틀린 것만 담았다. 나머지 매치(この·よう·ここ·ため·ください·せい·おかげ…)는 전부
+  올바른 단어였다. **일반 규칙은 형태소 분석기가 있어야 한다** — 이 앱엔 과하므로 부딪힌 것만 막는다.
+- **후리가나는 `rubyFor()`로만 그릴 것. `seg.word.furigana`를 직접 쓰지 말 것 (실제로 겪은 버그).**
+  그 필드는 **표제어의 표기**를 설명하는 것이라, 가나로 쓴 자리에 그대로 그리면 화면의 문장이
+  바뀐다 — 읽기 색인을 넣은 직후 「〜のため、」가 「〜の為ため、」로, 「ください」가 「下ください」로
+  렌더됐다. 사전 정보를 덧씌우는 것이지 원문을 고치는 게 아니다.
+- **LLM이 붙인 마크다운 강조는 예문을 만들 때 떼어낸다**(`wordExamples.ts`의 `stripEmphasis`).
+  예문은 마크다운으로 렌더링되지 않고 `ClickableSentence`가 원문 그대로 그리는 자리라,
+  「**氏名**を記入」이 별표째 화면에 보였고 `**氏名**`가 한 덩어리로 분절돼 눌러도 반응이 없었다.
 
 ## 한국어 뜻풀이 / 한글 검색
 - 단어의 한국어 뜻은 **한국어 위키낱말사전**(kaikki.org 가공본)에서 온다. JMdict에는 한국어판이
