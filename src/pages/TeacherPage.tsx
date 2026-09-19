@@ -11,6 +11,7 @@ import MemoryFactPrompt from "../components/MemoryFactPrompt";
 import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
 import { useAiModel } from "../hooks/useAiModel";
+import { useCurriculumPlan } from "../hooks/useCurriculumPlan";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useScriptInput, type InputScript } from "../hooks/useScriptInput";
 import { useWordSuggestions } from "../hooks/useWordSuggestions";
@@ -26,9 +27,12 @@ import {
   buildMemoryExtractionPrompt,
   parseExtractedFacts,
 } from "../lib/memoryExtraction";
+import { buildTeacherGreeting } from "../lib/dailyPlan";
+import { levelLabel } from "../lib/curriculum";
 import { looksLikePromptLeak } from "../lib/promptSafety";
 import { XP_REWARDS } from "../lib/xpRewards";
-import { useInputScriptPrefs } from "../stores/pageStateStore";
+import { useInputScriptPrefs, useTeacherGreeting } from "../stores/pageStateStore";
+import { useCurriculumStore } from "../stores/curriculumStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useLearnerMemoryStore, recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
@@ -131,6 +135,43 @@ function TeacherPage() {
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  /**
+   * 오늘 첫 방문이면 인사를 한 줄 띄운다(모델이 아니라 앱이 — dailyPlan.ts 주석 참고).
+   *
+   * effect에서 하는 이유: `claimGreeting()`은 "오늘 몫을 가져간다"는 부수효과(저장까지 한다)라
+   * 렌더 중에 부르면 안 되고, StrictMode에서 렌더가 두 번 도는 것과도 엮인다. ref로 한 번만 집는다.
+   * oxlint가 `set-state-in-effect`로 경고하지만 **여기서는 그게 맞다** — 렌더 중에 값을
+   * 만들라는 제안을 따르면 렌더가 저장소를 건드리게 된다.
+   */
+  const streak = useGamificationStore((s) => s.streak);
+  const claimGreeting = useTeacherGreeting((s) => s.claimGreeting);
+  const curriculum = useCurriculumPlan();
+  const startLevel = useCurriculumStore((s) => s.startLevel);
+  const [greeting, setGreeting] = useState<string | null>(null);
+  const greetingClaimedRef = useRef(false);
+
+  useEffect(() => {
+    if (greetingClaimedRef.current) return;
+    // 진도를 아직 못 읽었으면 기다린다 — 커리큘럼은 동적 import라 한 박자 늦게 온다.
+    // 시작 단계를 아예 안 골랐으면 영영 안 오므로 기다리지 않는다.
+    if (startLevel && !curriculum) return;
+    greetingClaimedRef.current = true;
+    if (!claimGreeting()) return;
+
+    const current = curriculum?.plan.current;
+    const level = current
+      ? curriculum?.curriculum.levels.find((l) => l.level === current.level)
+      : undefined;
+    setGreeting(
+      buildTeacherGreeting({
+        streak,
+        levelLabel: level ? levelLabel(level) : null,
+        unitNumber: current?.unitNumber ?? null,
+        unitTitle: current?.title ?? null,
+      })
+    );
+  }, [claimGreeting, curriculum, startLevel, streak]);
 
   /**
    * 화면에 들어올 때 기억 스냅샷을 새로 만든다 — 그 사이에 진도가 나갔거나 시작 단계를
@@ -320,6 +361,20 @@ function TeacherPage() {
       )}
 
       <div className="flex-1 overflow-y-auto p-3">
+        {/* 오늘 첫 방문에만 뜨는 인사. 모델이 아니라 앱이 한다 — 프롬프트에 맡기면 매 답변마다
+            인사로 시작하고, "하루에 한 번만"은 모델이 지킬 수 있는 규칙이 아니다(이전 답변을
+            셀 수 없다). 날짜로 판단할 수 있는 건 코드가 한다. */}
+        {greeting && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-3 flex items-start gap-2 rounded-2xl bg-primary/5 px-4 py-3"
+          >
+            <span className="text-xl leading-none">🧑‍🏫</span>
+            <p className="font-mixed text-sm text-gray-700">{greeting}</p>
+          </motion.div>
+        )}
+
         {messages.length === 0 && (
           <div className="mt-6 flex flex-col items-center gap-3">
             <p className="text-center text-sm text-gray-400">

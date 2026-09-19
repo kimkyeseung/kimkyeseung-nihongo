@@ -1,11 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-
-function todayKey(offsetDays = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+// 선생님 인사(pageStateStore의 useTeacherGreeting)와 같은 날짜 기준을 써야 해서 공용으로 뺐다.
+import { localDateKey as todayKey } from "../lib/localDate";
 
 interface GamificationState {
   xp: number;

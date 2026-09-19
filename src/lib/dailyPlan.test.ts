@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDailyPlan } from "./dailyPlan";
+import { buildDailyPlan, buildTeacherGreeting } from "./dailyPlan";
 import { EMPTY_PROFILE, type LearnerProfile } from "./learnerProfile";
 import type { UnitProgress } from "./curriculumProgress";
 import type { CurriculumUnit } from "../types/curriculum";
@@ -123,5 +123,35 @@ describe("buildDailyPlan", () => {
       profileWithWeakKanji(["薔", "鬱"])
     );
     expect(actions.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("buildTeacherGreeting", () => {
+  // 인사를 모델에게 맡기면 매 답변마다 반복된다. "하루에 한 번"은 모델이 지킬 수 있는
+  // 규칙이 아니라서(이전 답변을 셀 수 없다) 앱이 만든다.
+
+  it("지금 단원을 같이 알려준다", () => {
+    const text = buildTeacherGreeting({
+      streak: 3,
+      levelLabel: "N5",
+      unitNumber: 2,
+      unitTitle: "지시어와 존재 표현",
+    });
+    expect(text).toContain("3일 연속");
+    expect(text).toContain("N5 2단원");
+    expect(text).toContain("지시어와 존재 표현");
+  });
+
+  it("하루짜리 스트릭에 '1일 연속'이라고 하지 않는다", () => {
+    expect(buildTeacherGreeting({ streak: 1 })).not.toContain("연속");
+    expect(buildTeacherGreeting({ streak: 0 })).not.toContain("연속");
+  });
+
+  it("진도를 모르면 단원 이야기를 꺼내지 않는다", () => {
+    // 시작 단계를 아직 안 골랐을 때 빈 자리가 「undefined단원」으로 새어 나가면 안 된다.
+    const text = buildTeacherGreeting({ streak: 5 });
+    expect(text).not.toContain("단원");
+    expect(text).not.toContain("undefined");
+    expect(text).not.toContain("null");
   });
 });

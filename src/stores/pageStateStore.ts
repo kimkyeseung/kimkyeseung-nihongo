@@ -4,6 +4,7 @@ import type { ScriptMode } from "../data/gojuon";
 import type { InputScript } from "../hooks/useScriptInput";
 import type { JlptLevel } from "../types/jlpt";
 import type { WordExample } from "../lib/wordExamples";
+import { localDateKey } from "../lib/localDate";
 
 /**
  * 페이지를 떠났다 돌아와도 화면이 그대로이도록, 라우트 전환 때 사라지는 페이지 로컬 state를
@@ -205,5 +206,36 @@ export const useInputScriptPrefs = create<InputScriptPrefs>()(
         } as InputScriptPrefs;
       },
     }
+  )
+);
+
+/**
+ * 선생님 인사를 오늘 이미 했는가.
+ *
+ * **인사는 모델이 아니라 앱이 한다.** 시스템 프롬프트에 맡기면 매 답변마다
+ * "안녕하세요! 일본어 공부를 도와드릴 선생님입니다 😊"로 시작해서 금세 지겨워지는데,
+ * "하루에 한 번만"은 모델이 지킬 수 있는 종류의 규칙이 아니다(이전 답변을 셀 수 없다).
+ * 날짜로 판단할 수 있는 건 코드가 한다 — 표기 유지·후리가나와 같은 방침이다.
+ *
+ * 날짜는 gamificationStore의 스트릭과 같은 로컬 타임존 `YYYY-MM-DD` 문자열이다.
+ */
+interface TeacherGreeting {
+  lastGreetedDate: string | null;
+  /** 오늘 아직 인사하지 않았으면 true를 돌려주면서 오늘 날짜로 표시한다(한 번만 참). */
+  claimGreeting: () => boolean;
+}
+
+export const useTeacherGreeting = create<TeacherGreeting>()(
+  persist(
+    (set, get) => ({
+      lastGreetedDate: null,
+      claimGreeting: () => {
+        const today = localDateKey();
+        if (get().lastGreetedDate === today) return false;
+        set({ lastGreetedDate: today });
+        return true;
+      },
+    }),
+    { name: "teacher-greeting" }
   )
 );

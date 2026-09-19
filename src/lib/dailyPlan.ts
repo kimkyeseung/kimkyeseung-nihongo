@@ -11,6 +11,32 @@ import type { LearnerProfile } from "./learnerProfile";
 import type { UnitProgress } from "./curriculumProgress";
 import type { CurriculumUnit } from "../types/curriculum";
 
+/**
+ * 하루에 한 번 띄우는 선생님 인사. **모델이 아니라 앱이 만든다.**
+ *
+ * 프롬프트에 맡기면 매 답변이 "안녕하세요! 일본어 공부를 도와드릴 선생님입니다 😊"로 시작해서
+ * 금세 지겨워지는데, "하루에 한 번만"은 모델이 지킬 수 있는 규칙이 아니다 — 이전 답변을 셀 수
+ * 없기 때문이다. 날짜와 진도로 판단할 수 있는 것은 코드가 한다(표기 유지·후리가나와 같은 방침).
+ */
+export function buildTeacherGreeting(opts: {
+  streak: number;
+  levelLabel?: string | null;
+  unitNumber?: number | null;
+  unitTitle?: string | null;
+}): string {
+  const parts: string[] = [];
+  // 하루짜리 스트릭에 "1일 연속"이라고 하면 어색하다 — 이틀째부터 세어준다.
+  parts.push(opts.streak >= 2 ? `안녕하세요! 🔥 ${opts.streak}일 연속이네요.` : "안녕하세요! 👋");
+
+  if (opts.levelLabel && opts.unitNumber && opts.unitTitle) {
+    parts.push(`오늘은 ${opts.levelLabel} ${opts.unitNumber}단원 「${opts.unitTitle}」을 이어서 해볼까요?`);
+  } else {
+    parts.push("오늘은 뭐가 궁금하세요?");
+  }
+
+  return parts.join(" ");
+}
+
 export interface PlanAction {
   id: string;
   emoji: string;
