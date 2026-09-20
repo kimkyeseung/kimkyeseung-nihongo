@@ -135,15 +135,36 @@ export const useWritingDraft = create<WritingDraft>((set) => ({
 }));
 
 interface WordExamplesState {
-  /** 단어 id -> 그 단어로 생성해둔 예문들 */
+  /**
+   * 단어 id -> 그 단어로 생성해둔 예문들. 뜻이 다른 예문이 한 배열에 섞여 있고, 각 예문이
+   * `senseIndex`를 들고 있어 화면에서 뜻별로 갈라 그린다.
+   */
   byWordId: Record<string, WordExample[]>;
-  setExamples: (wordId: string, examples: WordExample[]) => void;
+  /** 뜻에서 새로 만든 예문들을 그 단어 목록 끝에 덧붙인다. */
+  addExamples: (wordId: string, examples: WordExample[]) => void;
+  /**
+   * 바꿔 만든 예문을 **원본 바로 뒤에** 끼워 넣는다 — 원문과 변형이 목록 위아래로 떨어져
+   * 있으면 "무엇이 어떻게 복잡해졌는지"를 볼 수가 없다(그게 이 버튼의 전부다).
+   */
+  insertVariant: (wordId: string, sourceId: string, variant: WordExample) => void;
 }
 
 export const useWordExamples = create<WordExamplesState>((set) => ({
   byWordId: {},
-  setExamples: (wordId, examples) =>
-    set((s) => ({ byWordId: { ...s.byWordId, [wordId]: examples } })),
+  addExamples: (wordId, examples) =>
+    set((s) => ({
+      byWordId: { ...s.byWordId, [wordId]: [...(s.byWordId[wordId] ?? []), ...examples] },
+    })),
+  insertVariant: (wordId, sourceId, variant) =>
+    set((s) => {
+      const current = s.byWordId[wordId] ?? [];
+      const at = current.findIndex((ex) => ex.id === sourceId);
+      // 원본이 사라졌으면(있을 수 없지만) 끝에 붙이느니 버린다 — 맥락 없는 변형만 남는다.
+      if (at < 0) return s;
+      const next = [...current];
+      next.splice(at + 1, 0, variant);
+      return { byWordId: { ...s.byWordId, [wordId]: next } };
+    }),
 }));
 
 interface ReviewSession {
