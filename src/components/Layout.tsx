@@ -29,8 +29,16 @@ function AnimatedOutlet() {
 
   return (
     <AnimatePresence mode="wait">
+      {/* **`h-full`이 반드시 있어야 한다 (실제로 겪은 버그).** 이 래퍼가 높이를 안 가지면
+          `height: auto`라, 선생님·회화처럼 루트에 `h-full`을 주고 **안쪽에 자기 스크롤 영역**을
+          두는 페이지에서 그 100%가 기댈 곳이 없어 auto로 풀린다. 그러면 메시지 목록이 자기
+          높이만큼 늘어나 버려서 목록 대신 **페이지 전체가 `main` 안에서 스크롤**되고, 아래
+          붙어 있어야 할 입력창도 같이 밀려 내려간다(스트리밍 중 화면이 출렁이던 원인).
+          길이가 긴 보통 페이지(오십음도·한자 목록 등)는 이 래퍼보다 커지면 그대로 넘쳐서
+          예전처럼 `main`이 스크롤한다 — overflow를 막지 않았으므로 잘리지 않는다. */}
       <motion.div
         key={location.pathname}
+        className="h-full"
         initial={{ opacity: 0, x: 12 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -12 }}
