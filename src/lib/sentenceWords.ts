@@ -46,6 +46,24 @@ let maxWordLength = 1;
  */
 const NOT_A_STANDALONE_READING = new Set(["まし", "まれ"]);
 
+/**
+ * **표기로는 찾지 않을 표제어** (읽기로는 그대로 찾는다).
+ *
+ * 그리디 최장일치는 낱말 경계를 모르기 때문에, 「今日は天気が良いです」의 앞 세 글자가
+ * 사전의 `今日は`(こんにちは, "안녕하세요")에 걸린다. 그러면 **今日에 こんにち라는 후리가나가
+ * 붙고**(실제로 보고받았다) 눌러보면 "hello"가 뜬다 — 여기의 は는 조사이고 今日는 きょう다.
+ *
+ * **"짧은 쪽을 고른다"는 일반 규칙으로 가면 안 된다 (데이터로 확인했다).** 표기가
+ * `앞 단어 + 조사`인데 그 앞 단어도 사전에 있는 표제어가 52개인데, 非常に·急に·別に·実は·
+ * 何か·誰か·更に·直ぐに처럼 **긴 쪽이 맞는 진짜 복합어가 대부분**이다. 짧은 쪽을 택하면
+ * 그것들이 전부 깨진다.
+ *
+ * 실제로 깨지는 건 **한자로는 거의 안 쓰는 인사말** 둘뿐이라 그것만 막는다. 둘 다 `uk`라
+ * 읽기 색인에는 그대로 들어가므로, **こんにちは라고 가나로 쓰면 여전히 인사말로 잡힌다**
+ * (실제로 그렇게 쓰는 말이다). 새 오탐을 발견하면 여기에 한 줄 더할 것.
+ */
+const NOT_A_STANDALONE_SPELLING = new Set(["今日は", "今晩は"]);
+
 function addTo(index: Map<string, WordEntry[]>, key: string, entry: WordEntry) {
   const list = index.get(key);
   if (list) list.push(entry);
@@ -56,8 +74,10 @@ function buildIndexes() {
   const words = new Map<string, WordEntry[]>();
   const readings = new Map<string, WordEntry[]>();
   for (const entry of dictionary) {
-    addTo(words, entry.word, entry);
-    maxWordLength = Math.max(maxWordLength, entry.word.length);
+    if (!NOT_A_STANDALONE_SPELLING.has(entry.word)) {
+      addTo(words, entry.word, entry);
+      maxWordLength = Math.max(maxWordLength, entry.word.length);
+    }
     // 한 글자짜리 읽기는 넣지 않는다 — 활용 어미와 부딪히기만 한다. 為(す) 하나 때문에
     // 「です」·「ます」의 끝 글자가 전부 단어로 잡혔다.
     if (
