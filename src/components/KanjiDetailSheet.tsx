@@ -5,6 +5,7 @@ import KanjiStrokeOrder from "./KanjiStrokeOrder";
 import LoadingMascot from "./LoadingMascot";
 import { findWordsContainingKanji, displayMeaning } from "../lib/dictionary";
 import { getKoreanReadingForWord } from "../lib/kanji";
+import { useWordLink } from "../hooks/useWordLink";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useConfettiStore } from "../stores/confettiStore";
@@ -13,6 +14,7 @@ import { XP_REWARDS } from "../lib/xpRewards";
 import type { KanjiEntry } from "../types/kanji";
 
 function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClose: () => void }) {
+  const wordLink = useWordLink();
   const isLearned = useKanjiProgressStore((s) => (entry ? s.learned.includes(entry.kanji) : false));
   const toggleLearned = useKanjiProgressStore((s) => s.toggleLearned);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
@@ -98,7 +100,7 @@ function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClos
                     const koreanReading = getKoreanReadingForWord(w.word);
                     return (
                       <li key={w.id}>
-                        <Link to={`/dictionary/${w.id}`} onClick={onClose} className="text-info">
+                        <Link {...wordLink(w.id)} onClick={onClose} className="text-info">
                           <span className="font-ja">{w.word}</span>
                           <span className="ml-1 text-xs text-gray-400">{w.reading}</span>
                           {koreanReading && (

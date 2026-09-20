@@ -136,6 +136,7 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
                      useStickToBottom(대화 목록을 바닥에 붙여 둔다 — 선생님·회화),
                      useJapaneseSpeech, useJapaneseInput(wanakana 입력 + 사전 자동완성),
                      useScriptInput(입력 문자 전환), useWordSuggestions(사전 자동완성 — 위 둘이 공유),
+                     useWordLink(단어 상세로 가는 링크 — 단어를 누르는 화면은 전부 이걸 쓴다),
                      useDebouncedValue, useAssetPreload
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, kanaWords.ts,
                      posTags.ts, sentenceWords.ts, srs.ts) +
@@ -155,7 +156,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      clipboard.ts(권한 거부 시 execCommand 폴백이 있는 복사) +
                      localDate.ts(로컬 타임존 YYYY-MM-DD + 날짜 이름 — 스트릭·인사·대화 기록이 공유) +
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
-                     romajiInput.ts(입력창의 로마자→히라가나 변환 범위)
+                     romajiInput.ts(입력창의 로마자→히라가나 변환 범위) +
+                     wordLink.ts(단어 상세 주소·돌아갈 곳·조사)
                      커리큘럼: curriculum.ts(동적 import 조회) · curriculumProgress.ts(진도 계산) ·
                        grammarPatterns.ts(문장에서 문형 찾기) ·
                        dailyPlan.ts(오늘의 추천 — 전부 순수 함수, LLM 안 씀)
@@ -165,6 +167,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                    테스트: promptSafety.test.ts · conversationPrompts.test.ts ·
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
                      romajiInput.test.ts · dictionary.test.ts · learnerProfile.test.ts ·
+                     wordLink.test.ts ·
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
                      grammarPatterns.test.ts
@@ -187,12 +190,13 @@ src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입, o
 scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립트 (완료, scripts/data/README.md 참고)
 ```
 
-하단 네비게이션 경로: `/gojuon` · `/dictionary`(+`/dictionary/:id`) · `/kanji` ·
+하단 네비게이션 경로: `/gojuon` · `/dictionary` · `/kanji` ·
 `/wordbook` · `/conversation` · `/writing` · `/teacher`(7개). 스펙 문서(japanese_app_prompt_1.md)의
 페이지 구성은 전부 최소 기능으로 구현됨. 하단 네비 **밖**에 다섯 개가 더 있다: `/`(대문),
 `/about`(정보/출처, 헤더 ⓘ 아이콘), `/memory`(선생님의 기억, 헤더 🧠 아이콘),
 `/curriculum`(학습 로드맵 — 헤더가 아니라 대문 카드와 `/memory`에서 링크),
-`/diagnostics`(자가진단, 미지원 안내에서 링크).
+`/diagnostics`(자가진단, 미지원 안내에서 링크), 그리고 `/word/:id`(단어 상세 — "단어 상세
+페이지" 절 참고).
 남은 건 다듬기와 QA — 특히 **Chrome에서의 Gemma 추론 검증**(Safari에서는 확인됨)과
 브라우저별 안내 화면 실물 확인.
 
@@ -1158,6 +1162,36 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   품사 분류도 사전적 사실이라 이 프로젝트 규칙상 정적 데이터로 처리). `WordDetailPage`와
   `WordMeaningDialog` 둘 다 품사 칩을 그리므로, 새로 품사를 보여주는 화면을 또 만들 때도
   raw 코드를 그대로 쓰지 말고 이 함수를 재사용할 것.
+
+## 단어 상세 페이지 (`/word/:id`) 구현 노트
+- **단어 상세는 사전의 하위 화면이 아니다.** 들어오는 입구가 다섯이다 — 사전 검색 결과,
+  단어장 목록, `WordMeaningDialog`(회화·선생님·단어장의 문장 탭에서 단어를 탭), `KanjiDetailSheet`
+  (활용 단어), `KanaDetailDialog`(대표 단어). 그래서 주소도 `/dictionary/:id`가 아니라
+  `/word/:id`다. 옛 주소는 `router.tsx`의 `LegacyWordRedirect`가 넘겨준다 — **지우지 말 것**
+  (북마크·공유 링크가 깨진다).
+- **돌아가기는 들어온 자리로 간다.** 예전에는 "← 사전으로"가 박혀 있어서 **단어장에서 들어온
+  사람이 사전 검색 화면으로 떨어졌다**(콘솔은 조용하다 — 눌러본 사람만 엉뚱한 데로 간다).
+  링크를 만들 때 지금 화면을 `state.from`에 실어 보내고(`useWordLink()`), 상세 화면이 그걸
+  읽는다(`originFromState`). **단어 상세로 가는 링크를 새로 만들면 `<Link to={...}>`를 직접
+  쓰지 말고 `<Link {...wordLink(id)}>`로 쓸 것** — 빠뜨려도 화면은 멀쩡하고 돌아가기만 틀린다.
+  새로고침·주소 직접 열기처럼 state가 없으면 사전으로 폴백한다.
+- 조사(`으로`/`로`)는 `backLabel`이 받침을 보고 정한다 — 이름을 늘릴 때 "한자으로"가 조용히
+  나가지 않게. 판정은 `wordLink.test.ts`가 고정한다.
+- **사전 탭은 마지막으로 보던 단어로 돌아간다**(`useDictionaryView.lastWordId`, 메모리 전용).
+  단어를 읽다가 다른 탭에 갔다 오면 검색 목록이 아니라 그 단어가 다시 나오고, 한 번 더 누르면
+  목록으로 내려온다. 갱신은 페이지가 아니라 **Layout의 `useDictionaryTabMemory`가 경로를 보고
+  한 곳에서** 한다 — 입구가 다섯이라 페이지마다 심으면 한 곳만 빠져도 그 경로로 들어간 단어만
+  기억이 안 된다. `/dictionary`에 도착하면 지운다(목록이 지금 내 자리니까).
+- **기억하는 건 사전에서 들어간 단어뿐이다**(`planDictionaryTabMemory`). 단어장·회화·선생님에서
+  연 단어까지 기억하면, 거기서 단어 하나 열어본 것만으로 사전 탭의 자리가 바뀐다 — 그 화면들은
+  자기 탭이 따로 있으니 사전 탭이 대신 기억해줄 이유가 없다. 단어 → 단어로 이어 간 경우(문장 속
+  단어를 탭)는 **앞 단어가 사전 탭의 자리였을 때만** 이어받는다. 판정은 순수 함수로 떼어 두고
+  `wordLink.test.ts`가 고정한다 — 틀려도 콘솔은 조용하고, 탭을 눌렀을 때 엉뚱한 단어가 나오거나
+  보던 단어가 그냥 사라질 뿐이다. **"그대로 두기(`null`)"와 "지우기(`{ lastWordId: null }`)"를
+  헷갈리지 말 것.**
+- **하단 네비의 "사전"은 목적지가 고정이 아니라서 `NavLink`를 못 쓴다.** 켜짐 여부는
+  `isNavActive`가 직접 계산하고, 단어 상세에서도 사전 탭에 불이 들어오도록 `also: "/word"`를
+  준다 — 없으면 단어를 보는 동안 **어느 탭에도 불이 안 들어와** 지금 어디인지 알 수 없다.
 
 ## 단어 상세의 예문 (`wordExamples.ts` / `WordSenses`) 구현 노트
 - **예문 생성 버튼은 뜻마다 붙는다.** 표제어 하나에 뜻이 여러 개인 경우가 흔한데(掛ける처럼)

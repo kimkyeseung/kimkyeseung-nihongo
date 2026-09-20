@@ -1,6 +1,8 @@
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Link, NavLink, useLocation, useOutlet } from "react-router-dom";
+import { Link, useLocation, useNavigate, useOutlet } from "react-router-dom";
+import { useDictionaryView } from "../stores/pageStateStore";
+import { originFromState, planDictionaryTabMemory, wordPath } from "../lib/wordLink";
 import GamificationBar from "./GamificationBar";
 import Confetti from "./Confetti";
 import BadgeWatcher from "./BadgeWatcher";
@@ -11,13 +13,27 @@ import PromptApiOnboardingDialog from "./PromptApiOnboardingDialog";
 
 const NAV_ITEMS = [
   { to: "/gojuon", label: "오십음도", icon: "あ" },
-  { to: "/dictionary", label: "사전", icon: "📖" },
+  // `also`: 이 탭에 속하지만 주소가 다른 화면. 단어 상세(`/word/:id`)는 사전의 하위 주소가
+  // 아니게 됐지만(lib/wordLink.ts) 탭으로는 여전히 사전 자리다 — 이게 없으면 단어를 보는
+  // 동안 **어느 탭에도 불이 안 들어와** 지금 어디인지 알 수 없다.
+  { to: "/dictionary", label: "사전", icon: "📖", also: "/word" },
   { to: "/kanji", label: "한자", icon: "漢" },
   { to: "/wordbook", label: "단어장", icon: "🗂️" },
   { to: "/conversation", label: "회화", icon: "💬" },
   { to: "/writing", label: "작문", icon: "✏️" },
   { to: "/teacher", label: "선생님", icon: "🧑‍🏫" },
 ] as const;
+
+type NavItem = (typeof NAV_ITEMS)[number];
+
+/**
+ * 이 탭이 켜져 있는가. `NavLink`의 기본 매칭(하위 경로 포함)을 직접 계산한다 — 사전 탭은
+ * 목적지가 "마지막으로 보던 단어"로 바뀌기 때문에 `to`만 보고 판단할 수 없다.
+ */
+function isNavActive(pathname: string, item: NavItem): boolean {
+  const prefixes = "also" in item ? [item.to, item.also] : [item.to];
+  return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 // react-router의 Outlet은 위치가 바뀌면 즉시 다음 페이지로 교체돼서, AnimatePresence가
 // 이전 페이지를 붙잡고 exit 애니메이션을 재생할 기회가 없다. useOutlet()으로 현재
@@ -60,7 +76,79 @@ function AnimatedOutlet() {
   );
 }
 
+/**
+ * 하단 네비게이션.
+ *
+ * 사전 탭만 목적지가 고정이 아니다 — 마지막으로 보던 단어가 있으면 그 단어로 돌아간다
+ * (`lastWordId`, pageStateStore 주석). 이미 그 자리에 있으면 한 번 더 눌러 검색 목록으로
+ * 내려올 수 있다. 모바일 탭바의 흔한 동작이고, 이게 없으면 단어를 보다가 다른 탭에 갔다
+ * 왔을 때 읽던 단어가 매번 사라진다.
+ */
+function BottomNav() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const lastWordId = useDictionaryView((s) => s.lastWordId);
+
+  return (
+    /* 항목이 7개라 375px 화면에서는 한 칸이 40px대까지 좁아진다 — 고정 최소 너비(min-w-16)를
+       주면 넘쳐서 마지막 항목이 잘리므로, flex-1 + min-w-0으로 화면을 n등분하고 라벨은
+       줄바꿈 없이(whitespace-nowrap) 작은 글씨로 넣는다. 항목을 더 늘릴 거라면 이 계산을
+       다시 할 것(라벨을 줄이거나 아이콘만 남기는 식). */
+    <nav className="flex gap-0.5 border-t-4 border-primary/20 bg-white px-1 py-2 sm:gap-1 sm:px-2">
+      {NAV_ITEMS.map((item) => {
+        const isActive = isNavActive(pathname, item);
+        const isDictionary = item.to === "/dictionary";
+        const to = isDictionary && lastWordId ? wordPath(lastWordId) : item.to;
+
+        return (
+          <Link
+            key={item.to}
+            to={to}
+            aria-current={isActive ? "page" : undefined}
+            onClick={(e) => {
+              // 이미 그 자리를 보고 있는데 또 눌렀다 = "목록으로 내려가고 싶다"는 뜻이다.
+              if (isDictionary && pathname === to && to !== item.to) {
+                e.preventDefault();
+                navigate(item.to);
+              }
+            }}
+            className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[11px] whitespace-nowrap sm:text-sm ${
+              isActive ? "bg-primary/10 text-primary" : "text-gray-500"
+            }`}
+          >
+            <span className="text-xl leading-none font-ja">{item.icon}</span>
+            <span>{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/**
+ * 사전 탭의 "마지막 자리"를 경로 하나로 갱신한다 — **사전에서 들어간 단어만** 기억하고,
+ * 검색 목록으로 돌아오면 지운다. 무엇을 기억할지는 `planDictionaryTabMemory`가 정한다.
+ *
+ * 페이지마다 effect를 심지 않고 여기 모은 이유는, 단어 상세로 가는 입구가 다섯 곳이고
+ * 한 곳만 빠뜨려도 **콘솔은 조용한 채 그 경로로 들어간 단어만 기억이 안 되기** 때문이다.
+ */
+function useDictionaryTabMemory(location: ReturnType<typeof useLocation>) {
+  const setLastWordId = useDictionaryView((s) => s.setLastWordId);
+  const { pathname } = location;
+  // 문자열로 좁혀서 effect 의존성에 넣는다 — location.state를 그대로 넣으면 모양만 같고
+  // 참조가 다른 객체에 매번 다시 돌 수 있다.
+  const originTo = originFromState(location.state).to;
+
+  useEffect(() => {
+    // 지금 값은 getState로 읽는다. 구독하면 이 effect가 자기가 쓴 값 때문에 또 돈다.
+    const next = planDictionaryTabMemory(pathname, originTo, useDictionaryView.getState().lastWordId);
+    if (next) setLastWordId(next.lastWordId);
+  }, [pathname, originTo, setLastWordId]);
+}
+
 function Layout() {
+  useDictionaryTabMemory(useLocation());
+
   return (
     <div className="flex h-svh flex-col">
       <header className="flex items-center justify-between gap-2 border-b-4 border-primary/20 bg-white px-4 py-3 sm:px-6 sm:py-4">
@@ -117,22 +205,7 @@ function Layout() {
           주면 넘쳐서 마지막 항목이 잘리므로, flex-1 + min-w-0으로 화면을 n등분하고 라벨은
           줄바꿈 없이(whitespace-nowrap) 작은 글씨로 넣는다. 항목을 더 늘릴 거라면 이 계산을
           다시 할 것(라벨을 줄이거나 아이콘만 남기는 식). */}
-      <nav className="flex gap-0.5 border-t-4 border-primary/20 bg-white px-1 py-2 sm:gap-1 sm:px-2">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              `flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[11px] whitespace-nowrap sm:text-sm ${
-                isActive ? "bg-primary/10 text-primary" : "text-gray-500"
-              }`
-            }
-          >
-            <span className="text-xl leading-none font-ja">{item.icon}</span>
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
-      </nav>
+      <BottomNav />
 
       <Confetti />
       <BadgeWatcher />

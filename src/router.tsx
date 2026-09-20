@@ -1,6 +1,7 @@
 import { lazy } from "react";
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate, useParams } from "react-router-dom";
 import Layout from "./components/Layout";
+import { wordPath } from "./lib/wordLink";
 // 대문은 앱의 첫 화면이라 lazy로 나누면 오히려 청크 왕복이 한 번 더 생긴다. 대신 이 페이지가
 // 쓰는 큰 데이터는 전부 preloadAssets.ts의 동적 import 뒤에 있어서 진입 청크는 그대로 가볍다.
 import HomePage from "./pages/HomePage";
@@ -22,6 +23,15 @@ const CurriculumPage = lazy(() => import("./pages/CurriculumPage"));
 const AboutPage = lazy(() => import("./pages/AboutPage"));
 const PromptApiDiagnosticsPage = lazy(() => import("./pages/PromptApiDiagnosticsPage"));
 
+/**
+ * 옛 주소를 새 주소로 넘긴다. `replace`라 뒤로 가기가 이 리다이렉트로 되돌아오지 않는다.
+ * 여기는 lazy 청크가 아니라 진입 청크에 들어가도 괜찮다 — 컴포넌트가 이것뿐이다.
+ */
+function LegacyWordRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={id ? wordPath(id) : "/dictionary"} replace />;
+}
+
 export const router = createBrowserRouter([
   // 대문(`/`)은 헤더·하단 네비게이션이 없는 전체 화면이라 Layout 밖에 둔다.
   { path: "/", element: <HomePage /> },
@@ -32,7 +42,11 @@ export const router = createBrowserRouter([
       { path: "conversation", element: <ConversationPage /> },
       { path: "gojuon", element: <GojuonPage /> },
       { path: "dictionary", element: <DictionaryPage /> },
-      { path: "dictionary/:id", element: <WordDetailPage /> },
+      // 단어 상세는 **사전의 하위 화면이 아니다** — 단어장·회화·선생님·한자·오십음도에서도
+      // 들어오므로 주소도 사전 밑에 두지 않는다(lib/wordLink.ts 주석).
+      { path: "word/:id", element: <WordDetailPage /> },
+      // 예전 주소(`/dictionary/:id`)로 저장해둔 북마크·공유 링크를 깨뜨리지 않는다.
+      { path: "dictionary/:id", element: <LegacyWordRedirect /> },
       { path: "wordbook", element: <WordbookPage /> },
       { path: "kanji", element: <KanjiPage /> },
       { path: "writing", element: <WritingPage /> },

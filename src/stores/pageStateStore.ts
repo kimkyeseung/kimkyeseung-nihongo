@@ -96,15 +96,26 @@ export const useWritingOptions = create<WritingOptions>()(
 interface DictionaryView {
   query: string;
   committedQuery: string | null;
+  /**
+   * 사전 탭에서 마지막으로 있던 자리 — 단어 상세면 그 id, 검색 목록이면 null.
+   *
+   * 하단 네비의 "사전"이 여기로 돌아간다. 단어를 읽다가 다른 탭에 갔다 오면 검색 목록이
+   * 아니라 **보던 단어**가 다시 나온다(검색어·결과는 원래도 남아 있었지만 단어 화면만
+   * 매번 사라졌다). 갱신은 Layout이 경로를 보고 한 곳에서 한다.
+   */
+  lastWordId: string | null;
   setQuery: (query: string) => void;
   setCommittedQuery: (committedQuery: string | null) => void;
+  setLastWordId: (lastWordId: string | null) => void;
 }
 
 export const useDictionaryView = create<DictionaryView>((set) => ({
   query: "",
   committedQuery: null,
+  lastWordId: null,
   setQuery: (query) => set({ query }),
   setCommittedQuery: (committedQuery) => set({ committedQuery }),
+  setLastWordId: (lastWordId) => set({ lastWordId }),
 }));
 
 interface WritingDraft {

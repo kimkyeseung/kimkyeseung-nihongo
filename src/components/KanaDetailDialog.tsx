@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import SpeakButton from "./SpeakButton";
 import { getKanaWords } from "../lib/kanaWords";
+import { useWordLink } from "../hooks/useWordLink";
 import type { KanaCell, ScriptMode } from "../data/gojuon";
 
 /**
@@ -19,6 +20,7 @@ function KanaDetailDialog({
   mode: ScriptMode;
   onClose: () => void;
 }) {
+  const wordLink = useWordLink();
   // 애니메이션으로 사라지는 동안에도 내용이 남아있어야 해서 cell이 null이면 렌더만 건너뛴다.
   const char = cell ? (mode === "hiragana" ? cell.hiragana : cell.katakana) : "";
   const counterpart = cell ? (mode === "hiragana" ? cell.katakana : cell.hiragana) : "";
@@ -69,7 +71,7 @@ function KanaDetailDialog({
                     // 발음 버튼이 링크 안에 들어가면 안 되므로(중첩 인터랙티브 요소) 둘을 나란히 둔다.
                     <li key={word.id} className="flex items-center gap-2">
                       <Link
-                        to={`/dictionary/${word.id}`}
+                        {...wordLink(word.id)}
                         onClick={onClose}
                         className="min-w-0 flex-1 rounded-xl px-2 py-1.5 hover:bg-primary/10 active:bg-primary/20"
                       >

@@ -7,6 +7,7 @@ import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useConfettiStore } from "../stores/confettiStore";
 import { findWordById } from "../lib/dictionary";
+import { useWordLink } from "../hooks/useWordLink";
 import { XP_REWARDS } from "../lib/xpRewards";
 import SegmentedTabs from "../components/SegmentedTabs";
 import SentencebookList from "../components/SentencebookList";
@@ -237,6 +238,7 @@ function ReviewDeck({ group, entries }: { group: string; entries: WordbookEntry[
 }
 
 function WordList({ entries }: { entries: WordbookEntry[] }) {
+  const wordLink = useWordLink();
   const groups = useWordbookStore((s) => s.groups);
   const removeWord = useWordbookStore((s) => s.removeWord);
   const setWordGroups = useWordbookStore((s) => s.setWordGroups);
@@ -257,7 +259,7 @@ function WordList({ entries }: { entries: WordbookEntry[] }) {
           <li key={entry.wordId} className="rounded-2xl border-2 border-gray-100 bg-white p-3">
             <div className="flex items-center gap-2">
               {entry.mastered && <span className="text-primary">✓</span>}
-              <Link to={`/dictionary/${word.id}`} className="flex-1">
+              <Link {...wordLink(word.id)} className="flex-1">
                 <span className="font-ja text-lg">{word.word}</span>
                 <span className="ml-2 font-ja text-sm text-gray-400">{word.reading}</span>
               </Link>

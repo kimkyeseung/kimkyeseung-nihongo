@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import ClickableSentence from "../components/ClickableSentence";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import LoadingMascot from "../components/LoadingMascot";
@@ -13,6 +13,7 @@ import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import type { WordEntry } from "../types/dictionary";
 import { findWordById } from "../lib/dictionary";
+import { backLabel, originFromState } from "../lib/wordLink";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import {
   buildExamplePrompt,
@@ -302,6 +303,10 @@ function WordSenses({ entry }: { entry: WordEntry }) {
 
 function WordDetailPage() {
   const { id } = useParams<{ id: string }>();
+  // 돌아갈 곳은 **들어온 자리**다. 여기는 사전의 하위 화면이 아니라 단어장·회화·선생님·한자·
+  // 오십음도에서도 들어오는 화면이라, 예전처럼 "← 사전으로"를 박아두면 단어장에서 온 사람을
+  // 엉뚱한 데로 보낸다(lib/wordLink.ts 주석).
+  const origin = originFromState(useLocation().state);
   const entry = id ? findWordById(id) : undefined;
   const inWordbook = useWordbookStore((s) => (id ? Boolean(s.entries[id]) : false));
   const toggleWord = useWordbookStore((s) => s.toggleWord);
@@ -323,8 +328,8 @@ function WordDetailPage() {
   if (!entry) {
     return (
       <div className="p-6">
-        <Link to="/dictionary" className="text-info">
-          ← 사전으로
+        <Link to={origin.to} className="text-info">
+          {backLabel(origin)}
         </Link>
         <p className="mt-4 text-gray-400">단어를 찾을 수 없습니다 (id: {id}).</p>
       </div>
@@ -333,8 +338,8 @@ function WordDetailPage() {
 
   return (
     <div className="p-6">
-      <Link to="/dictionary" className="text-info">
-        ← 사전으로
+      <Link to={origin.to} className="text-info">
+        {backLabel(origin)}
       </Link>
 
       <div className="mt-3 flex items-center justify-between gap-3">

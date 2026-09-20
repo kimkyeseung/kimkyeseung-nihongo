@@ -7,6 +7,7 @@ import { searchDictionary, displayMeaning } from "../lib/dictionary";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useRecentSearchesStore } from "../stores/recentSearchesStore";
 import { useDictionaryView } from "../stores/pageStateStore";
+import { useWordLink } from "../hooks/useWordLink";
 import type { WordEntry } from "../types/dictionary";
 
 function ResultRow({ entry, onClick }: { entry: WordEntry; onClick: () => void }) {
@@ -28,6 +29,7 @@ function ResultRow({ entry, onClick }: { entry: WordEntry; onClick: () => void }
 function DictionaryPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const wordLink = useWordLink();
 
   // 검색어와 검색 결과는 탭을 옮겼다 돌아와도 그대로다(pageStateStore 주석 참고).
   const query = useDictionaryView((s) => s.query);
@@ -84,9 +86,10 @@ function DictionaryPage() {
       addRecent(entry.word);
       setShowSuggestions(false);
       setInputValue(entry.word);
-      navigate(`/dictionary/${entry.id}`);
+      const { to, state } = wordLink(entry.id);
+      navigate(to, { state });
     },
-    [addRecent, navigate, setInputValue]
+    [addRecent, navigate, setInputValue, wordLink]
   );
 
   const commitSearch = useCallback(
@@ -202,7 +205,13 @@ function DictionaryPage() {
             <ul className="flex flex-col gap-2">
               {results.map((entry) => (
                 <li key={entry.id}>
-                  <ResultRow entry={entry} onClick={() => navigate(`/dictionary/${entry.id}`)} />
+                  <ResultRow
+                    entry={entry}
+                    onClick={() => {
+                      const { to, state } = wordLink(entry.id);
+                      navigate(to, { state });
+                    }}
+                  />
                 </li>
               ))}
             </ul>

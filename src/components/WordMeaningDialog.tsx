@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import SpeakButton from "./SpeakButton";
 import { getKoreanReadingForWord } from "../lib/kanji";
+import { useWordLink } from "../hooks/useWordLink";
 import { translatePos } from "../lib/posTags";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useGamificationStore } from "../stores/gamificationStore";
@@ -12,6 +13,7 @@ import type { WordEntry } from "../types/dictionary";
 
 /** 클릭 가능한 문장(ClickableSentence)에서 단어를 탭했을 때 뜻을 보여주는 공용 다이얼로그. */
 function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose: () => void }) {
+  const wordLink = useWordLink();
   const inWordbook = useWordbookStore((s) => (word ? Boolean(s.entries[word.id]) : false));
   const toggleWord = useWordbookStore((s) => s.toggleWord);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
@@ -106,7 +108,7 @@ function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose:
             </ol>
 
             <Link
-              to={`/dictionary/${word.id}`}
+              {...wordLink(word.id)}
               onClick={onClose}
               className="btn-press mt-5 block w-full rounded-2xl bg-primary py-3 text-center font-bold text-white"
               style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
