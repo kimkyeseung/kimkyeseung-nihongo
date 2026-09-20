@@ -132,6 +132,7 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
                      usePromptApiTroubleshoot(런타임 실패 진단)
                    그 외: useSentenceDialogs(ClickableSentence에 딸리는 단어 뜻·한자 상세
                      다이얼로그 배선 — 문장을 보여주는 화면은 전부 이걸 쓴다),
+                     useStickToBottom(대화 목록을 바닥에 붙여 둔다 — 선생님·회화),
                      useJapaneseSpeech, useJapaneseInput(wanakana 입력 + 사전 자동완성),
                      useScriptInput(입력 문자 전환), useWordSuggestions(사전 자동완성 — 위 둘이 공유),
                      useDebouncedValue, useAssetPreload
@@ -786,6 +787,13 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   꺼내 바로 물어본다. **꺼내는 즉시 store를 비우는 게 중요하다** — StrictMode에서 effect가 두 번
   실행돼도 질문이 두 번 날아가지 않는다(실제로 이 가드 없이는 중복된다). 회화 말풍선과 선생님
   답변 속 예문 칩 양쪽에 같은 버튼이 붙어 있고, 이미 선생님 페이지에 있어도 같은 경로로 동작한다.
+- **대화 목록을 바닥에 붙이는 건 `useStickToBottom`이다(회화와 공유).**
+  `scrollIntoView({ behavior: "smooth" })`를 메시지가 바뀔 때마다 부르지 말 것 — 스트리밍은
+  청크마다 메시지를 바꾸므로 1초에 수십 번 불리고, 부드러운 스크롤이 매번 다시 출발하면서
+  **화면이 위아래로 떨린다**(두 번째 문답부터 보인다 — 그때부터 대화가 화면을 넘긴다).
+  애니메이션 없이 즉시 붙이면 떨릴 것이 없다. 훅에 **`isAnswering`(회화는 `isStreaming`)도
+  같이 넘길 것** — 답변이 끝나며 숨겨뒀던 입력 영역이 돌아오면 목록이 짧아지는데, 그때
+  메시지는 바뀌지 않아서 안 넘기면 **답변 끝이 화면 밖에 남는다**(실측 113px).
 - **입력 영역(입력창·보내기·전환 토글)은 답변 중에 통째로 숨긴다.** 어차피 보낼 수 없는
   상태이고, "생각하는 중" 마스코트에 시선이 가도록 비워두는 편이 낫다. 답변이 끝나면 돌아온다.
 - 보내기 버튼은 종이비행기 **인라인 SVG**다(`PaperPlaneIcon`). `public/icons.svg`는 템플릿

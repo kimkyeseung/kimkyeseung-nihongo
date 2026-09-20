@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import ClickableSentence from "../components/ClickableSentence";
@@ -11,6 +11,7 @@ import SentenceGrammar from "../components/SentenceGrammar";
 import SpeakButton from "../components/SpeakButton";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
 import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
+import { useStickToBottom } from "../hooks/useStickToBottom";
 import { useUserProfileStore } from "../stores/userProfileStore";
 import { useConversationSessionStore } from "../stores/conversationSessionStore";
 import { LEVELS, SCENARIOS, type Level, type Scenario } from "../lib/conversationPrompts";
@@ -121,12 +122,9 @@ function ConversationPage() {
   const sendMessage = useConversationSessionStore((s) => s.sendMessage);
 
   const japaneseInput = useJapaneseInput<HTMLInputElement>();
-  const listEndRef = useRef<HTMLDivElement>(null);
   const { handlers: sentenceHandlers, dialogs: sentenceDialogs } = useSentenceDialogs();
-
-  useEffect(() => {
-    listEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  // 답변이 자라는 동안 목록을 바닥에 붙여 둔다(위로 올려 읽는 중이면 따라가지 않는다).
+  const scrollRef = useStickToBottom<HTMLDivElement>(messages, isStreaming);
 
   const handleSend = useCallback(() => {
     const userText = japaneseInput.value.trim();
@@ -230,7 +228,7 @@ function ConversationPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-3">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-3">
         {messages.length === 0 && (
           <p className="mt-4 text-center text-sm text-gray-300">
             일본어로 말을 걸어보세요! 🗻
@@ -285,7 +283,6 @@ function ConversationPage() {
             </div>
           ))}
         </div>
-        <div ref={listEndRef} />
       </div>
 
       <div className="flex gap-2 border-t border-gray-100 p-3">

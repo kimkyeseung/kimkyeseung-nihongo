@@ -13,6 +13,7 @@ import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice
 import { useAiModel } from "../hooks/useAiModel";
 import { useCurriculumPlan } from "../hooks/useCurriculumPlan";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
+import { useStickToBottom } from "../hooks/useStickToBottom";
 import { useScriptInput, type InputScript } from "../hooks/useScriptInput";
 import { useWordSuggestions } from "../hooks/useWordSuggestions";
 import {
@@ -149,10 +150,8 @@ function TeacherPage() {
     { enabled: script === "ja" }
   );
 
-  const listEndRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    listEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  // 답변이 자라는 동안 목록을 바닥에 붙여 둔다(위로 올려 읽는 중이면 따라가지 않는다).
+  const scrollRef = useStickToBottom<HTMLDivElement>(messages, isAnswering);
 
   /**
    * 오늘 첫 방문이면 인사를 한 줄 띄운다(모델이 아니라 앱이 — dailyPlan.ts 주석 참고).
@@ -421,7 +420,7 @@ function TeacherPage() {
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-3">
           {/* 지난 날짜는 읽기만 한다. 왜 이어서 못 쓰는지 한 줄로 말해주지 않으면 입력창이
               사라진 게 고장처럼 보인다. */}
           {!viewingToday && (
@@ -486,7 +485,6 @@ function TeacherPage() {
               </div>
             ))}
           </div>
-          <div ref={listEndRef} />
         </div>
 
         {/* 답변을 받는 동안에는 입력 영역을 통째로 감춘다 — 어차피 보낼 수 없는 상태이고,
