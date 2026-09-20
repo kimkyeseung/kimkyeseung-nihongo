@@ -100,11 +100,10 @@ function pickEntry(candidates: WordEntry[]): WordEntry {
 
 /**
  * LLM이 생성한 일본어 문장을 dictionary.json과 그리디 최장일치로 대조해 클릭 가능한
- * 단어/조사 구간으로 나눈다. furigana.ts의 annotateFurigana와 같은 방식이지만, 후리가나가
- * 없는 항목(조사 등)까지 전부 포함한 전체 사전을 쓰고 한 글자짜리 매치도 허용한다는 점이
- * 다르다(は/が/を 같은 조사가 대부분 한 글자라서). 사전에 없는 부분은 클릭 불가능한 원문
- * 그대로 남긴다 — 이 프로젝트 규칙상 단어 뜻은 LLM이 지어내면 안 되고 항상 정적 사전에서만
- * 조회해야 하기 때문이다.
+ * 단어/조사 구간으로 나눈다. 후리가나가 없는 항목(조사 등)까지 전부 포함한 전체 사전을 쓰고
+ * 한 글자짜리 매치도 허용한다(は/が/を 같은 조사가 대부분 한 글자라서). 사전에 없는 부분은
+ * 클릭 불가능한 원문 그대로 남긴다 — 이 프로젝트 규칙상 단어 뜻은 LLM이 지어내면 안 되고
+ * 항상 정적 사전에서만 조회해야 하기 때문이다.
  *
  * 단어로 안 잡히는 나머지 글자 중 한자(예: 활용형이라 사전 표제어와 형태가 다른 開いた의 開)는
  * kanji.json과 대조해 한 글자 단위로 한자 정보만이라도 조회할 수 있게 한다 — 단어 사전에 없다고
@@ -158,7 +157,7 @@ export function segmentSentenceIntoWords(text: string): SentenceSegment[] {
  * **표제어의 표기**를 설명하는 것이라(為 → ruby:"為", rt:"ため"), 가나로 쓴 자리에 그대로
  * 그리면 화면의 문장이 바뀐다 — 읽기 색인을 넣은 직후 「〜のため、」가 「〜の為ため、」로,
  * 「ください」가 「下ください」로 렌더됐다. 사전 정보를 덧씌우는 것이지 원문을 고치는 게
- * 아니다(furigana.ts의 annotateFurigana와 같은 원칙).
+ * 아니다.
  */
 export function rubyFor(segment: SentenceSegment): Furigana[] | null {
   if (!segment.word?.furigana) return null;

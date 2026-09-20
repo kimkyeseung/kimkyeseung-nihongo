@@ -99,7 +99,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        ConversationSessionController(회화 세션 — 페이지 밖에 둬야 탭 이동에도
                        스트리밍이 안 끊긴다) · PromptApiOnboardingDialog(첫 접속 1회 안내 모달)
                      학습 UI: KanjiStrokeOrder, KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
-                       FuriganaText, ClickableSentence, WritingDiff, BadgeSheet, GamificationBar,
+                       ClickableSentence(후리가나·단어 탭 — 일본어 문장은 전부 이걸로 그린다),
+                       WritingDiff, BadgeSheet, GamificationBar,
                        KanaDetailDialog, WordMeaningDialog, JapaneseSuggestionList,
                        MarkdownAnswer(선생님 답변 렌더링), LoadingMascot, ProgressBar,
                        AssetLoadingBar(대문 프리로드) ·
@@ -137,7 +138,7 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
                      useDebouncedValue, useAssetPreload
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, kanaWords.ts,
                      posTags.ts, sentenceWords.ts, srs.ts) +
-                     furigana.ts(LLM 응답에 사전 후리가나 오버레이) + diff.ts(문자 단위 LCS diff) +
+                     diff.ts(문자 단위 LCS diff) +
                      verbConjugation.ts(て형 등 규칙 기반 활용) + kanjiQuiz.ts(한자 읽기 퀴즈 생성) +
                      프롬프트: conversationPrompts.ts · teacherPrompts.ts · wordExamples.ts ·
                        writingCorrection.ts(첨삭 프롬프트/응답 파싱) ·
@@ -476,10 +477,13 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   `navigator.clipboard`는 권한/보안 컨텍스트에 따라 거부되므로(이 프로젝트 미리보기
   브라우저에서 실제로 NotAllowedError) 임시 textarea + `execCommand("copy")` 폴백이 있다 —
   클립보드 복사를 새로 붙일 때 이 컴포넌트를 재사용할 것.
-- 후리가나는 LLM에게 만들게 하지 않는다. `src/lib/furigana.ts`의 `annotateFurigana`가
-  `dictionary.json`에 이미 있는 단어만 그리디 최장일치로 찾아 후리가나를 입힌다
-  (사전에 없는 단어/표현은 그냥 원문 그대로 — 이 프로젝트의 "사전적 사실은 LLM이 지어내지
-  않는다" 규칙과 동일한 이유). `FuriganaText` 컴포넌트로 렌더링.
+- 후리가나는 LLM에게 만들게 하지 않는다. `sentenceWords.ts`가 `dictionary.json`에 이미 있는
+  단어만 그리디 최장일치로 찾고, `rubyFor`가 **표기가 표제어와 정확히 같은 자리에만** 읽기를
+  덧씌운다(사전에 없는 단어/표현은 그냥 원문 그대로 — 이 프로젝트의 "사전적 사실은 LLM이
+  지어내지 않는다" 규칙과 동일한 이유). 렌더링은 `ClickableSentence`가 맡는다 — 후리가나와
+  단어 탭이 같은 분절 결과를 써야 해서 한 컴포넌트다. 자세한 건 "문장 속 단어 클릭" 절 참고.
+  (예전에는 후리가나 전용 경로가 `lib/furigana.ts` + `FuriganaText`로 따로 있었다. 같은 그리디
+  매칭을 두 벌 들고 있다가 한쪽만 고치는 일이 생겨서 지웠다 — 새로 만들지 말 것.)
 - **테스트 환경 참고**: 이 브라우저(미리보기)에는 실제로 `window.LanguageModel`이 존재하지만,
   실제 온디바이스 모델이 아니라 입력을 그대로 되돌려주는 스텁이다("On-device model is not
   available in Chromium, this API is just echoing back the input: ..."). 덕분에 실제 세션
