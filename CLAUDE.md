@@ -99,7 +99,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        ConversationSessionController(회화 세션 — 페이지 밖에 둬야 탭 이동에도
                        스트리밍이 안 끊긴다) · PromptApiOnboardingDialog(첫 접속 1회 안내 모달)
                      학습 UI: KanjiStrokeOrder, KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
-                       FuriganaText, ClickableSentence, WritingDiff, BadgeSheet, GamificationBar,
+                       ClickableSentence(후리가나·단어 탭 — 일본어 문장은 전부 이걸로 그린다),
+                       WritingDiff, BadgeSheet, GamificationBar,
                        KanaDetailDialog, WordMeaningDialog, JapaneseSuggestionList,
                        MarkdownAnswer(선생님 답변 렌더링), LoadingMascot, ProgressBar,
                        AssetLoadingBar(대문 프리로드) ·
@@ -138,7 +139,7 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
                      useDebouncedValue, useAssetPreload
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, kanaWords.ts,
                      posTags.ts, sentenceWords.ts, srs.ts) +
-                     furigana.ts(LLM 응답에 사전 후리가나 오버레이) + diff.ts(문자 단위 LCS diff) +
+                     diff.ts(문자 단위 LCS diff) +
                      verbConjugation.ts(て형 등 규칙 기반 활용) + kanjiQuiz.ts(한자 읽기 퀴즈 생성) +
                      프롬프트: conversationPrompts.ts · teacherPrompts.ts · wordExamples.ts ·
                        writingCorrection.ts(첨삭 프롬프트/응답 파싱) ·
@@ -477,10 +478,13 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   `navigator.clipboard`는 권한/보안 컨텍스트에 따라 거부되므로(이 프로젝트 미리보기
   브라우저에서 실제로 NotAllowedError) 임시 textarea + `execCommand("copy")` 폴백이 있다 —
   클립보드 복사를 새로 붙일 때 이 컴포넌트를 재사용할 것.
-- 후리가나는 LLM에게 만들게 하지 않는다. `src/lib/furigana.ts`의 `annotateFurigana`가
-  `dictionary.json`에 이미 있는 단어만 그리디 최장일치로 찾아 후리가나를 입힌다
-  (사전에 없는 단어/표현은 그냥 원문 그대로 — 이 프로젝트의 "사전적 사실은 LLM이 지어내지
-  않는다" 규칙과 동일한 이유). `FuriganaText` 컴포넌트로 렌더링.
+- 후리가나는 LLM에게 만들게 하지 않는다. `sentenceWords.ts`가 `dictionary.json`에 이미 있는
+  단어만 그리디 최장일치로 찾고, `rubyFor`가 **표기가 표제어와 정확히 같은 자리에만** 읽기를
+  덧씌운다(사전에 없는 단어/표현은 그냥 원문 그대로 — 이 프로젝트의 "사전적 사실은 LLM이
+  지어내지 않는다" 규칙과 동일한 이유). 렌더링은 `ClickableSentence`가 맡는다 — 후리가나와
+  단어 탭이 같은 분절 결과를 써야 해서 한 컴포넌트다. 자세한 건 "문장 속 단어 클릭" 절 참고.
+  (예전에는 후리가나 전용 경로가 `lib/furigana.ts` + `FuriganaText`로 따로 있었다. 같은 그리디
+  매칭을 두 벌 들고 있다가 한쪽만 고치는 일이 생겨서 지웠다 — 새로 만들지 말 것.)
 - **테스트 환경 참고**: 이 브라우저(미리보기)에는 실제로 `window.LanguageModel`이 존재하지만,
   실제 온디바이스 모델이 아니라 입력을 그대로 되돌려주는 스텁이다("On-device model is not
   available in Chromium, this API is just echoing back the input: ..."). 덕분에 실제 세션
@@ -1155,6 +1159,48 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   `WordMeaningDialog` 둘 다 품사 칩을 그리므로, 새로 품사를 보여주는 화면을 또 만들 때도
   raw 코드를 그대로 쓰지 말고 이 함수를 재사용할 것.
 
+## 단어 상세의 예문 (`wordExamples.ts` / `WordSenses`) 구현 노트
+- **예문 생성 버튼은 뜻마다 붙는다.** 표제어 하나에 뜻이 여러 개인 경우가 흔한데(掛ける처럼)
+  예전에는 페이지 맨 아래에 버튼이 하나뿐이라, 모델이 그중 아무 뜻이나 집어 **학습자가 방금
+  읽은 뜻과 상관없는 예문**을 내놓곤 했다. 그래서 뜻 목록과 예문이 한 컴포넌트(`WordSenses`)에
+  있다 — 뜻 `<ol>`을 예문과 떼어놓으면 버튼을 뜻 밑에 둘 수 없다.
+- **고른 뜻만 넘기는 것으로는 부족했다 (실제로 겪었다).** 座る의 뜻 2(to assume a position)로
+  만든 예문 3개 중 **2개가 뜻 1("앉다")**이었고, 나머지 하나는 자동사에 목적어를 붙인 비문
+  (「その役**を**座っています」)이었다. 모델은 "다른 뜻도 있지만 위 뜻만"이라고 쓰면 자기가 아는
+  **가장 흔한 뜻으로 돌아간다.** 그래서 `buildExamplePrompt(entry, senseIndex)`가 사전에 이미
+  있는 두 가지를 더 넘긴다:
+  - **안 되는 뜻을 직접** 보여준다(`❌ 이 뜻으로는 만들지 마세요: …`). 나머지 뜻은 **첫 gloss
+    하나씩만** 뽑아 6개까지 — 통째로 넣으면 지켜야 할 ✅ 줄이 긴 목록에 파묻힌다.
+  - **자/타동사**(`sense.pos`의 `vi`). 자동사면 「を」를 쓰지 말라고 못박는다. 이건 사전이 아는
+    사실이라 프롬프트에 안 넘길 이유가 없었다.
+  - **여전히 프롬프트에 기댄 방어라 완전하지 않다.** 표기 유지(scriptPreference)와 달리 "이
+    문장이 어느 뜻으로 쓰였는가"는 사전만으로 판정할 수 없어서 코드로 확인할 방법이 없다.
+    결과가 계속 흔한 뜻으로 쏠리면 프롬프트를 더 조이기 전에 그 점부터 감안할 것.
+- **난이도 버튼(🟡 더 쉽게 / 🔵 더 어렵게)도 예문마다 붙는다.** 예전에는 목록 전체에 하나씩만
+  있어서 누르면 앞의 예문과 **아무 상관 없는 새 문장 세 개**가 또 쌓였다. 배우는 지점은 같은
+  내용이 어떻게 복잡해지는가라(「りんごを食べました」 →
+  「昨日友達と一緒においしいりんごを食べながら遊びました」), `buildRewritePrompt`가 원문을
+  프롬프트에 함께 넣고 "내용은 유지하고 구성만 바꾸라"고 지시한다. 결과는 `insertVariant`가
+  **원본 바로 뒤에** 끼워 넣는다 — 위아래로 떨어지면 비교할 수가 없어 버튼의 의미가 없다.
+  - 자리는 **문장 오른쪽에 세로 두 칸**이다. 가로 한 줄로 깔았더니 예문 하나가 카드 두 배
+    높이를 먹어서 목록이 금세 화면을 넘겼다. 문장 쪽 `div`에 **`min-w-0`을 반드시 줄 것** —
+    flex 아이템은 기본이 `min-width: auto`라 없으면 긴 일본어 문장이 접히는 대신 버튼을 화면
+    밖으로 밀어낸다(헤더/네비 레이아웃 절의 `min-h-0`과 같은 함정이다).
+- **`shiftJlptLevel`의 부호를 조심할 것 (실제로 뒤집혀 있었다).** `JLPT_LEVELS`는 쉬운 쪽(N5)이
+  앞이라 쉽게 가려면 인덱스를 **빼야** 한다. 예전엔 `easier`에 +1을 줘서 "더 쉬운 예문"이 한
+  급수 위의 어휘를 요구했다. 프롬프트에 숫자로만 들어가는 값이라 콘솔에는 아무것도 안 찍히고,
+  결과가 어려워져도 "모델이 말을 안 듣나 보다" 싶을 뿐이다(`wordExamples.test.ts`가 고정한다).
+- **AI 안내 화면은 예문 버튼 자리만 대신한다.** 컴포넌트 전체를 early return으로 대신하면
+  AI를 못 쓰는 브라우저에서 **뜻풀이까지 통째로 사라진다** — 뜻은 사전 데이터라 AI와 상관이 없다.
+  `"unsupported"`와 `"unavailable"`을 둘 다 보는 규칙은 그대로다("AI 안내 흐름" 참고).
+- **XP는 성공한 생성에만, 그 단어의 첫 예문에만 준다.** 예전엔 버튼을 누르는 순간 무조건
+  지급해서 연타로 무한히 쌓였고 생성이 실패해도 들어갔다 — 오십음도에서 고쳤던 것과 같은
+  문제다. 예문 목록은 메모리 전용이라 새로고침하면 한 번 더 받을 수 있지만, 그때마다 모델을
+  실제로 돌려야 해서 긁을 수 있는 구멍은 아니다.
+- 스트리밍 중인 예문은 `ClickableSentence` 없이 **글자만** 보여준다(반 토막 단어는 눌러도
+  의미가 없고, 청크마다 문장을 다시 분절할 이유도 없다). 확정된 뒤에야 후리가나·단어 탭·
+  `SentenceActions`·`SentenceGrammar`가 붙는다.
+
 ## 문장 속 문법 패턴 (`grammarPatterns.ts`) 구현 노트
 - **사전은 단어만 안다.** 「〜のため」의 ため를 눌러도 나오는 건 為(good, advantage...)뿐이고,
   정작 배우고 싶은 "~하기 위해서"는 문법이라 사전에 없다. 그 설명은 커리큘럼이 이미 들고
@@ -1190,6 +1236,15 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   `usuallyKana`로 가져오고, 그 항목만 읽기로 찾는다. 판정은 **첫 번째 뜻에 `uk`가 붙었을 때만**
   참이다 — "하나라도 있으면"으로 하면 島가 걸린다(첫 뜻은 "island"고 uk는 은어인 "구역" 뜻에만
   붙어 있다). 為·事·彼処·下さい는 첫 뜻부터 uk다.
+- **그리디는 낱말 경계를 모른다 — 「今日は」가 인사말로 잡혔다 (실제로 보고받았다).**
+  「今日は天気が良いです」의 앞 세 글자가 사전의 `今日は`(こんにちは)에 걸려서, **今日 위에
+  こんにち라는 후리가나**가 뜨고 눌러보면 "hello"가 나왔다. 여기의 は는 조사고 今日는 きょう다.
+  `NOT_A_STANDALONE_SPELLING`이 이 **표기만** 색인에서 빼고, `uk`라 읽기 색인에는 그대로 있어
+  **こんにちは라고 가나로 쓰면 여전히 인사말로 잡힌다**(실제로 그렇게 쓰는 말이다).
+  - **"짧은 쪽을 고른다"는 일반 규칙으로 가지 말 것 (데이터로 확인했다).** 표기가
+    `앞 단어 + 조사`이고 그 앞 단어도 표제어인 항목이 52개인데 非常に·急に·別に·実は·何か·
+    誰か·更に·直ぐに처럼 **긴 쪽이 맞는 진짜 복합어가 대부분**이다. 짧은 쪽을 택하면 그게 다
+    깨진다. 실제로 깨지는 건 한자로 거의 안 쓰는 인사말(今日は·今晩は)뿐이라 그것만 막았다.
 - 추가 가드 둘: **한 글자 읽기는 안 넣는다**(為(す) 하나가 모든 です·ます를 오염시켰다),
   그리고 `NOT_A_STANDALONE_READING`(`まし`·`まれ`) — 커리큘럼 예문 123개를 전수로 훑어
   실제로 틀린 것만 담았다. 나머지 매치(この·よう·ここ·ため·ください·せい·おかげ…)는 전부

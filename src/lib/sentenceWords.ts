@@ -46,6 +46,24 @@ let maxWordLength = 1;
  */
 const NOT_A_STANDALONE_READING = new Set(["まし", "まれ"]);
 
+/**
+ * **표기로는 찾지 않을 표제어** (읽기로는 그대로 찾는다).
+ *
+ * 그리디 최장일치는 낱말 경계를 모르기 때문에, 「今日は天気が良いです」의 앞 세 글자가
+ * 사전의 `今日は`(こんにちは, "안녕하세요")에 걸린다. 그러면 **今日에 こんにち라는 후리가나가
+ * 붙고**(실제로 보고받았다) 눌러보면 "hello"가 뜬다 — 여기의 は는 조사이고 今日는 きょう다.
+ *
+ * **"짧은 쪽을 고른다"는 일반 규칙으로 가면 안 된다 (데이터로 확인했다).** 표기가
+ * `앞 단어 + 조사`인데 그 앞 단어도 사전에 있는 표제어가 52개인데, 非常に·急に·別に·実は·
+ * 何か·誰か·更に·直ぐに처럼 **긴 쪽이 맞는 진짜 복합어가 대부분**이다. 짧은 쪽을 택하면
+ * 그것들이 전부 깨진다.
+ *
+ * 실제로 깨지는 건 **한자로는 거의 안 쓰는 인사말** 둘뿐이라 그것만 막는다. 둘 다 `uk`라
+ * 읽기 색인에는 그대로 들어가므로, **こんにちは라고 가나로 쓰면 여전히 인사말로 잡힌다**
+ * (실제로 그렇게 쓰는 말이다). 새 오탐을 발견하면 여기에 한 줄 더할 것.
+ */
+const NOT_A_STANDALONE_SPELLING = new Set(["今日は", "今晩は"]);
+
 function addTo(index: Map<string, WordEntry[]>, key: string, entry: WordEntry) {
   const list = index.get(key);
   if (list) list.push(entry);
@@ -56,8 +74,10 @@ function buildIndexes() {
   const words = new Map<string, WordEntry[]>();
   const readings = new Map<string, WordEntry[]>();
   for (const entry of dictionary) {
-    addTo(words, entry.word, entry);
-    maxWordLength = Math.max(maxWordLength, entry.word.length);
+    if (!NOT_A_STANDALONE_SPELLING.has(entry.word)) {
+      addTo(words, entry.word, entry);
+      maxWordLength = Math.max(maxWordLength, entry.word.length);
+    }
     // 한 글자짜리 읽기는 넣지 않는다 — 활용 어미와 부딪히기만 한다. 為(す) 하나 때문에
     // 「です」·「ます」의 끝 글자가 전부 단어로 잡혔다.
     if (
@@ -80,11 +100,10 @@ function pickEntry(candidates: WordEntry[]): WordEntry {
 
 /**
  * LLM이 생성한 일본어 문장을 dictionary.json과 그리디 최장일치로 대조해 클릭 가능한
- * 단어/조사 구간으로 나눈다. furigana.ts의 annotateFurigana와 같은 방식이지만, 후리가나가
- * 없는 항목(조사 등)까지 전부 포함한 전체 사전을 쓰고 한 글자짜리 매치도 허용한다는 점이
- * 다르다(は/が/を 같은 조사가 대부분 한 글자라서). 사전에 없는 부분은 클릭 불가능한 원문
- * 그대로 남긴다 — 이 프로젝트 규칙상 단어 뜻은 LLM이 지어내면 안 되고 항상 정적 사전에서만
- * 조회해야 하기 때문이다.
+ * 단어/조사 구간으로 나눈다. 후리가나가 없는 항목(조사 등)까지 전부 포함한 전체 사전을 쓰고
+ * 한 글자짜리 매치도 허용한다(は/が/を 같은 조사가 대부분 한 글자라서). 사전에 없는 부분은
+ * 클릭 불가능한 원문 그대로 남긴다 — 이 프로젝트 규칙상 단어 뜻은 LLM이 지어내면 안 되고
+ * 항상 정적 사전에서만 조회해야 하기 때문이다.
  *
  * 단어로 안 잡히는 나머지 글자 중 한자(예: 활용형이라 사전 표제어와 형태가 다른 開いた의 開)는
  * kanji.json과 대조해 한 글자 단위로 한자 정보만이라도 조회할 수 있게 한다 — 단어 사전에 없다고
@@ -138,7 +157,7 @@ export function segmentSentenceIntoWords(text: string): SentenceSegment[] {
  * **표제어의 표기**를 설명하는 것이라(為 → ruby:"為", rt:"ため"), 가나로 쓴 자리에 그대로
  * 그리면 화면의 문장이 바뀐다 — 읽기 색인을 넣은 직후 「〜のため、」가 「〜の為ため、」로,
  * 「ください」가 「下ください」로 렌더됐다. 사전 정보를 덧씌우는 것이지 원문을 고치는 게
- * 아니다(furigana.ts의 annotateFurigana와 같은 원칙).
+ * 아니다.
  */
 export function rubyFor(segment: SentenceSegment): Furigana[] | null {
   if (!segment.word?.furigana) return null;
