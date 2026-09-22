@@ -12,7 +12,9 @@ export default defineConfig({
       // 강제 새로고침이 아니라 물어본다 — 회화/선생님 스트리밍 중이거나 2GB Gemma 모델을
       // 받는 중에 배포가 화면을 갈아치우면 안 된다(PwaUpdatePrompt.tsx가 짝이다).
       registerType: 'prompt',
-      includeAssets: ['favicon.svg', 'favicon.ico'],
+      // hero.png(1.1MB)는 설치한 앱의 첫 화면(start_url `/`)이라 오프라인에서도 떠야 한다 —
+      // 기본 globPatterns는 js/css/html뿐이라 안 넣으면 오프라인 대문에 깨진 그림이 뜬다.
+      includeAssets: ['favicon.svg', 'favicon.ico', 'hero.png'],
       manifest: {
         name: '김계승 일본어',
         short_name: '김계승 일본어',
@@ -73,12 +75,20 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: {
               cacheName: 'google-fonts-webfonts',
-              expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              // Jua/Kosugi Maru는 CJK라 unicode-range로 수십~백여 개의 woff2로 쪼개져 온다
+              // (한 화면에서만 14개를 받았다). 8개로 두면 계속 밀려나 오프라인에서 글꼴이
+              // 군데군데 시스템 폰트로 떨어진다. 실제로 쓴 조각만 들어오므로 넉넉히 둔다.
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 365 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
         ],
         cleanupOutdatedCaches: true,
+        // 처음 깔린 서비스워커가 지금 열린 페이지를 바로 맡는다. 없으면 첫 방문 동안 연
+        // 사전·한자 데이터가 runtimeCaching을 거치지 않아, 그날 본 페이지도 오프라인에서
+        // 안 열린다. 업데이트는 여전히 PwaUpdatePrompt가 물어본다(skipWaiting은 켜지 않는다 —
+        // 새 버전은 사용자가 "새로고침"을 눌러야 대기 상태에서 넘어온다).
+        clientsClaim: true,
       },
       // 개발 서버(vite dev)에는 서비스워커를 켜지 않는다 — 사용자가 직접 띄워 쓰는 HMR
       // 루프를 건드리지 않기 위함. 오프라인 테스트는 `npm run build && npm run preview`로.

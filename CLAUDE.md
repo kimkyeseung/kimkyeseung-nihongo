@@ -1333,6 +1333,27 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
 - 파일시스템이 rewrite보다 먼저라서 `/assets/*`·`/hero.png` 같은 실제 파일은 그대로 나간다.
   대신 없는 파일을 요청해도 404 대신 index.html(200)이 돌아온다 — SPA에서는 정상이다.
 
+## PWA (`vite-plugin-pwa`) 구현 노트
+- 설정은 `vite.config.ts`, 등록·업데이트 안내는 `PwaUpdatePrompt`다. 업데이트는 **물어본다**
+  (`registerType: "prompt"`) — 스트리밍·2GB 다운로드 중에 화면을 갈아치우면 안 된다.
+  `skipWaiting`을 켜지 말 것. `clientsClaim`은 켜 둔다(첫 설치 때만 효과가 있고, 없으면 첫
+  방문 동안 연 사전·한자 데이터가 런타임 캐시에 안 들어간다).
+- **`PwaUpdatePrompt`는 `App.tsx`에 둔다 — Layout에 두지 말 것 (실제로 겪은 버그).**
+  `useRegisterSW`가 곧 서비스워커 등록이라, Layout에 있을 땐 대문(`/`)만 보고 간 사용자에게
+  서비스워커가 아예 안 깔렸다. 설치한 앱의 `start_url`이 바로 그 대문이다.
+- 프리캐시는 앱 셸만(~1MB, 42개)이다. dictionary/kanjivg/kanji 청크는 `globIgnores`로 빼고
+  `runtimeCaching`(CacheFirst)이 **그 페이지를 실제로 열 때** 넣는다 — 그래서 한 번도 안 연
+  화면(예: 획순)은 오프라인에서 안 된다. 정상이다.
+- `hero.png`는 `includeAssets`에 있어야 한다(기본 globPatterns는 js/css/html뿐). 빼면
+  오프라인 대문에 깨진 그림이 뜬다. 그림을 바꿔도 이름이 같으면 revision이 바뀌어 다시 받는다.
+- 글꼴(Jua·Kosugi Maru)은 unicode-range로 수십 개 woff2로 쪼개져 온다 — 한 화면에서만
+  14개였다. 캐시 `maxEntries`를 작게 두면 오프라인에서 글꼴이 군데군데 떨어진다.
+- 오프라인 확인은 `npm run build` 후 미리보기(`.claude/launch.json`의 `preview`)를 띄워
+  한 번 둘러본 다음 **서버를 내리고** 새로고침하면 된다. `vite dev`에는 서비스워커가 없다.
+- LiteRT-LM WASM(jsDelivr)과 Gemma 모델은 캐시하지 않는다 — WASM은 브라우저 HTTP 캐시가,
+  모델은 OPFS가 맡는다. 모델 다운로드(Range 요청)가 서비스워커를 거치지 않게 하려는 것이기도
+  하다. huggingface·jsDelivr에 runtimeCaching 규칙을 추가하지 말 것.
+
 ## 데이터 파이프라인 (완료됨)
 `src/data/`의 사전/한자/획순 JSON은 이미 생성되어 있다(원본 5종을 받아 가공한다). 원본을 다시 받거나 갱신하려면:
 ```bash

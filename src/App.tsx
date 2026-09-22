@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { RouterProvider } from "react-router-dom";
 import { router } from "./router";
+import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import { useLearnerMemoryStore } from "./stores/learnerMemoryStore";
 
 function App() {
@@ -18,6 +19,10 @@ function App() {
   return (
     <>
       <RouterProvider router={router} />
+      {/* 서비스워커 등록도 여기서 한다 — Layout에 두면 대문(`/`)만 보고 간 사용자에게는
+          서비스워커가 영영 안 깔려서, 설치한 앱을 오프라인으로 켜면 빈 화면이 된다(실제로
+          그랬다 — 위 loadMemory와 같은 이유다). */}
+      <PwaUpdatePrompt />
       <Analytics />
     </>
   );
