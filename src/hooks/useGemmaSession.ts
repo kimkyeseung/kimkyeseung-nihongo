@@ -51,7 +51,13 @@ export function useGemmaSession(systemPrompt: string, enabled: boolean) {
   }, [systemPrompt]);
 
   const ensureSession = useCallback(async (): Promise<GemmaSession> => {
-    if (sessionRef.current) return sessionRef.current;
+    if (sessionRef.current) {
+      if (!sessionRef.current.isStale()) return sessionRef.current;
+      // 그 사이 엔진이 버려졌다(GPU 디바이스 유실 — 모바일에서 다른 앱을 보고 돌아온 경우).
+      // 죽은 엔진 위의 대화는 버리고 새 엔진에서 다시 판다.
+      void sessionRef.current.destroy().catch(() => {});
+      sessionRef.current = null;
+    }
     // 엔진이 아직 안 떠 있으면 여기서 모델이 GPU에 올라간다 — 수 초 걸린다.
     setBusyLabel("Gemma 4 모델을 GPU에 올리는 중...");
     try {
@@ -82,14 +88,26 @@ export function useGemmaSession(systemPrompt: string, enabled: boolean) {
     discardGemmaEngine();
   }, []);
 
+  // 실패하면 엔진을 버리고 **한 번만** 새 엔진으로 다시 시도한다. 디바이스의 `lost`가 늦게
+  // 오거나 아예 안 오는 브라우저에서는 돌아와서 보낸 첫 메시지가 죽은 엔진에 닿는데, 예전엔
+  // 그걸 사용자에게 실패로 보여주고 "한 번 더 보내야" 살아났다(실제로 그렇게 보고받았다).
+  // 스트리밍은 **아직 한 글자도 안 내보냈을 때만** 재시도한다 — 중간에 끊긴 걸 다시 돌리면
+  // 앞부분이 두 번 붙는다. 두 번째도 실패하면 진짜 실패다(그대로 던진다).
   const promptStreaming = useCallback(
     async function* promptStreaming(input: string): AsyncGenerator<string> {
-      const session = await ensureSession();
-      try {
-        yield* session.promptStreaming(input);
-      } catch (err) {
-        recoverFromFailure();
-        throw err;
+      for (let attempt = 0; ; attempt++) {
+        let yielded = false;
+        try {
+          const session = await ensureSession();
+          for await (const chunk of session.promptStreaming(input)) {
+            yielded = true;
+            yield chunk;
+          }
+          return;
+        } catch (err) {
+          recoverFromFailure();
+          if (yielded || attempt >= 1) throw err;
+        }
       }
     },
     [ensureSession, recoverFromFailure]
@@ -97,12 +115,14 @@ export function useGemmaSession(systemPrompt: string, enabled: boolean) {
 
   const prompt = useCallback(
     async (input: string): Promise<string> => {
-      const session = await ensureSession();
-      try {
-        return await session.prompt(input);
-      } catch (err) {
-        recoverFromFailure();
-        throw err;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const session = await ensureSession();
+          return await session.prompt(input);
+        } catch (err) {
+          recoverFromFailure();
+          if (attempt >= 1) throw err;
+        }
       }
     },
     [ensureSession, recoverFromFailure]
