@@ -10,6 +10,7 @@ import ConversationSessionController from "./ConversationSessionController";
 import GemmaDownloadBar from "./GemmaDownloadBar";
 import LoadingMascot from "./LoadingMascot";
 import PromptApiOnboardingDialog from "./PromptApiOnboardingDialog";
+import PwaUpdatePrompt from "./PwaUpdatePrompt";
 
 const NAV_ITEMS = [
   { to: "/gojuon", label: "오십음도", icon: "あ" },
@@ -211,6 +212,7 @@ function Layout() {
       <BadgeWatcher />
       <PromptApiOnboardingDialog />
       <ConversationSessionController />
+      <PwaUpdatePrompt />
     </div>
   );
 }

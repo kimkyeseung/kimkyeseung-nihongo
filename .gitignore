@@ -8,6 +8,8 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+# vite-plugin-pwa가 devOptions.enabled를 잠깐 켜서 로컬 오프라인 테스트할 때만 생긴다.
+dev-dist/
 
 # Env
 .env
