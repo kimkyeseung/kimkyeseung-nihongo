@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import GemmaEngineNotice from "../components/GemmaEngineNotice";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
@@ -19,9 +20,11 @@ import {
 } from "../lib/writingCorrection";
 import { looksLikePromptLeak } from "../lib/promptSafety";
 import { preserveLearnerScript } from "../lib/scriptPreference";
+import { buildWritingCorrectionQuestion } from "../lib/teacherPrompts";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useConfettiStore } from "../stores/confettiStore";
+import { useTeacherChatStore } from "../stores/teacherChatStore";
 import { useWritingDraft, useWritingOptions } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 
@@ -63,6 +66,8 @@ function applyScriptPreference(
 }
 
 function WritingPage() {
+  const navigate = useNavigate();
+  const requestQuestion = useTeacherChatStore((s) => s.requestQuestion);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const celebrate = useConfettiStore((s) => s.celebrate);
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
@@ -392,6 +397,19 @@ function WritingPage() {
               </p>
             </div>
           )}
+
+          {/* 첨삭은 diff·표기 보정이 붙은 고정 형식 답이라 여기서 더 캐물을 수 없다 — 왜
+              이렇게 고쳐야 하는지는 자유 대화가 되는 선생님 페이지로 넘긴다(원문·수정문을
+              질문에 실어 보내 맥락을 잃지 않게 한다). */}
+          <button
+            onClick={() => {
+              requestQuestion(buildWritingCorrectionQuestion(submittedText ?? "", result.corrected));
+              navigate("/teacher");
+            }}
+            className="btn-press mt-4 w-full rounded-2xl bg-info/10 py-3 text-sm font-bold text-info"
+          >
+            🧑‍🏫 선생님에게 더 물어보기
+          </button>
         </div>
       )}
 

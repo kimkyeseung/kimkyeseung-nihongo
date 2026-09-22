@@ -193,6 +193,26 @@ export function buildSentenceExplanationQuestion(sentence: string): string {
   ].join("\n");
 }
 
+/**
+ * 작문 첨삭 결과 옆 "선생님에게 묻기" 버튼이 대신 보내주는 질문. 원문·수정문을 같이 실어
+ * 보내야 선생님이 "뭘 왜 고쳤는지"를 맥락 없이 다시 묻지 않는다 — 첨삭 세션과는 분리된
+ * 별도 세션(TeacherPage)이라 원문 텍스트를 여기서 직접 넘겨줘야 한다.
+ */
+export function buildWritingCorrectionQuestion(original: string, corrected: string): string {
+  if (original.trim() === corrected.trim()) {
+    return [
+      `내가 쓴 일본어 문장이야: 「${original}」`,
+      "고칠 곳이 없다고 하는데, 더 자연스럽게 쓸 수 있는 방법이 있으면 알려줘.",
+    ].join("\n");
+  }
+  return [
+    `내가 쓴 일본어 문장을 첨삭받았어.`,
+    `원문: 「${original}」`,
+    `수정문: 「${corrected}」`,
+    "왜 이렇게 고쳐야 하는지 문법적으로 설명해줘.",
+  ].join("\n");
+}
+
 /** 처음 들어온 사람이 무엇을 물어볼 수 있는지 감을 잡도록 보여주는 예시 질문. */
 export const TEACHER_SAMPLE_QUESTIONS = [
   "조사 だけ에 대해서 알려줘",
