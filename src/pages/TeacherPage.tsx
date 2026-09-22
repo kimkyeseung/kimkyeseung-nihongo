@@ -463,27 +463,33 @@ function TeacherPage() {
           )}
 
           <div className="flex flex-col gap-3">
-            {messages.map((m) => (
-              <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={
-                    m.role === "user"
-                      ? "max-w-[80%] rounded-2xl bg-primary px-4 py-2 text-white"
-                      : "w-full rounded-2xl bg-gray-50 px-4 py-3 text-gray-800"
-                  }
-                >
-                  {m.role === "assistant" && m.text === "" ? (
-                    <LoadingMascot label="선생님이 생각하는 중..." />
-                  ) : m.role === "assistant" ? (
-                    <MarkdownAnswer text={m.text} />
-                  ) : (
-                    m.text
-                  )}
-                </motion.div>
-              </div>
-            ))}
+            {messages.map((m, i) => {
+              // 지금 청크가 도착하고 있는 그 말풍선인가 — 답변 중일 때의 마지막 메시지 하나뿐이다.
+              // MarkdownAnswer에 이걸 넘겨야 후리가나·문법 칩 재계산으로 인한 흔들림을 막는다
+              // (MarkdownAnswer의 isStreaming 주석 참고).
+              const isStreaming = isAnswering && i === messages.length - 1 && m.role === "assistant";
+              return (
+                <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={
+                      m.role === "user"
+                        ? "max-w-[80%] rounded-2xl bg-primary px-4 py-2 text-white"
+                        : "w-full rounded-2xl bg-gray-50 px-4 py-3 text-gray-800"
+                    }
+                  >
+                    {m.role === "assistant" && m.text === "" ? (
+                      <LoadingMascot label="선생님이 생각하는 중..." />
+                    ) : m.role === "assistant" ? (
+                      <MarkdownAnswer text={m.text} isStreaming={isStreaming} />
+                    ) : (
+                      m.text
+                    )}
+                  </motion.div>
+                </div>
+              );
+            })}
           </div>
         </div>
 

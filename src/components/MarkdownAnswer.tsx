@@ -15,8 +15,14 @@ const HAS_JAPANESE = /[぀-ヿ㐀-䶿一-鿿]/;
  * 시키므로, 그 자리를 ClickableSentence로 렌더링해 사전 후리가나·단어 탭·발음/복사 버튼을
  * 그대로 붙일 수 있다(회화 페이지와 같은 장치의 재사용). 백틱 안이 일본어가 아니면
  * (코드나 기호) 평범한 코드 칩으로 둔다.
+ *
+ * **`isStreaming`일 때는 예문 칩을 글자만 보여준다 (실제로 겪은 버그).** 스트리밍 중에
+ * ClickableSentence(그리디 재분절)·SentenceGrammar(패턴 매칭)까지 매 청크마다 다시 돌리면,
+ * 백틱이 아직 안 닫혔거나 문형이 반 토막인 상태에서 그리드/칩이 붙었다 떨어졌다 하면서
+ * 메시지 목록이 위아래로 흔들렸다 — 단어 상세의 생성 예문과 같은 문제라 같은 방식으로
+ * 고쳤다: 확정되지 않은 문장은 후리가나·단어 탭·문법 칩 없이 글자만 둔다.
  */
-function MarkdownAnswer({ text }: { text: string }) {
+function MarkdownAnswer({ text, isStreaming = false }: { text: string; isStreaming?: boolean }) {
   const { handlers, dialogs } = useSentenceDialogs();
 
   return (
@@ -57,6 +63,13 @@ function MarkdownAnswer({ text }: { text: string }) {
             const content = String(children);
             if (!HAS_JAPANESE.test(content)) {
               return <code className="rounded bg-gray-100 px-1 py-0.5 text-sm">{content}</code>;
+            }
+            if (isStreaming) {
+              return (
+                <span className="my-0.5 inline-flex rounded-xl bg-gray-50 px-2 py-1 align-middle font-ja text-lg">
+                  {content}
+                </span>
+              );
             }
             return (
               // 예문 칩은 한 줄짜리 인라인 요소였는데, 문법 설명이 아래로 펼쳐지므로 세로로
