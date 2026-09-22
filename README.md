@@ -23,6 +23,16 @@ npm run lint       # oxlint
 npm run build      # 프로덕션 빌드
 ```
 
+## 앱으로 설치 / 오프라인
+
+PWA라서 브라우저의 "앱 설치"(iOS Safari는 공유 → 홈 화면에 추가)로 홈 화면에 둘 수 있다.
+한 번 열어본 화면은 오프라인에서도 열린다. 사전·한자 데이터는 용량이 커서 **그 화면을 처음
+열 때** 저장되므로, 한 번도 안 연 화면(예: 한자 획순)은 오프라인에서 안 된다. 새 버전이
+배포되면 바로 바꾸지 않고 "새로고침할까요?"를 먼저 묻는다.
+
+오프라인 동작은 개발 서버(`npm run dev`)에서는 확인할 수 없다 — `npm run build && npm run preview`로
+띄워 둘러본 뒤 서버를 끄고 새로고침해 본다.
+
 ## AI 기능을 쓰려면
 
 회화 연습·작문 첨삭·선생님에게 질문은 온디바이스 AI가 필요하다. **두 가지 방법이 있고,
@@ -59,7 +69,7 @@ npm run build      # 프로덕션 빌드
 React + TypeScript + Vite + Tailwind CSS, react-router-dom, Zustand(설정·학습 상태는
 localStorage persist), IndexedDB(끝없이 쌓이는 학습 기록·기억·대화), Framer Motion,
 WanaKana(로마자→히라가나 변환), react-markdown + remark-gfm(선생님 답변),
-`@litert-lm/core`(Gemma 4 / WebGPU), vitest.
+`@litert-lm/core`(Gemma 4 / WebGPU), vite-plugin-pwa(설치·오프라인), vitest.
 
 ## 페이지 구성
 

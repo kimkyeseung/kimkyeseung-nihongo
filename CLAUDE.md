@@ -14,6 +14,7 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
 - 로마자→히라가나: `wanakana` 패키지
 - 온디바이스 LLM: Chrome Prompt API + `@litert-lm/core`(Gemma 4 / WebGPU)
 - 테스트: vitest ("테스트" 절 참고)
+- PWA: `vite-plugin-pwa`(Workbox generateSW — "PWA" 절 참고)
 - 패키지 매니저: npm
 
 ## 개발 순서
@@ -76,8 +77,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
 - **저장소 선택**: 사용자 상태(단어장·스트릭/XP·설정)는 localStorage(Zustand `persist`),
   GB 단위 바이너리(Gemma 모델 파일)는 OPFS, **끝없이 쌓이는 학습 기록·기억·선생님 대화는
   IndexedDB**에 둔다("Gemma 4 엔진" / "학습자 기억" / "선생님 대화 기록" 노트 참고).
-  **사전 데이터는 어디에도 저장하지 않는다** — 정적 JSON을 동적 import로 불러오면 브라우저
-  HTTP 캐시가 알아서 맡는다("번들 최적화" 노트 참고).
+  **사전 데이터는 앱 코드가 직접 저장하지 않는다** — 정적 JSON은 동적 import로 불러오고,
+  캐시는 서비스워커의 Cache Storage(`reference-data-v1`, 오프라인용)와 브라우저 HTTP 캐시가
+  맡는다("번들 최적화" / "PWA" 노트 참고). localStorage·IndexedDB·OPFS에 옮겨 담지 말 것.
   IndexedDB를 쓰는 곳은 `learnerMemoryDb.ts` **하나뿐**이다 — 다른 데로 넓히지 말 것.
 
 ## 타입 컨벤션
@@ -94,6 +96,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
 ## 프로젝트 구조
 ```
 src/router.tsx     react-router-dom 라우트 정의 (완료)
+src/App.tsx        RouterProvider + 대문(`/`)까지 덮어야 하는 상주물: 기억 미리 읽기 ·
+                     PwaUpdatePrompt(서비스워커 등록 + 새 버전 안내 — Layout에 두면 안 된다,
+                     "PWA" 절 참고) · Vercel Analytics
 src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 GamificationBar 포함) +
                      Layout에 상주하는 것들: BadgeWatcher(뱃지 신규 획득 감지) · Confetti ·
                        ConversationSessionController(회화 세션 — 페이지 밖에 둬야 탭 이동에도
@@ -185,7 +190,10 @@ src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, p
                      · dictionary.json의 `usuallyKana`는 JMDict `uk`(보통 가나로 쓰는 단어) —
                        문장 분절이 읽기로도 찾을지 판단하는 데만 쓴다
                    + curriculum.json(JLPT 커리큘럼 — **손으로 만든 데이터**, scripts/data 파이프라인 밖)
-public/            favicon.svg, icons.svg, hero.png(대문 그림 1536×1024)
+public/            favicon.svg(브랜드 마크 원본), hero.png(대문 그림 1536×1024), icons.svg(템플릿 잔재) +
+                     PWA 아이콘(favicon.ico, pwa-*.png, maskable-icon-512x512.png,
+                     apple-touch-icon-180x180.png — favicon.svg에서 `@vite-pwa/assets-generator`로 생성.
+                     로고를 바꾸면 다시 생성할 것)
 src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입, opfs.ts(move 선언) — 완료
 scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립트 (완료, scripts/data/README.md 참고)
 ```
@@ -1332,6 +1340,9 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   **이 버그는 운영에서만 보인다** — 로컬에서 멀쩡하다고 넘어가지 말 것.
 - 파일시스템이 rewrite보다 먼저라서 `/assets/*`·`/hero.png` 같은 실제 파일은 그대로 나간다.
   대신 없는 파일을 요청해도 404 대신 index.html(200)이 돌아온다 — SPA에서는 정상이다.
+- `sw.js`·`workbox-*.js`·`manifest.webmanifest`도 실제 파일이라 rewrite에 안 걸린다. 반대로
+  **`sw.js`를 rewrite 대상 경로로 옮기거나 이름을 바꾸면** 서비스워커 요청에 index.html이
+  돌아가 등록이 조용히 실패한다(스크립트 MIME 오류). 로컬 미리보기에서는 안 보이는 종류다.
 
 ## PWA (`vite-plugin-pwa`) 구현 노트
 - 설정은 `vite.config.ts`, 등록·업데이트 안내는 `PwaUpdatePrompt`다. 업데이트는 **물어본다**
