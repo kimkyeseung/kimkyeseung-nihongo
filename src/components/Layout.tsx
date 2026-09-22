@@ -162,7 +162,9 @@ function Layout() {
             **헤더 아이콘은 둘(🧠·ⓘ)이 한계다** — 셋으로 늘렸더니 375px에서 제목이 7px 모자라
             잘렸다. 새 페이지는 /curriculum처럼 다른 페이지에서 링크로 잇는 쪽을 먼저 볼 것. */}
         <Link to="/" className="flex min-w-0 items-center gap-2" aria-label="대문으로">
-          <span className="text-2xl">🗻</span>
+          {/* 이름 텍스트가 바로 옆에 있고 Link에 이미 aria-label이 있어서 장식용 — alt를
+              비워 스크린리더가 두 번 읽지 않게 한다. */}
+          <img src="/favicon.svg" alt="" className="h-8 w-8 shrink-0 rounded-lg" />
           <h1 className="truncate text-2xl whitespace-nowrap text-primary">김계승 일본어</h1>
         </Link>
         <div className="flex items-center gap-2">
