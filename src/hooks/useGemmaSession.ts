@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createGemmaSession, type GemmaSession } from "../lib/gemmaEngine";
+import { createGemmaSession, discardGemmaEngine, type GemmaSession } from "../lib/gemmaEngine";
 import { getCachedModelFile, isOpfsSupported, isWebGpuSupported } from "../lib/gemmaModel";
 
 export type GemmaSessionStatus =
@@ -45,7 +45,7 @@ export function useGemmaSession(systemPrompt: string, enabled: boolean) {
   // 엔진 자체는 살려둔다 — 2GB를 GPU에 다시 올리는 건 너무 비싸다(gemmaEngine.ts의 싱글턴).
   useEffect(() => {
     return () => {
-      void sessionRef.current?.destroy();
+      void sessionRef.current?.destroy().catch(() => {});
       sessionRef.current = null;
     };
   }, [systemPrompt]);
@@ -58,31 +58,61 @@ export function useGemmaSession(systemPrompt: string, enabled: boolean) {
       const session = await createGemmaSession(systemPrompt);
       sessionRef.current = session;
       return session;
+    } catch (err) {
+      // 엔진 생성 자체가 실패했다면 죽은 WebGPU 디바이스를 붙들고 있었을 수 있다 — 아래
+      // recoverFromFailure와 같은 이유로 캐시를 버려 다음 시도가 새 엔진으로 다시 뜨게 한다.
+      discardGemmaEngine();
+      throw err;
     } finally {
       setBusyLabel(null);
     }
   }, [systemPrompt]);
 
+  /**
+   * **모바일에서 다른 앱을 보다가 돌아오면 실제로 겪은 문제**: 백그라운드 탭의 WebGPU
+   * 컨텍스트를 OS가 회수해가는 경우가 있는데, 그 상태에서는 이미 만들어둔 `Conversation`도
+   * `Engine`(모듈 싱글턴, gemmaEngine.ts)도 죽어 있다. `sessionRef.current`만 비우면 다음
+   * `ensureSession()`이 죽은 엔진 위에 새 대화를 또 만들려다 똑같이 실패한다 — 그래서
+   * `discardGemmaEngine()`으로 엔진 캐시까지 같이 버려야 다음 시도가 새로 뜬 엔진으로 간다.
+   * 이걸 안 하면 사용자가 할 수 있는 건 페이지 새로고침뿐이었다(실제로 그렇게 보고받았다).
+   */
+  const recoverFromFailure = useCallback(() => {
+    void sessionRef.current?.destroy().catch(() => {});
+    sessionRef.current = null;
+    discardGemmaEngine();
+  }, []);
+
   const promptStreaming = useCallback(
     async function* promptStreaming(input: string): AsyncGenerator<string> {
       const session = await ensureSession();
-      yield* session.promptStreaming(input);
+      try {
+        yield* session.promptStreaming(input);
+      } catch (err) {
+        recoverFromFailure();
+        throw err;
+      }
     },
-    [ensureSession]
+    [ensureSession, recoverFromFailure]
   );
 
   const prompt = useCallback(
     async (input: string): Promise<string> => {
       const session = await ensureSession();
-      return session.prompt(input);
+      try {
+        return await session.prompt(input);
+      } catch (err) {
+        recoverFromFailure();
+        throw err;
+      }
     },
-    [ensureSession]
+    [ensureSession, recoverFromFailure]
   );
 
-  // useLanguageModel.resetSession과 같은 역할(오염된 대화 히스토리 버리기).
-  // 여기서도 엔진은 살려두고 Conversation만 새로 판다 — 2GB를 GPU에 다시 올리지 않기 위해서다.
+  // useLanguageModel.resetSession과 같은 역할(오염된 대화 히스토리 버리기) — 이쪽은 정상적으로
+  // 쓰던 세션을 인젝션 때문에 버리는 것뿐이라 엔진까지 버릴 이유는 없다(recoverFromFailure와
+  // 다른 경우다).
   const resetSession = useCallback(() => {
-    void sessionRef.current?.destroy();
+    void sessionRef.current?.destroy().catch(() => {});
     sessionRef.current = null;
   }, []);
 

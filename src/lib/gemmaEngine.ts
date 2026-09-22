@@ -69,6 +69,23 @@ export async function unloadGemmaEngine(): Promise<void> {
   await engine?.delete();
 }
 
+/**
+ * 캐시된 엔진을 **정리를 기다리지 않고** 즉시 버린다. 모바일에서 다른 앱을 보다가 돌아오면
+ * WebGPU 컨텍스트가 죽어 있는 경우가 있는데(OS가 백그라운드 탭의 GPU 리소스를 회수한다),
+ * 그 상태에서 `unloadGemmaEngine()`처럼 `engine.delete()`를 기다리면 죽은 디바이스를 상대로
+ * 또 호출하는 셈이라 실패하거나 걸릴 수 있다. 참조만 먼저 비워서 다음 `loadGemmaEngine()`이
+ * 새 엔진을 만들게 하고, 옛 엔진 정리는 되면 좋고 안 돼도 그만인 배경 작업으로 던져둔다.
+ *
+ * `useGemmaSession`이 `prompt`/`promptStreaming` 실패를 잡았을 때만 부른다 — 정상적으로
+ * 쓰는 중에는 절대 부를 이유가 없다.
+ */
+export function discardGemmaEngine(): void {
+  const pending = enginePromise;
+  enginePromise = null;
+  if (!pending) return;
+  void pending.then((engine) => engine.delete()).catch(() => {});
+}
+
 export function isGemmaEngineLoaded(): boolean {
   return enginePromise !== null;
 }
