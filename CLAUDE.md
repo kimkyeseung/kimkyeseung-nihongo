@@ -52,6 +52,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     퍼센트가 뜨고, 사용자는 엉뚱한 유닛을 공부하게 된다. 커리큘럼 데이터 자체의 검사(깨진
     예문·읽기에 남은 한자·`KANJI_NOT_IN_APP` 동기화)도 여기에 같이 들어 있다.
 
+  - 단어장 복습 일정(`srs`의 `buildReviewQueue`/`planReviewOutcome`) — 틀려도 카드는 멀쩡히
+    넘어간다. 예전엔 30일 뒤에 볼 단어가 매일 나왔는데 아무도 몰랐다.
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`verbConjugation`, `scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
@@ -179,7 +182,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      wordLink.test.ts ·
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
-                     grammarPatterns.test.ts · kanaPronunciation.test.ts
+                     grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -519,6 +522,27 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   검증할 땐 `PromptApiOnboardingDialog.tsx`의 `show` 계산식을 잠깐 `true ||`로 강제한 뒤
   꼭 원복할 것 (실제로 이렇게 확인했음).
 
+## 단어장 복습 (`ReviewDeck` / `srs.ts`) 구현 노트
+- **오른쪽은 "알아요", 왼쪽은 "모르겠어요"다. 삭제는 스와이프가 아니다**(카드 아래 "이 단어
+  삭제" + 6초 실행 취소). 예전엔 스펙 문구 그대로 왼쪽이 삭제였는데, 그러면 `reviewSrs(…, false)`를
+  부르는 곳이 한 군데도 없어서 **간격이 늘어나기만 했다** — 스펙의 "스와이프 결과를 SRS에
+  반영"과 서로 안 맞는 설계였다.
+- **카드 앞면은 단어만** 보여준다. 탭(또는 "뜻 보기")해야 읽기·뜻이 나오고, **뒤집기 전에는
+  drag가 꺼져 있다.** 다 보이는 카드를 넘기는 건 떠올리기가 아니라 훑어보기라 "안다"를 믿을
+  수 없다. 스와이프가 불편한 환경을 위해 같은 동작을 버튼으로도 둔다 — 버튼으로 넘기면 x가
+  0이라 카드가 어느 쪽으로 빠질지 모르므로 `AnimatePresence custom`으로 방향을 넘긴다.
+- **세트에는 복습할 때가 된 단어만 들어간다**(`buildReviewQueue`). 예전엔 전체를 `dueAt` 순으로
+  정렬만 해서, 간격 계산이 순서에만 쓰였다. 없으면 "다음 복습: 내일"을 보여주고
+  "그래도 더 복습하기"로 전체를 연다.
+- "더 복습하기"(때가 안 된 단어)의 처리는 `planReviewOutcome`이 정한다: "알아요"는 SRS에
+  반영하지 않고(앞당겨 본 걸 성공으로 치면 간격이 곱절로 불어난다) "모르겠어요"는 반영한다.
+  **XP는 때가 된 단어에만, 안다/모른다와 상관없이** 준다 — "안다"에만 주면 솔직하게 모른다고
+  할 이유가 없고, 때가 안 된 단어에 주면 "더 복습하기"를 반복해 무한히 쌓인다(예전엔 새로고침만
+  해도 전체가 다시 나와서 실제로 그랬다).
+- 끝낸 세션도 빈 큐로 store에 남아 있으므로, 새 세트는 **버튼(`begin`)으로만** 연다. 그때와
+  실행 취소 때 `lastHandledRef`를 반드시 비울 것 — 같은 카드가 다시 큐 맨 앞에 오면 첫
+  스와이프가 조용히 무시된다(예전 실행 취소에 실제로 이 버그가 있었다).
+
 ## 단어장의 문장 칸 (`sentencebookStore`) 구현 노트
 - 단어장 페이지는 **상단 탭으로 단어 칸/문장 칸**이 나뉜다. 문장 칸에는 회화 상대의 대사·선생님
   답변의 예문처럼 "통째로 다시 보고 싶은 문장"이 쌓인다. 담는 입구는 `SentenceActions`의
@@ -686,9 +710,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - **이벤트에 급수(`level`)와 표시 문자열을 기록 시점에 같이 넣을 것.** 나중에 `dictionary.ts`로
   다시 찾으면 2.9MB짜리 사전 청크가 진입 번들까지 딸려온다("번들 최적화" 노트). 어휘 수준
   추정은 이 `level` 값이 유일한 근거다.
-- **"모르겠다" 신호는 단어장 스와이프에 없다** — 왼쪽은 삭제, 오른쪽은 학습 완료뿐이다. 그래서
-  약한 어휘는 `word-looked-up`(문장 속 단어를 탭해 뜻을 열어본 것)으로 잡는다. 단어장에
-  "모르겠다" 스와이프를 추가하게 되면 그쪽도 같이 기록할 것.
+- 약한 어휘는 `word-review-unknown`(단어장 복습에서 "모르겠어요")과 `word-looked-up`(문장 속
+  단어를 탭해 뜻을 열어본 것) 둘로 잡는다 — 단어장에 담지 않은 단어는 뒤쪽으로만 잡힌다.
+  커리큘럼 진도에서도 둘 다 "건드려 본 단어"로 센다(`curriculumProgress`의 `isWordTouch`).
 - IndexedDB를 못 여는 환경(사생활 보호 모드 등)에서는 **전부 조용히 no-op**이 된다 — 기억이
   안 쌓일 뿐 학습 기능은 그대로 돌아간다. 다른 탭이 옛 버전을 붙들고 있는 `onblocked`도 같다.
 - `/memory`는 헤더 🧠 아이콘으로 간다("페이지를 새로 추가할 때" 참고). 이 화면이 꼭 있어야
@@ -942,7 +966,8 @@ React의 합성 이벤트 시스템이 IME 조합(composition) 관련 내부 처
 `null`이 되는 바람에 "실행 취소"가 항상 조용히 실패했던 버그가 있었음 — 콘솔 에러 없음).
 **반드시 `useRef`로 "마지막으로 처리한 카드 id"를 기록해 같은 id의 중복 호출을 무시할 것**
 (`WordbookPage.tsx`의 `lastHandledRef` 패턴 참고). state가 아니라 ref를 쓰는 이유는 배치/재렌더
-타이밍과 무관하게 즉시 반영되어야 하기 때문.
+타이밍과 무관하게 즉시 반영되어야 하기 때문. 같은 카드가 큐에 다시 들어오는 경로(실행 취소 등)에서는
+ref를 비워야 한다.
 
 ## 폼 제출(Enter) 주의사항 (실제로 겪은 버그)
 `<form onSubmit>` + Enter로 암묵적 제출에 의존하는 방식이 이 프로젝트 환경에서 간헐적으로

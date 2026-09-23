@@ -109,6 +109,14 @@ describe("buildLearnerProfile", () => {
     expect(profile.weakWords).toEqual(["難しい", "簡単"]);
   });
 
+  it("복습에서 모른다고 넘긴 단어도 약한 어휘다", () => {
+    const profile = buildLearnerProfile([
+      event("word-review-unknown", "約束"),
+      event("word-review-known", "水"),
+    ]);
+    expect(profile.weakWords).toEqual(["約束"]);
+  });
+
   it("첨삭 지적 요지는 원문이 아니라 detail에서 가져온다", () => {
     const profile = buildLearnerProfile([
       event("writing-corrected", "私は학생です", { detail: "조사 は와 が를 헷갈렸어요" }),

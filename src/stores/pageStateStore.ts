@@ -196,17 +196,20 @@ interface ReviewSession {
   group: string;
   queue: string[];
   total: number;
+  /** "그래도 더 복습하기"로 연 세트 — 때가 안 된 단어가 섞여 있다. */
+  extra: boolean;
 }
 
 interface WordbookReviewState {
   session: ReviewSession | null;
-  start: (group: string, queue: string[]) => void;
+  start: (group: string, queue: string[], extra?: boolean) => void;
   setQueue: (queue: string[]) => void;
 }
 
 export const useWordbookReview = create<WordbookReviewState>((set) => ({
   session: null,
-  start: (group, queue) => set({ session: { group, queue, total: queue.length } }),
+  start: (group, queue, extra = false) =>
+    set({ session: { group, queue, total: queue.length, extra } }),
   setQueue: (queue) => set((s) => (s.session ? { session: { ...s.session, queue } } : s)),
 }));
 

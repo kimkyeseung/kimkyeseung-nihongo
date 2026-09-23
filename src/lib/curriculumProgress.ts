@@ -90,9 +90,7 @@ function studiedKana(events: StudyEvent[]): Set<string> {
 function wordCountByLevel(events: StudyEvent[]): Map<string, Set<string>> {
   const byLevel = new Map<string, Set<string>>();
   for (const event of events) {
-    if (event.type !== "word-added" && event.type !== "word-review-known" && event.type !== "word-looked-up") {
-      continue;
-    }
+    if (!isWordTouch(event)) continue;
     if (!event.level) continue;
     let seen = byLevel.get(event.level);
     if (!seen) {
@@ -104,13 +102,23 @@ function wordCountByLevel(events: StudyEvent[]): Map<string, Set<string>> {
   return byLevel;
 }
 
+/** 학습자가 그 단어를 "건드려 봤다"고 볼 기록. 복습에서 모른다고 한 것도 공부한 것이다. */
+function isWordTouch(event: StudyEvent): boolean {
+  return (
+    event.type === "word-added" ||
+    event.type === "word-review-known" ||
+    event.type === "word-review-unknown" ||
+    event.type === "word-looked-up"
+  );
+}
+
 /** Pre-N5 유닛은 커리큘럼이 단어를 직접 들고 있으므로 그 표기로 맞춰 센다. */
 function matchedVocabItems(unit: CurriculumUnit, events: StudyEvent[]): number {
   const items = unit.vocabItems ?? [];
   if (items.length === 0) return 0;
   const touched = new Set(
     events
-      .filter((e) => e.type === "word-added" || e.type === "word-review-known" || e.type === "word-looked-up")
+      .filter(isWordTouch)
       .map((e) => e.subject)
   );
   return items.filter((item) => touched.has(item.word) || touched.has(item.reading)).length;
