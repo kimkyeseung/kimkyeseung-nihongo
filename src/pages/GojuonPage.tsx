@@ -91,30 +91,31 @@ function GojuonPage() {
         {sections.map((section) => (
           <section key={section.id}>
             <h3 className="mb-3 text-lg text-gray-700">{section.label}</h3>
-            <div className="overflow-x-auto">
-              <div
-                className="grid w-fit gap-2"
-                style={{
-                  gridTemplateColumns: `2rem repeat(${section.columnHeaders.length}, minmax(3.5rem, 1fr))`,
-                }}
-              >
-                <div />
-                {section.columnHeaders.map((h) => (
-                  <div key={h} className="text-center text-xs text-gray-400">
-                    {h}
-                  </div>
-                ))}
+            {/* 칸은 최소폭 없이(minmax(0, …)) 화면 너비를 나눠 갖는다. 예전의 최소폭 3.5rem +
+                행 레이블 2rem + gap 8px로는 375px(내용 폭 343px)에서 352px가 되어 마지막 열이
+                9px 잘렸다. 최대폭 4.5rem은 칸이 적은 표(요음 3칸·ヵヶ 2칸)가 과하게 늘어나지 않게. */}
+            <div
+              className="grid gap-1.5 sm:gap-2"
+              style={{
+                gridTemplateColumns: `1.5rem repeat(${section.columnHeaders.length}, minmax(0, 4.5rem))`,
+              }}
+            >
+              <div />
+              {section.columnHeaders.map((h) => (
+                <div key={h} className="text-center text-xs text-gray-400">
+                  {h}
+                </div>
+              ))}
 
-                {section.rows.map((row, rowIdx) => (
-                  <RowCells
-                    key={rowIdx}
-                    rowLabel={row.rowLabel}
-                    cells={row.cells}
-                    mode={mode}
-                    onSelect={handleSelect}
-                  />
-                ))}
-              </div>
+              {section.rows.map((row, rowIdx) => (
+                <RowCells
+                  key={rowIdx}
+                  rowLabel={row.rowLabel}
+                  cells={row.cells}
+                  mode={mode}
+                  onSelect={handleSelect}
+                />
+              ))}
             </div>
           </section>
         ))}
