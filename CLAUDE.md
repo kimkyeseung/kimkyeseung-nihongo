@@ -46,6 +46,8 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     모델의 잡담이 "기억"이 되어 **다음 대화에도 영구히 따라온다**.
   - 문장 분절(`sentenceWords`) — 엉뚱한 단어가 붙어도 콘솔은 멀쩡하고, 눌러본 사용자만
     "왜 ため가 과거형이지?" 하고 만다(실제로 그렇게 보고받았다).
+  - 오십음도 발음 게임 채점(`kanaPronunciation`의 `matchesKana`) — 틀리면 제대로 읽은 학습자가
+    "틀렸다"는 소리를 듣는다. 인식기가 か를 蚊로, に를 "2"로 돌려주는 식이라 경우의 수가 많다.
   - 커리큘럼 진도(`curriculumProgress`)·오늘의 추천(`dailyPlan`) — 어긋나도 화면에는 그럴듯한
     퍼센트가 뜨고, 사용자는 엉뚱한 유닛을 공부하게 된다. 커리큘럼 데이터 자체의 검사(깨진
     예문·읽기에 남은 한자·`KANJI_NOT_IN_APP` 동기화)도 여기에 같이 들어 있다.
@@ -106,7 +108,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      학습 UI: KanjiStrokeOrder, KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
                        ClickableSentence(후리가나·단어 탭 — 일본어 문장은 전부 이걸로 그린다),
                        WritingDiff, BadgeSheet, GamificationBar,
-                       KanaDetailDialog, WordMeaningDialog, JapaneseSuggestionList,
+                       KanaDetailDialog, KanaSpeakingGame(오십음도 2초 발음 게임),
+                       WordMeaningDialog, JapaneseSuggestionList,
                        MarkdownAnswer(선생님 답변 렌더링), LoadingMascot, ProgressBar,
                        AssetLoadingBar(대문 프리로드) ·
                        SegmentedTabs(알약 세그먼트 탭 공용 — 오십음도·한자 급수·단어장 두 탭) ·
@@ -162,7 +165,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      localDate.ts(로컬 타임존 YYYY-MM-DD + 날짜 이름 — 스트릭·인사·대화 기록이 공유) +
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위) +
-                     wordLink.ts(단어 상세 주소·돌아갈 곳·조사)
+                     wordLink.ts(단어 상세 주소·돌아갈 곳·조사) +
+                     발음 게임: kanaPronunciation.ts(채점·출제) · speechRecognition.ts(음성 인식 창구)
                      커리큘럼: curriculum.ts(동적 import 조회) · curriculumProgress.ts(진도 계산) ·
                        grammarPatterns.ts(문장에서 문형 찾기) ·
                        dailyPlan.ts(오늘의 추천 — 전부 순수 함수, LLM 안 씀)
@@ -175,7 +179,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      wordLink.test.ts ·
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
-                     grammarPatterns.test.ts
+                     grammarPatterns.test.ts · kanaPronunciation.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -186,7 +190,7 @@ src/stores/        Zustand 스토어:
                      teacherChatStore(선생님 대화 — 날짜별, IndexedDB 저장) ·
                      gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
-                     kana-words.json, gojuon.ts) — 완료
+                     kana-words.json, kana-homophones.json, gojuon.ts) — 완료
                      · dictionary.json의 `usuallyKana`는 JMDict `uk`(보통 가나로 쓰는 단어) —
                        문장 분절이 읽기로도 찾을지 판단하는 데만 쓴다
                    + curriculum.json(JLPT 커리큘럼 — **손으로 만든 데이터**, scripts/data 파이프라인 밖)
@@ -1011,12 +1015,55 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   미리 뽑아 58KB짜리 파일로 떨궈둔다(GojuonPage 청크 62KB/gzip 18KB). 오십음도에 사전 데이터가
   더 필요해지면 이 방식을 따를 것 — 런타임에 dictionary.json을 import하지 말 것.
   선정 규칙과 예외는 scripts/data/README.md 참고.
+- **표는 탭으로 나뉜다** — 청음 / 탁음(반탁음 포함) / 요음 / 특수. 선택한 탭은
+  `useGojuonView.tab`에 persist한다. **"특수"는 가타카나 전용**(ファ·ティ·ヴ 같은 외래어 표기 +
+  작은 ヵ・ヶ)이라 히라가나 모드에서는 탭이 사라지고 청음을 대신 보여준다(저장값은 그대로 둬서
+  가타카나로 돌아오면 다시 열린다). 이 칸들은 `special(...)`로 만들고 `katakanaOnly`가 붙는다 —
+  다이얼로그는 짝 히라가나 대신 설명을 보여주고, `hiragana` 필드(ふぁ·ゖ…)는 kana-words.json과
+  학습 기록의 **키로만** 쓴다(ゕ・ゖ는 폰트가 거의 없어 화면에 그리면 안 된다). ヵ・ヶ는 그대로
+  읽히면 엉뚱한 소리가 나서 `speech`로 か를 넘긴다.
 - 가타카나 모드에서는 외래어(カップ), 히라가나 모드에서는 고유어/한자어(角)를 보여준다.
   한쪽이 비면 다른 쪽으로 폴백하고, 둘 다 없는 8자(ぢ·づ 등)는 대표 단어 칸을 아예 안 그린다.
 - **XP는 그 글자를 처음 눌렀을 때만 준다**(`kana-studied` 기록으로 판단). 예전에는 탭할 때마다
   지급해 연타하면 무한히 쌓였다 — 자세한 것은 "커리큘럼 / 오늘의 학습" 노트.
-- **알려진 문제**(아직 안 고침): 375px 화면에서 표가 9px 넘쳐 마지막 열이 잘린다
-  (셀 최소폭 3.5rem / 행 레이블 2rem을 줄이면 된다).
+- **표 칸은 최소폭 없이 화면 너비를 나눠 갖는다**(`minmax(0, 4.5rem)`, 행 레이블 1.5rem,
+  gap 6px). 예전엔 칸 최소폭 3.5rem + 레이블 2rem + gap 8px라 375px에서 352px > 343px가 되어
+  마지막 열이 9px 잘렸다. 지금은 375px에서 칸 58px, 320px에서도 47px로 안 넘친다(직접 잼).
+  칸에 최소폭을 다시 주거나 열을 늘릴 땐 375px에서 `main.scrollWidth > clientWidth`를 재볼 것.
+
+## 오십음도 2초 발음 게임 (`KanaSpeakingGame`) 구현 노트
+- 오십음도의 🎤 버튼으로 연다. **지금 보고 있는 표(모드 × 탭)**에서 10문제를 섞어 내고, 글자가
+  뜨면 2초 안에 소리 내 읽는다. 마이크 입력은 브라우저 음성 인식(Web Speech API의
+  `SpeechRecognition`, `ja-JP`)이 받아 적고, 채점은 `kanaPronunciation.ts`가 한다.
+- **Chrome의 음성 인식은 기기에서 돌지 않는다 — 목소리를 구글 서버로 보낸다.** 이 앱에서
+  사용자 데이터가 외부 서버로 가는 **유일한** 기능이라 게임 첫 화면에 그 사실을 적어 뒀다.
+  오프라인이면 `"network"` 오류가 난다. Firefox에는 API가 아예 없다(안내만 보인다).
+  Chrome은 요즘 접두사 없는 `SpeechRecognition`도 노출하므로 `getSpeechRecognition()`이 둘 다 본다.
+  (기기 안 인식 — Chrome의 `processLocally` — 은 아직 붙이지 않았다.)
+- **2초는 "말하기 시작"까지다.** 시계는 `start()`가 아니라 마이크가 실제로 열린 `audiostart`부터
+  잰다(첫 판엔 권한 창이 떠 있다). 2초 안에 목소리가 잡혔으면(`speechstart` 또는 interim 결과)
+  결과를 1.5초 더 기다린다 — 인식 지연(서버 왕복)은 학습자 탓이 아니다. `interimResults`를
+  켜서 **맞는 순간 바로** 끊는다.
+- **인식기는 가나 한 글자를 가나로 주지 않는다.** か → 蚊·課, て → 手, に → "2", カ, "ka" 식이다.
+  그래서 `matchesKana`가 NFKC → 잡음(구두점·장음·말끝 っ) 제거 → 가타카나·로마자를 히라가나로
+  (wanakana `toHiragana`) → 숫자를 한자 숫자로 바꾼 뒤, 한자는 **`kana-homophones.json`**(읽기가
+  그 글자 하나와 같은 사전 표기 — `build-kana-words.mjs`가 함께 만든다)으로 판정한다. 읽기는
+  사전 정보라 LLM에게 묻지 않는다는 규칙 그대로다. ぢ·づ·を는 소리가 같은 じ·ず·お로 온다.
+  - 외래어 표기(ふぁ)는 **작은 모음을 떼지 않은 형태**로 맞춘다 — 말끝 꼬리를 떼는 처리가
+    ふぁ를 ふ로 만들면 안 된다(테스트가 있다). 작은 ヵ・ヶ(`speech`가 있는 칸)는 글자와 소리가
+    달라 출제하지 않는다.
+  - 표 전체의 모든 칸이 자기 자신을 맞게 판정하는지 테스트가 훑는다 — 표 데이터를 고치면
+    `npm test`부터.
+- **정답 듣기(TTS)와 마이크가 부딪힌다.** 정답 발음을 틀어 둔 채 다음 판으로 넘어가면 마이크가
+  그 소리를 듣고 "맞았다"고 한다 — 판을 시작할 때 `speechSynthesis.cancel()`부터 부른다.
+- 판마다 인식기를 새로 만들고(`continuous: false`), 늦게 도착하는 이벤트는 **토큰**으로 버린다.
+  시트를 닫으면(언마운트) 반드시 `abort()` — 안 하면 탭에 녹음 표시가 남는다.
+- XP는 **완주에 한 번**(`kanaSpeakingCompleted`, 한자 퀴즈와 같은 규칙). 맞힌 글자는
+  `kana-studied`를 남긴다(처음 한 번만 — Pre-N5 진도가 된다. XP는 따로 안 준다).
+- **실제 마이크로는 아직 확인 못 했다.** 헤드리스 브라우저에서 권한 거부 경로는 진짜 API로,
+  나머지(정답·시간 초과·오답·늦게 말하기)는 이벤트 순서를 흉내 낸 가짜 인식기로 확인했다.
+  남은 확인거리: **짧은 한 글자를 실제 인식기가 얼마나 잘 받아 적는지**(특히 Android Chrome),
+  1.5초 유예가 충분한지.
 
 ## 발음 재생(TTS) 구현 노트
 - 문장/단어 끝의 🔊 버튼은 전부 `SpeakButton` 하나다(내부에서 `useJapaneseSpeech` 사용).

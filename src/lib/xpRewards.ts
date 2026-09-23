@@ -3,6 +3,7 @@ export const XP_REWARDS = {
   gojuonPlayed: 1,
   kanjiLearned: 10,
   kanjiQuizCompleted: 5,
+  kanaSpeakingCompleted: 5,
   wordAdded: 5,
   sentenceAdded: 5,
   wordReviewed: 5,

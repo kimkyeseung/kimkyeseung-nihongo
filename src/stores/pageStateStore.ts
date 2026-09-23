@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { ScriptMode } from "../data/gojuon";
+import type { KanaTab, ScriptMode } from "../data/gojuon";
 import type { InputScript } from "../hooks/useScriptInput";
 import type { JlptLevel } from "../types/jlpt";
 import type { WordExample } from "../lib/wordExamples";
@@ -22,13 +22,26 @@ import { localDateKey } from "../lib/localDate";
 
 interface GojuonView {
   mode: ScriptMode;
+  /**
+   * 청음/탁음/요음/특수 탭. 히라가나 모드에서 `special`이 남아 있어도 지우지 않는다 —
+   * 화면이 청음으로 대신 보여주고, 가타카나로 돌아오면 특수 탭이 그대로 열린다.
+   */
+  tab: KanaTab;
   setMode: (mode: ScriptMode) => void;
+  setTab: (tab: KanaTab) => void;
 }
 
+// 옛 저장값에는 `tab`이 없지만 persist의 기본 merge가 얕은 병합이라 초기값("seion")이 남는다.
 export const useGojuonView = create<GojuonView>()(
-  persist((set) => ({ mode: "hiragana", setMode: (mode) => set({ mode }) }), {
-    name: "gojuon-view",
-  })
+  persist(
+    (set) => ({
+      mode: "hiragana",
+      tab: "seion",
+      setMode: (mode) => set({ mode }),
+      setTab: (tab) => set({ tab }),
+    }),
+    { name: "gojuon-view" }
+  )
 );
 
 interface KanjiView {

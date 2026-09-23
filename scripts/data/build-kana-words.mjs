@@ -8,6 +8,7 @@
 //   src/data/gojuon.ts         (글자 목록의 유일한 출처 — cell(...) 호출을 그대로 읽는다)
 // 출력:
 //   src/data/kana-words.json
+//   src/data/kana-homophones.json  (발음 게임 채점용 — 읽기가 그 글자 하나와 같은 단어의 표기)
 //
 // 실행: node scripts/data/build-kana-words.mjs
 
@@ -38,17 +39,53 @@ const OVERRIDES = {
   わ: { hiragana: "1311110" /* 私 */ },
   へ: { hiragana: "1499320" /* 部屋 */ },
   ど: { hiragana: "1451470" /* 動物 */ },
+  // 작은 ヵ・ヶ로 "시작하는" 단어는 없다 — 一ヶ月처럼 들어 있는 단어에서 고른다.
+  ゕ: { match: "contains" },
+  ゖ: { match: "contains" },
 };
 
 function readKanaCells() {
   const source = fs.readFileSync(path.join(OUT_DIR, "gojuon.ts"), "utf-8");
   const cells = [];
-  const re = /cell\("([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\)/g;
+  // special(...)은 가타카나 전용 칸(ファ·ヶ…) — 네 번째 인자(설명 등)가 올 수 있어 닫는 괄호는 안 본다.
+  const re = /\b(cell|special)\("([^"]+)",\s*"([^"]+)",\s*"([^"]+)"/g;
   let match;
   while ((match = re.exec(source))) {
-    cells.push({ hiragana: match[1], katakana: match[2], romaji: match[3] });
+    cells.push({
+      hiragana: match[2],
+      katakana: match[3],
+      romaji: match[4],
+      katakanaOnly: match[1] === "special",
+    });
   }
   return cells;
+}
+
+/** 가타카나를 히라가나로(코드포인트 이동). 사전의 외래어 읽기는 가타카나로 들어 있다. */
+const toHiraganaReading = (text) =>
+  text.replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+
+/** 발음 게임 채점에 쓸 동음어를 글자당 최대 몇 개까지 싣는가. */
+const HOMOPHONE_LIMIT = 60;
+
+/**
+ * 발음 게임용 동음어 표. 음성 인식기는 "か" 한 글자를 蚊·課·可처럼 **한자로** 돌려주는 일이
+ * 흔해서(て → 手, に → 二), 그 표기의 읽기를 알아야 맞게 읽었는지 판단할 수 있다. 읽기는 사전
+ * 정보라 여기서 dictionary.json으로 미리 뽑는다 — 오십음도가 2.9MB 사전을 불러오지 않도록.
+ * 표기가 가나뿐인 항목은 뺀다(가나는 채점 쪽에서 읽기 그대로 비교한다).
+ */
+function buildHomophones(dictionary, cells) {
+  const keys = new Set(cells.map((cell) => cell.hiragana));
+  const result = {};
+  for (const key of keys) result[key] = [];
+  for (const entry of dictionary) {
+    const key = toHiraganaReading(entry.reading);
+    const list = result[key];
+    if (!list || /^[\u3040-\u30ffー]+$/.test(entry.word)) continue;
+    if (list.length < HOMOPHONE_LIMIT && !list.includes(entry.word)) list.push(entry.word);
+  }
+  for (const key of Object.keys(result)) if (result[key].length === 0) delete result[key];
+  return result;
 }
 
 /** 글자 하나당 보여줄 대표 단어 수. */
@@ -97,8 +134,9 @@ function main() {
 
   const result = {};
   let missing = 0;
+  const cells = readKanaCells();
 
-  for (const cell of readKanaCells()) {
+  for (const cell of cells) {
     const override = OVERRIDES[cell.hiragana] ?? {};
     const matchesCell = (text, kana) =>
       override.match === "contains"
@@ -112,16 +150,27 @@ function main() {
       return [forced, ...picked.filter((w) => w.word !== forced.word)].slice(0, LIMIT);
     };
 
-    const hiragana = withOverride(
-      override.hiragana,
-      pickBest(
-        usable.filter((e) => matchesCell(e.reading, cell.hiragana) && !KATAKANA_ONLY.test(e.word))
-      )
-    );
+    // 가타카나 전용 칸은 히라가나 쪽 단어가 없다(화면도 가타카나 모드에서만 보여준다).
+    const hiragana = cell.katakanaOnly
+      ? []
+      : withOverride(
+          override.hiragana,
+          pickBest(
+            usable.filter(
+              (e) => matchesCell(e.reading, cell.hiragana) && !KATAKANA_ONLY.test(e.word)
+            )
+          )
+        );
     // 가타카나 쪽은 외래어(가타카나로만 쓰는 단어)를 고른다 — 가타카나를 실제로 만나는 자리다.
+    // 가타카나 전용 칸은 예외로 표기만 본다 — ヶ는 一ヶ月처럼 한자와 섞여서만 쓰인다.
     const katakana = withOverride(
       override.katakana,
-      pickBest(usable.filter((e) => matchesCell(e.word, cell.katakana) && KATAKANA_ONLY.test(e.word)))
+      pickBest(
+        usable.filter(
+          (e) =>
+            matchesCell(e.word, cell.katakana) && (cell.katakanaOnly || KATAKANA_ONLY.test(e.word))
+        )
+      )
     );
 
     if (hiragana.length === 0 && katakana.length === 0) missing += 1;
@@ -131,6 +180,10 @@ function main() {
   fs.writeFileSync(path.join(OUT_DIR, "kana-words.json"), JSON.stringify(result));
   const count = Object.keys(result).length;
   console.log(`kana-words.json: ${count}자 (둘 다 못 찾은 글자 ${missing}자)`);
+
+  const homophones = buildHomophones(dictionary, cells);
+  fs.writeFileSync(path.join(OUT_DIR, "kana-homophones.json"), JSON.stringify(homophones));
+  console.log(`kana-homophones.json: ${Object.keys(homophones).length}자`);
 }
 
 main();
