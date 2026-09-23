@@ -8,6 +8,7 @@
 //   src/data/gojuon.ts         (글자 목록의 유일한 출처 — cell(...) 호출을 그대로 읽는다)
 // 출력:
 //   src/data/kana-words.json
+//   src/data/kana-homophones.json  (발음 게임 채점용 — 읽기가 그 글자 하나와 같은 단어의 표기)
 //
 // 실행: node scripts/data/build-kana-words.mjs
 
@@ -60,6 +61,33 @@ function readKanaCells() {
   return cells;
 }
 
+/** 가타카나를 히라가나로(코드포인트 이동). 사전의 외래어 읽기는 가타카나로 들어 있다. */
+const toHiraganaReading = (text) =>
+  text.replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+
+/** 발음 게임 채점에 쓸 동음어를 글자당 최대 몇 개까지 싣는가. */
+const HOMOPHONE_LIMIT = 60;
+
+/**
+ * 발음 게임용 동음어 표. 음성 인식기는 "か" 한 글자를 蚊·課·可처럼 **한자로** 돌려주는 일이
+ * 흔해서(て → 手, に → 二), 그 표기의 읽기를 알아야 맞게 읽었는지 판단할 수 있다. 읽기는 사전
+ * 정보라 여기서 dictionary.json으로 미리 뽑는다 — 오십음도가 2.9MB 사전을 불러오지 않도록.
+ * 표기가 가나뿐인 항목은 뺀다(가나는 채점 쪽에서 읽기 그대로 비교한다).
+ */
+function buildHomophones(dictionary, cells) {
+  const keys = new Set(cells.map((cell) => cell.hiragana));
+  const result = {};
+  for (const key of keys) result[key] = [];
+  for (const entry of dictionary) {
+    const key = toHiraganaReading(entry.reading);
+    const list = result[key];
+    if (!list || /^[\u3040-\u30ffー]+$/.test(entry.word)) continue;
+    if (list.length < HOMOPHONE_LIMIT && !list.includes(entry.word)) list.push(entry.word);
+  }
+  for (const key of Object.keys(result)) if (result[key].length === 0) delete result[key];
+  return result;
+}
+
 /** 글자 하나당 보여줄 대표 단어 수. */
 const LIMIT = 5;
 
@@ -106,8 +134,9 @@ function main() {
 
   const result = {};
   let missing = 0;
+  const cells = readKanaCells();
 
-  for (const cell of readKanaCells()) {
+  for (const cell of cells) {
     const override = OVERRIDES[cell.hiragana] ?? {};
     const matchesCell = (text, kana) =>
       override.match === "contains"
@@ -151,6 +180,10 @@ function main() {
   fs.writeFileSync(path.join(OUT_DIR, "kana-words.json"), JSON.stringify(result));
   const count = Object.keys(result).length;
   console.log(`kana-words.json: ${count}자 (둘 다 못 찾은 글자 ${missing}자)`);
+
+  const homophones = buildHomophones(dictionary, cells);
+  fs.writeFileSync(path.join(OUT_DIR, "kana-homophones.json"), JSON.stringify(homophones));
+  console.log(`kana-homophones.json: ${Object.keys(homophones).length}자`);
 }
 
 main();

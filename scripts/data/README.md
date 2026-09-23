@@ -119,6 +119,18 @@ interface KanaWord { id: string; word: string; reading: string; meaning: string;
 ん이 들어간 단어에서 고른다. 8자(ぢ·づ 등)는 사전에 후보가 없어 양쪽 다 빈 배열이며,
 그 경우 UI에서 대표 단어 칸을 아예 그리지 않는다.
 
+### `kana-homophones.json` — 발음 게임 채점용 동음어
+
+```ts
+type KanaHomophones = Record<string, string[]>; // 히라가나 키 → 읽기가 정확히 그 글자인 표기
+```
+
+`build-kana-words.mjs`가 `kana-words.json`과 함께 만든다. 음성 인식기는 "か" 한 글자를
+蚊·課처럼 한자로 받아 적는 일이 흔해서, 그 표기의 읽기가 목표 글자와 같은지 알아야 채점할 수
+있다. 사전의 읽기(가타카나 읽기는 히라가나로 바꿔서)가 키와 정확히 같은 항목의 표기만,
+글자당 최대 60개 싣는다. 가나뿐인 표기는 뺀다(채점 쪽에서 읽기 그대로 비교한다).
+해당하는 표기가 없는 글자는 키 자체가 없다.
+
 ### `pos-tags.json`
 
 `dictionary.json`에 실제로 등장하는 품사 코드만 담은 `{ code: "영문 설명" }` 맵.

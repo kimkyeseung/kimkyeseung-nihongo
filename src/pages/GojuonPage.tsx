@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import KanaDetailDialog from "../components/KanaDetailDialog";
+import KanaSpeakingGame from "../components/KanaSpeakingGame";
 import SegmentedTabs from "../components/SegmentedTabs";
 import { GOJUON_SECTIONS, type KanaCell, type KanaTab, type ScriptMode } from "../data/gojuon";
 import { useJapaneseSpeech } from "../hooks/useJapaneseSpeech";
@@ -8,6 +9,7 @@ import { useGamificationStore } from "../stores/gamificationStore";
 import { useLearnerMemoryStore, recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useGojuonView } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
+import { speakableCells } from "../lib/kanaPronunciation";
 
 const TAB_OPTIONS: readonly { key: KanaTab; label: string }[] = [
   { key: "seion", label: "청음" },
@@ -27,6 +29,11 @@ function GojuonPage() {
     mode === "katakana" ? TAB_OPTIONS : TAB_OPTIONS.filter((t) => t.key !== "special");
   const tab: KanaTab = mode === "hiragana" && storedTab === "special" ? "seion" : storedTab;
   const sections = GOJUON_SECTIONS.filter((section) => section.tab === tab);
+  // 발음 게임은 지금 보고 있는 표에서 낸다. 판마다 새로 섞도록 여는 횟수를 key로 쓴다
+  // (KanjiPage의 quizSessionId와 같은 방식). null이면 닫힘.
+  const [gameSession, setGameSession] = useState<number | null>(null);
+  const gameCells = speakableCells(sections.flatMap((s) => s.rows.flatMap((r) => r.cells)));
+  const tabLabel = TAB_OPTIONS.find((t) => t.key === tab)?.label ?? "";
   const [selected, setSelected] = useState<KanaCell | null>(null);
   const { speak, isSupported } = useJapaneseSpeech();
   const recordProgress = useGamificationStore((s) => s.recordProgress);
@@ -80,6 +87,14 @@ function GojuonPage() {
         className="mt-4"
       />
 
+      <button
+        onClick={() => setGameSession((n) => (n ?? 0) + 1)}
+        className="btn-press mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3 font-bold text-white"
+        style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
+      >
+        🎤 2초 발음 게임
+      </button>
+
       {tab === "special" && (
         <p className="mt-3 text-sm text-gray-500">
           외래어를 적을 때 쓰는 가타카나 조합이에요. 작은 ァ·ィ·ゥ·ェ·ォ·ュ를 붙여 일본어에 없던 소리를
@@ -122,6 +137,14 @@ function GojuonPage() {
       </div>
 
       <KanaDetailDialog cell={selected} mode={mode} onClose={() => setSelected(null)} />
+      <KanaSpeakingGame
+        session={gameSession ?? 0}
+        cells={gameSession === null ? null : gameCells}
+        mode={mode}
+        label={`${mode === "hiragana" ? "히라가나" : "가타카나"} · ${tabLabel}`}
+        onClose={() => setGameSession(null)}
+        onRestart={() => setGameSession((n) => (n ?? 0) + 1)}
+      />
     </div>
   );
 }
