@@ -135,6 +135,8 @@ function describeEvent(event: StudyEvent): string | null {
       return `단어 ${event.subject}의 뜻을 찾아봄`;
     case "word-review-known":
       return `단어 ${event.subject} 복습에 성공`;
+    case "word-review-unknown":
+      return `단어 ${event.subject}를 복습에서 떠올리지 못함`;
     case "writing-corrected":
       return `작문 첨삭을 받음: ${event.subject}`;
     case "writing-clean":
@@ -188,7 +190,7 @@ export function buildLearnerProfile(rawEvents: StudyEvent[]): LearnerProfile {
     levelBasis: basis,
     weakKanji,
     strongKanji,
-    weakWords: recentSubjects(events, ["word-looked-up"], "subject"),
+    weakWords: recentSubjects(events, ["word-review-unknown", "word-looked-up"], "subject"),
     // 첨삭에서 지적받은 요지는 subject(원문)가 아니라 detail에 넣는다.
     strugglePoints: recentSubjects(events, ["writing-corrected"], "detail"),
     recentStudy,

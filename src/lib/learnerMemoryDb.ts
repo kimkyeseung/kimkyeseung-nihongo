@@ -41,10 +41,11 @@ export type StudyEventType =
   | "kanji-learned"
   | "word-added"
   | "word-review-known"
+  /** 단어장 복습에서 왼쪽으로 넘긴 것 — "이 단어를 몰랐다"의 가장 직접적인 신호. */
+  | "word-review-unknown"
   /**
-   * 문장 속 단어를 탭해서 뜻을 찾아본 것. 단어장 스와이프에는 "모르겠다" 경로가 없어서
-   * (왼쪽은 삭제, 오른쪽은 학습 완료) **지금 이 앱에서 "이 단어를 몰랐다"에 가장 가까운
-   * 신호가 이것이다.** 단어장에 "모르겠다" 스와이프를 추가하게 되면 그쪽도 같이 넣을 것.
+   * 문장 속 단어를 탭해서 뜻을 찾아본 것. `word-review-unknown`과 함께 약한 어휘로 센다
+   * (단어장에 담지 않은 단어는 이쪽으로만 잡힌다).
    */
   | "word-looked-up"
   | "writing-corrected"

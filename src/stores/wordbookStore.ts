@@ -103,7 +103,8 @@ export const useWordbookStore = create<WordbookState>()(
               ...state.entries,
               [wordId]: {
                 ...entry,
-                mastered: know ? true : entry.mastered,
+                // 모른다고 답한 단어에 ✓가 남아 있으면 목록이 거짓말을 한다.
+                mastered: know,
                 srs: reviewSrs(entry.srs, know),
               },
             },
