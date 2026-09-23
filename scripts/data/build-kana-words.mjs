@@ -38,15 +38,24 @@ const OVERRIDES = {
   わ: { hiragana: "1311110" /* 私 */ },
   へ: { hiragana: "1499320" /* 部屋 */ },
   ど: { hiragana: "1451470" /* 動物 */ },
+  // 작은 ヵ・ヶ로 "시작하는" 단어는 없다 — 一ヶ月처럼 들어 있는 단어에서 고른다.
+  ゕ: { match: "contains" },
+  ゖ: { match: "contains" },
 };
 
 function readKanaCells() {
   const source = fs.readFileSync(path.join(OUT_DIR, "gojuon.ts"), "utf-8");
   const cells = [];
-  const re = /cell\("([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\)/g;
+  // special(...)은 가타카나 전용 칸(ファ·ヶ…) — 네 번째 인자(설명 등)가 올 수 있어 닫는 괄호는 안 본다.
+  const re = /\b(cell|special)\("([^"]+)",\s*"([^"]+)",\s*"([^"]+)"/g;
   let match;
   while ((match = re.exec(source))) {
-    cells.push({ hiragana: match[1], katakana: match[2], romaji: match[3] });
+    cells.push({
+      hiragana: match[2],
+      katakana: match[3],
+      romaji: match[4],
+      katakanaOnly: match[1] === "special",
+    });
   }
   return cells;
 }
@@ -112,16 +121,27 @@ function main() {
       return [forced, ...picked.filter((w) => w.word !== forced.word)].slice(0, LIMIT);
     };
 
-    const hiragana = withOverride(
-      override.hiragana,
-      pickBest(
-        usable.filter((e) => matchesCell(e.reading, cell.hiragana) && !KATAKANA_ONLY.test(e.word))
-      )
-    );
+    // 가타카나 전용 칸은 히라가나 쪽 단어가 없다(화면도 가타카나 모드에서만 보여준다).
+    const hiragana = cell.katakanaOnly
+      ? []
+      : withOverride(
+          override.hiragana,
+          pickBest(
+            usable.filter(
+              (e) => matchesCell(e.reading, cell.hiragana) && !KATAKANA_ONLY.test(e.word)
+            )
+          )
+        );
     // 가타카나 쪽은 외래어(가타카나로만 쓰는 단어)를 고른다 — 가타카나를 실제로 만나는 자리다.
+    // 가타카나 전용 칸은 예외로 표기만 본다 — ヶ는 一ヶ月처럼 한자와 섞여서만 쓰인다.
     const katakana = withOverride(
       override.katakana,
-      pickBest(usable.filter((e) => matchesCell(e.word, cell.katakana) && KATAKANA_ONLY.test(e.word)))
+      pickBest(
+        usable.filter(
+          (e) =>
+            matchesCell(e.word, cell.katakana) && (cell.katakanaOnly || KATAKANA_ONLY.test(e.word))
+        )
+      )
     );
 
     if (hiragana.length === 0 && katakana.length === 0) missing += 1;

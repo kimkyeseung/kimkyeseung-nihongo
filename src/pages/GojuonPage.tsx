@@ -2,17 +2,31 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import KanaDetailDialog from "../components/KanaDetailDialog";
 import SegmentedTabs from "../components/SegmentedTabs";
-import { GOJUON_SECTIONS, type KanaCell, type ScriptMode } from "../data/gojuon";
+import { GOJUON_SECTIONS, type KanaCell, type KanaTab, type ScriptMode } from "../data/gojuon";
 import { useJapaneseSpeech } from "../hooks/useJapaneseSpeech";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useLearnerMemoryStore, recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useGojuonView } from "../stores/pageStateStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 
+const TAB_OPTIONS: readonly { key: KanaTab; label: string }[] = [
+  { key: "seion", label: "청음" },
+  { key: "dakuon", label: "탁음" },
+  { key: "youon", label: "요음" },
+  { key: "special", label: "특수" },
+];
+
 function GojuonPage() {
-  // 히라가나/가타카나 선택은 페이지를 떠나도 유지된다(pageStateStore 주석 참고).
+  // 히라가나/가타카나 선택과 탭은 페이지를 떠나도 유지된다(pageStateStore 주석 참고).
   const mode = useGojuonView((s) => s.mode);
   const setMode = useGojuonView((s) => s.setMode);
+  const storedTab = useGojuonView((s) => s.tab);
+  const setTab = useGojuonView((s) => s.setTab);
+  // "특수"는 가타카나 전용 표기(ファ·ヶ…)라 히라가나 모드에서는 탭 자체가 없다.
+  const tabOptions =
+    mode === "katakana" ? TAB_OPTIONS : TAB_OPTIONS.filter((t) => t.key !== "special");
+  const tab: KanaTab = mode === "hiragana" && storedTab === "special" ? "seion" : storedTab;
+  const sections = GOJUON_SECTIONS.filter((section) => section.tab === tab);
   const [selected, setSelected] = useState<KanaCell | null>(null);
   const { speak, isSupported } = useJapaneseSpeech();
   const recordProgress = useGamificationStore((s) => s.recordProgress);
@@ -22,7 +36,7 @@ function GojuonPage() {
   function handleSelect(cell: KanaCell) {
     const kana = mode === "hiragana" ? cell.hiragana : cell.katakana;
     setSelected(cell);
-    speak(kana);
+    speak(cell.speech ?? kana);
 
     // **XP는 그 글자를 처음 눌렀을 때만 준다.** 예전에는 탭할 때마다 무조건 줘서 한 글자를
     // 연타하면 XP가 무한히 쌓였다 — 게이미피케이션 규칙("아직 안 된 상태 → 되는 상태로
@@ -58,8 +72,23 @@ function GojuonPage() {
         </p>
       )}
 
+      <SegmentedTabs
+        options={tabOptions}
+        value={tab}
+        onChange={setTab}
+        fill
+        className="mt-4"
+      />
+
+      {tab === "special" && (
+        <p className="mt-3 text-sm text-gray-500">
+          외래어를 적을 때 쓰는 가타카나 조합이에요. 작은 ァ·ィ·ゥ·ェ·ォ·ュ를 붙여 일본어에 없던 소리를
+          나타내요.
+        </p>
+      )}
+
       <div className="mt-6 flex flex-col gap-8">
-        {GOJUON_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <section key={section.id}>
             <h3 className="mb-3 text-lg text-gray-700">{section.label}</h3>
             <div className="overflow-x-auto">

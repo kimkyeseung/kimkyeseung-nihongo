@@ -50,7 +50,7 @@ function KanaDetailDialog({
                 <span className="font-ja text-6xl leading-none">{char}</span>
                 <div>
                   <p className="text-lg text-gray-400">{cell.romaji}</p>
-                  <SpeakButton text={char} label={`${char} 발음 듣기`} size="md" className="mt-1" />
+                  <SpeakButton text={cell.speech ?? char} label={`${char} 발음 듣기`} size="md" className="mt-1" />
                 </div>
               </div>
               <button onClick={onClose} className="text-2xl leading-none text-gray-400" aria-label="닫기">
@@ -58,10 +58,17 @@ function KanaDetailDialog({
               </button>
             </div>
 
-            <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-              <p className="text-xs text-gray-400">{counterpartLabel}</p>
-              <p className="mt-1 font-ja text-3xl">{counterpart}</p>
-            </div>
+            {/* 가타카나 전용 칸(ファ·ヶ…)은 짝이 되는 히라가나가 실제로 쓰이지 않으니 보여주지 않는다. */}
+            {cell.katakanaOnly ? (
+              <p className="mt-5 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
+                {cell.note ?? "외래어를 적을 때만 쓰는 가타카나 표기예요. 히라가나로는 거의 쓰지 않아요."}
+              </p>
+            ) : (
+              <div className="mt-5 rounded-2xl bg-gray-50 p-4">
+                <p className="text-xs text-gray-400">{counterpartLabel}</p>
+                <p className="mt-1 font-ja text-3xl">{counterpart}</p>
+              </div>
+            )}
 
             {words.length > 0 && (
               <div className="mt-3 rounded-2xl bg-primary/5 p-4">
