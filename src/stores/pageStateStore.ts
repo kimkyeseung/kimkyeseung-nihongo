@@ -4,6 +4,7 @@ import type { KanaTab, ScriptMode } from "../data/gojuon";
 import type { InputScript } from "../hooks/useScriptInput";
 import type { JlptLevel } from "../types/jlpt";
 import type { WordExample } from "../lib/wordExamples";
+import type { PracticeProblem } from "../lib/teacherPractice";
 import { localDateKey } from "../lib/localDate";
 
 /**
@@ -293,3 +294,39 @@ export const useTeacherGreeting = create<TeacherGreeting>()(
     { name: "teacher-greeting" }
   )
 );
+
+/**
+ * 선생님 답변별 "연습해보기" 문제. **메모리 전용**이다 — 방금 만든 LLM 결과라 새로고침하면
+ * 사라지는 편이 자연스럽다(단어 예문과 같은 기준).
+ *
+ * 여기 두는 이유는 시트를 닫았다 다시 열 때 **같은 문제를 다시 만들지 않으려는 것**이다.
+ * 문제 만들기는 추론을 한 번 통째로 도는 일이라 Gemma/Safari에서는 수십 초가 걸린다 —
+ * 실수로 바깥을 눌러 닫았다고 그걸 다시 기다리게 하면 안 된다. 푸는 도중의 진행 상황은
+ * 담지 않는다(열 때마다 1번부터 다시 푼다).
+ */
+interface TeacherPracticeSet {
+  problems: PracticeProblem[];
+  /** 이 문제 묶음으로 이미 XP를 받았는가 — 다시 풀기로 무한히 쌓지 못하게. */
+  xpAwarded: boolean;
+}
+
+interface TeacherPracticeState {
+  byMessageId: Record<string, TeacherPracticeSet>;
+  save: (messageId: string, problems: PracticeProblem[]) => void;
+  /** 처음 부를 때만 true를 돌려주면서 표시한다. */
+  claimXp: (messageId: string) => boolean;
+}
+
+export const useTeacherPractice = create<TeacherPracticeState>((set, get) => ({
+  byMessageId: {},
+  save: (messageId, problems) =>
+    set((s) => ({ byMessageId: { ...s.byMessageId, [messageId]: { problems, xpAwarded: false } } })),
+  claimXp: (messageId) => {
+    const current = get().byMessageId[messageId];
+    if (!current || current.xpAwarded) return false;
+    set((s) => ({
+      byMessageId: { ...s.byMessageId, [messageId]: { ...current, xpAwarded: true } },
+    }));
+    return true;
+  },
+}));

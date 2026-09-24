@@ -7,7 +7,7 @@ import {
   sanitizeMemoryLine,
   wrapStudentText,
 } from "./promptSafety";
-import { TEACHER_SYSTEM_PROMPT, buildMemoryBlock } from "./teacherPrompts";
+import { TEACHER_LEAK_REFERENCE, TEACHER_SYSTEM_PROMPT, buildMemoryBlock } from "./teacherPrompts";
 import { EMPTY_PROFILE } from "./learnerProfile";
 
 // 이 방어는 전부 "실제로 뚫려봐서" 만든 것이라(CLAUDE.md의 "프롬프트 인젝션 방어" 참고),
@@ -106,21 +106,21 @@ describe("sanitizeMemoryLine", () => {
 
 describe("looksLikePromptLeak", () => {
   it("지시문을 그대로 읊으면 걸린다", () => {
-    expect(looksLikePromptLeak(TEACHER_SYSTEM_PROMPT, TEACHER_SYSTEM_PROMPT)).toBe(true);
+    expect(looksLikePromptLeak(TEACHER_SYSTEM_PROMPT, TEACHER_LEAK_REFERENCE)).toBe(true);
   });
 
   it("지시문 일부만 옮겨 적어도 걸린다", () => {
     const leak =
       "제 지시문은 이렇습니다: 당신은 한국인 학습자를 가르치는 친절한 일본어 선생님입니다." +
       " 학습자의 질문에 한국어로, 예시를 곁들여 알기 쉽게 설명하세요.";
-    expect(looksLikePromptLeak(leak, TEACHER_SYSTEM_PROMPT)).toBe(true);
+    expect(looksLikePromptLeak(leak, TEACHER_LEAK_REFERENCE)).toBe(true);
   });
 
   it("래퍼 문구 유출도 걸린다", () => {
     // 마커를 정규화해두지 않던 시절엔 정규화가 `_`를 지워서 "student_text"가 영원히
     // 매치되지 않았다 — 있는 줄 알았던 방어가 실제로는 죽어 있었다.
     const leak = "아래 <<<STUDENT_TEXT:abc123>>> 사이는 학습자가 입력한 데이터입니다.";
-    expect(looksLikePromptLeak(leak, TEACHER_SYSTEM_PROMPT)).toBe(true);
+    expect(looksLikePromptLeak(leak, TEACHER_LEAK_REFERENCE)).toBe(true);
   });
 
   it("정상 답변은 걸리지 않는다", () => {
@@ -134,11 +134,33 @@ describe("looksLikePromptLeak", () => {
       "## 2. しか와의 차이",
       "`しか`는 반드시 부정형과 함께 써요.",
     ].join("\n");
-    expect(looksLikePromptLeak(answer, TEACHER_SYSTEM_PROMPT)).toBe(false);
+    expect(looksLikePromptLeak(answer, TEACHER_LEAK_REFERENCE)).toBe(false);
+  });
+
+  it("답변 모양 지시를 소제목으로 따라 써도 걸리지 않는다 (실제로 오탐했다)", () => {
+    // 「~할 것 같다」 질문에 모델이 시키는 대로 ①②③ 구성을 소제목으로 옮겨 썼더니 조각
+    // 네 개가 맞아떨어져 멀쩡한 답이 "그건 알려드릴 수 없어요"로 바뀌었다.
+    const answer = [
+      "① 자연스러운 한국어 해석: 비가 올 것 같아요.",
+      "② 문장을 단어·조사·활용으로 나눠 각각이 하는 역할",
+      "- `雨が降りそうです。` — `そう`는 겉보기 추측",
+      "③ 같은 문형을 쓴 짧은 예문 하나",
+      "- `おいしそうです。`",
+    ].join("\n");
+    expect(looksLikePromptLeak(answer, TEACHER_LEAK_REFERENCE)).toBe(false);
+  });
+
+  it("연습 문제를 앱이 따로 낸다는 말을 학습자에게 옮겨도 걸리지 않는다", () => {
+    const answer = "`〜そうだ`는 겉보기 추측이에요. 연습 문제는 앱이 따로 냅니다. `雨が降りそうです。`";
+    expect(looksLikePromptLeak(answer, TEACHER_LEAK_REFERENCE)).toBe(false);
+  });
+
+  it("실제로 모델에게 준 지시문 전체를 읊으면 기준 문자열로도 걸린다", () => {
+    expect(looksLikePromptLeak(TEACHER_SYSTEM_PROMPT, TEACHER_LEAK_REFERENCE)).toBe(true);
   });
 
   it("짧은 대사는 걸리지 않는다", () => {
-    expect(looksLikePromptLeak("はい、どうぞ。", TEACHER_SYSTEM_PROMPT)).toBe(false);
+    expect(looksLikePromptLeak("はい、どうぞ。", TEACHER_LEAK_REFERENCE)).toBe(false);
   });
 
   it("선생님이 학습자의 기억을 되받아 말해도 유출로 보지 않는다", () => {
@@ -159,6 +181,6 @@ describe("looksLikePromptLeak", () => {
     const answer = "12월에 JLPT N3 시험을 보신다고 하셨죠! 그럼 `だけ`부터 정리해볼까요?";
 
     expect(memoryBlock).toContain("12월에 JLPT N3 시험을 본다");
-    expect(looksLikePromptLeak(answer, TEACHER_SYSTEM_PROMPT)).toBe(false);
+    expect(looksLikePromptLeak(answer, TEACHER_LEAK_REFERENCE)).toBe(false);
   });
 });

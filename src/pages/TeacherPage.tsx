@@ -19,7 +19,7 @@ import { useWordSuggestions } from "../hooks/useWordSuggestions";
 import {
   TEACHER_REFUSAL_ANSWER,
   TEACHER_SAMPLE_QUESTIONS,
-  TEACHER_SYSTEM_PROMPT,
+  TEACHER_LEAK_REFERENCE,
   buildTeacherSystemPrompt,
   buildTeacherUserPrompt,
 } from "../lib/teacherPrompts";
@@ -43,6 +43,8 @@ import {
 } from "../stores/teacherChatStore";
 import { formatDayLabel, localDateKey } from "../lib/localDate";
 import TeacherHistorySidebar from "../components/TeacherHistorySidebar";
+import TeacherPracticeSheet, { type PracticeTarget } from "../components/TeacherPracticeSheet";
+import { isPracticeWorthy } from "../lib/teacherPractice";
 
 /**
  * 이보다 짧은 답변에서는 기억할 만한 개인적인 사실이 나올 일이 없다. 추출은 추론이 한 번 더
@@ -129,6 +131,7 @@ function TeacherPage() {
   const pendingQuestion = useTeacherChatStore((s) => s.pendingQuestion);
   const consumePendingQuestion = useTeacherChatStore((s) => s.consumePendingQuestion);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [practiceTarget, setPracticeTarget] = useState<PracticeTarget | null>(null);
 
   // 지난 대화를 IndexedDB에서 읽어온다. 한 번만 부르면 되고, 실패해도 조용히 넘어간다.
   useEffect(() => {
@@ -248,10 +251,11 @@ function TeacherPage() {
           // 지시문을 그대로 읊기 시작하면 거기서 끊는다 — 프롬프트로 "말하지 말라"고 시키는
           // 것만으로는 막히지 않아서, 받은 답을 코드에서 한 번 더 본다(promptSafety.ts 주석 참고).
           //
-          // **고정 지시문(TEACHER_SYSTEM_PROMPT)만 넘긴다.** 실제로 모델에게 준 시스템
+          // **고정 지시문에서 답변 모양 지시를 뺀 TEACHER_LEAK_REFERENCE만 넘긴다.** 모델이
+          // 모양 지시(①②③)를 소제목으로 따라 쓰는 건 정상이다. 또 실제로 모델에게 준 시스템
           // 프롬프트에는 기억 블록이 붙어 있지만, 그것까지 넘기면 선생님이 학습자의 기억을
           // 정상적으로 되받기만 해도 유출로 오인한다(teacherPrompts.ts 주석 참고).
-          if (looksLikePromptLeak(acc, TEACHER_SYSTEM_PROMPT)) {
+          if (looksLikePromptLeak(acc, TEACHER_LEAK_REFERENCE)) {
             appendAnswer(assistantId, TEACHER_REFUSAL_ANSWER);
             // 화면만 바꾸고 끝내면 오염된 턴이 히스토리에 남아 다음 질문에서 이어받을 수 있다.
             model.resetSession();
@@ -482,7 +486,30 @@ function TeacherPage() {
                     {m.role === "assistant" && m.text === "" ? (
                       <LoadingMascot label="선생님이 생각하는 중..." />
                     ) : m.role === "assistant" ? (
-                      <MarkdownAnswer text={m.text} isStreaming={isStreaming} />
+                      <>
+                        <MarkdownAnswer text={m.text} isStreaming={isStreaming} />
+                        {/* 모든 답변에 달지 않는다 — 예문이 여럿 든 설명에만(isPracticeWorthy).
+                            답변 중에는 감춘다: 스트리밍 중인 답은 아직 다 안 왔고, 지난 답으로
+                            문제를 만들면 수업과 추론이 겹친다. 지난 날짜에서도 연다 — 연습은
+                            대화 기록에 아무것도 쓰지 않는다. */}
+                        {!isAnswering && isPracticeWorthy(m.text) && messages[i - 1]?.role === "user" && (
+                          <div className="mt-3 flex justify-end">
+                            <button
+                              onClick={() =>
+                                setPracticeTarget({
+                                  messageId: m.id,
+                                  question: messages[i - 1].text,
+                                  answer: m.text,
+                                })
+                              }
+                              className="btn-press rounded-2xl border-2 border-primary/20 bg-white px-4 py-2 text-sm font-bold text-primary"
+                              style={{ ["--btn-shadow" as string]: "#e5e7eb" }}
+                            >
+                              ✏️ 연습해보기
+                            </button>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       m.text
                     )}
@@ -546,6 +573,7 @@ function TeacherPage() {
         )}
 
         <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
+        <TeacherPracticeSheet target={practiceTarget} onClose={() => setPracticeTarget(null)} />
       </div>
     </div>
   );
