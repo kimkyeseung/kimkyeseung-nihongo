@@ -52,6 +52,14 @@ import { isPracticeWorthy } from "../lib/teacherPractice";
  */
 const MIN_ANSWER_LENGTH_FOR_EXTRACTION = 40;
 
+/** 이보다 긴 답변에는 "답변 처음으로" 버튼을 단다 — 375px에서 대략 한 화면을 넘는 길이. */
+const LONG_ANSWER_LENGTH = 350;
+
+/** 답변 말풍선의 DOM id — "답변 처음으로"가 스크롤해 갈 곳. */
+function answerAnchorId(messageId: string) {
+  return `teacher-answer-${messageId}`;
+}
+
 /** 보내기 버튼의 종이비행기. 이 프로젝트에 아이콘 세트가 없어 인라인 SVG로 둔다(currentColor 상속). */
 function PaperPlaneIcon() {
   return (
@@ -472,6 +480,9 @@ function TeacherPage() {
               // MarkdownAnswer에 이걸 넘겨야 후리가나·문법 칩 재계산으로 인한 흔들림을 막는다
               // (MarkdownAnswer의 isStreaming 주석 참고).
               const isStreaming = isAnswering && i === messages.length - 1 && m.role === "assistant";
+              const isLong = m.role === "assistant" && m.text.length >= LONG_ANSWER_LENGTH;
+              const canPractice =
+                m.role === "assistant" && isPracticeWorthy(m.text) && messages[i - 1]?.role === "user";
               return (
                 <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <motion.div
@@ -480,33 +491,52 @@ function TeacherPage() {
                     className={
                       m.role === "user"
                         ? "max-w-[80%] rounded-2xl bg-primary px-4 py-2 text-white"
-                        : "w-full rounded-2xl bg-gray-50 px-4 py-3 text-gray-800"
+                        : // 흰 바탕이어야 답변 속 예문 카드(bg-gray-50)가 보인다 — 예전엔 말풍선도 회색이라
+                          // 카드 경계가 없었다. 넓은 화면에서 한 줄이 너무 길면 읽기 힘들어 폭을 묶는다.
+                          "w-full max-w-3xl scroll-mt-3 rounded-2xl border-2 border-gray-100 bg-white px-4 py-3 text-gray-800"
                     }
+                    id={m.role === "assistant" ? answerAnchorId(m.id) : undefined}
                   >
                     {m.role === "assistant" && m.text === "" ? (
                       <LoadingMascot label="선생님이 생각하는 중..." />
                     ) : m.role === "assistant" ? (
                       <>
                         <MarkdownAnswer text={m.text} isStreaming={isStreaming} />
-                        {/* 모든 답변에 달지 않는다 — 예문이 여럿 든 설명에만(isPracticeWorthy).
+                        {/* 연습해보기는 모든 답변에 달지 않는다 — 예문이 여럿 든 설명에만(isPracticeWorthy).
                             답변 중에는 감춘다: 스트리밍 중인 답은 아직 다 안 왔고, 지난 답으로
                             문제를 만들면 수업과 추론이 겹친다. 지난 날짜에서도 연다 — 연습은
                             대화 기록에 아무것도 쓰지 않는다. */}
-                        {!isAnswering && isPracticeWorthy(m.text) && messages[i - 1]?.role === "user" && (
-                          <div className="mt-3 flex justify-end">
-                            <button
-                              onClick={() =>
-                                setPracticeTarget({
-                                  messageId: m.id,
-                                  question: messages[i - 1].text,
-                                  answer: m.text,
-                                })
-                              }
-                              className="btn-press rounded-2xl border-2 border-primary/20 bg-white px-4 py-2 text-sm font-bold text-primary"
-                              style={{ ["--btn-shadow" as string]: "#e5e7eb" }}
-                            >
-                              ✏️ 연습해보기
-                            </button>
+                        {!isAnswering && (isLong || canPractice) && (
+                          <div className="mt-3 flex items-center justify-end gap-3">
+                            {/* 긴 설명은 끝까지 따라 내려온 채로 끝난다 — 처음부터 다시 읽을 길을 둔다.
+                                부드러운 스크롤은 누를 때 한 번뿐이라 useStickToBottom의 떨림과 무관하다. */}
+                            {isLong && (
+                              <button
+                                onClick={() =>
+                                  document
+                                    .getElementById(answerAnchorId(m.id))
+                                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                                }
+                                className="mr-auto text-xs text-gray-400"
+                              >
+                                ↑ 답변 처음으로
+                              </button>
+                            )}
+                            {canPractice && (
+                              <button
+                                onClick={() =>
+                                  setPracticeTarget({
+                                    messageId: m.id,
+                                    question: messages[i - 1].text,
+                                    answer: m.text,
+                                  })
+                                }
+                                className="btn-press rounded-2xl border-2 border-primary/20 bg-white px-4 py-2 text-sm font-bold text-primary"
+                                style={{ ["--btn-shadow" as string]: "#e5e7eb" }}
+                              >
+                                ✏️ 연습해보기
+                              </button>
+                            )}
                           </div>
                         )}
                       </>

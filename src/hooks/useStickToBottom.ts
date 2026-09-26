@@ -27,6 +27,7 @@ const USER_IDLE_MS = 200;
 export function useStickToBottom<T extends HTMLElement>(...deps: unknown[]) {
   const elRef = useRef<T | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
+  const mutationRef = useRef<MutationObserver | null>(null);
   const stick = useRef(true);
   /** 지금 스크롤을 움직이고 있는 것이 사용자인가. */
   const userDriving = useRef(false);
@@ -67,6 +68,8 @@ export function useStickToBottom<T extends HTMLElement>(...deps: unknown[]) {
       }
       observerRef.current?.disconnect();
       observerRef.current = null;
+      mutationRef.current?.disconnect();
+      mutationRef.current = null;
       elRef.current = node;
       if (!node) return;
 
@@ -84,6 +87,17 @@ export function useStickToBottom<T extends HTMLElement>(...deps: unknown[]) {
       const observer = new ResizeObserver(pin);
       observer.observe(node);
       observerRef.current = observer;
+
+      /**
+       * **내용이 나중에 자라는 것도 따라가야 한다 (실제로 겪은 문제).** 선생님 답변은 스트리밍이
+       * 끝난 뒤에야 예문 카드에 후리가나·문법 칩이 붙는데(사전·커리큘럼이 동적 import라 한 박자
+       * 늦다), 그때는 메시지도 컨테이너 크기도 그대로라 위의 두 장치 어느 쪽도 돌지 않는다 —
+       * 긴 답변의 끝 140px이 화면 밖에 남았다. DOM이 바뀌면 한 번 더 붙인다(바닥을 보고 있을
+       * 때만 — `pin`이 `stick`을 본다).
+       */
+      const mutation = new MutationObserver(pin);
+      mutation.observe(node, { childList: true, subtree: true, characterData: true });
+      mutationRef.current = mutation;
     },
     [handleScroll, markUserDriving, pin]
   );
