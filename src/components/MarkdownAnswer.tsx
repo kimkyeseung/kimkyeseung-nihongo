@@ -3,7 +3,10 @@ import remarkGfm from "remark-gfm";
 import ClickableSentence from "./ClickableSentence";
 import SentenceActions from "./SentenceActions";
 import SentenceGrammar from "./SentenceGrammar";
+import { useMemo } from "react";
 import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
+import { useCurriculum } from "../hooks/useCurriculumPlan";
+import { assignGrammarToFirstSentence } from "../lib/grammarPatterns";
 
 const HAS_JAPANESE = /[぀-ヿ㐀-䶿一-鿿]/;
 
@@ -16,6 +19,15 @@ function isExampleSentence(content: string): boolean {
   const t = content.trim();
   return /[。！？!?]$/.test(t) || t.includes("、") || t.length >= 12;
 }
+
+/** 답변 속 예문(백틱 안의 일본어 문장)을 나온 순서대로. 문법 칩을 처음 한 번만 달 때 쓴다. */
+function exampleSentencesIn(text: string): string[] {
+  return [...text.matchAll(/`([^`]+)`/g)]
+    .map((m) => m[1].trim())
+    .filter((c) => HAS_JAPANESE.test(c) && isExampleSentence(c));
+}
+
+const NO_PATTERNS: ReadonlySet<string> = new Set();
 
 /**
  * 선생님 답변(마크다운)을 렌더링한다. 앱 폰트/색을 그대로 쓰려고 Tailwind 클래스를
@@ -35,6 +47,13 @@ function isExampleSentence(content: string): boolean {
  */
 function MarkdownAnswer({ text, isStreaming = false }: { text: string; isStreaming?: boolean }) {
   const { handlers, dialogs } = useSentenceDialogs();
+  const curriculum = useCurriculum();
+  // 같은 문법 칩은 그 문형이 처음 나온 예문에만 단다 — 예문 다섯 개에 같은 칩이 다섯 번 붙었다.
+  // 스트리밍 중에는 칩을 안 그리므로 계산도 하지 않는다.
+  const grammarBySentence = useMemo(
+    () => (curriculum && !isStreaming ? assignGrammarToFirstSentence(curriculum, exampleSentencesIn(text)) : null),
+    [curriculum, isStreaming, text]
+  );
 
   return (
     // 한·일이 한 줄에 섞이는 자리라 font-mixed(CLAUDE.md "입력 문자 전환 토글" 절). 첫 블록의
@@ -120,7 +139,10 @@ function MarkdownAnswer({ text, isStreaming = false }: { text: string; isStreami
                   {/* 칩 안이라 여백을 따로 주지 않는다(기본값 ml-1은 문장 뒤에 붙는 자리용). */}
                   <SentenceActions text={content} subject="예문" className="" />
                 </span>
-                <SentenceGrammar text={content} />
+                <SentenceGrammar
+                  text={content}
+                  showOnly={grammarBySentence?.get(content.trim()) ?? NO_PATTERNS}
+                />
               </span>
             );
           },

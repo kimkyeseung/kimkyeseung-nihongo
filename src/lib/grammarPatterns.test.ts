@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findGrammarInSentence, patternFragments } from "./grammarPatterns";
+import { assignGrammarToFirstSentence, findGrammarInSentence, patternFragments } from "./grammarPatterns";
 import curriculumData from "../data/curriculum.json";
 import type { Curriculum } from "../types/curriculum";
 
@@ -108,5 +108,32 @@ describe("findGrammarInSentence", () => {
         expect(s.slice(m.start, m.end).length).toBe(m.end - m.start);
       }
     }
+  });
+});
+
+describe("assignGrammarToFirstSentence", () => {
+  it("같은 문형은 처음 나온 예문에만 붙는다", () => {
+    const sentences = ["水だけ飲みます。", "一つだけください。", "百円しかありません。"];
+    const first = patternsIn(sentences[0]);
+    expect(first.length).toBeGreaterThan(0);
+    const assigned = assignGrammarToFirstSentence(curriculum, sentences);
+    expect([...assigned.get(sentences[0])!]).toEqual(first);
+    // 뒤 문장에는 앞에서 이미 나온 패턴이 다시 붙지 않는다.
+    for (const later of sentences.slice(1)) {
+      for (const pattern of assigned.get(later)!) expect(first).not.toContain(pattern);
+    }
+  });
+
+  it("뒤 문장에만 있는 새 문형은 그대로 남긴다", () => {
+    const sentences = ["水だけ飲みます。", "日曜日だけ休みます。"];
+    const assigned = assignGrammarToFirstSentence(curriculum, sentences);
+    const onlyInSecond = patternsIn(sentences[1]).filter((p) => !patternsIn(sentences[0]).includes(p));
+    expect([...assigned.get(sentences[1])!]).toEqual(onlyInSecond);
+  });
+
+  it("앞뒤 공백은 무시하고, 같은 문장은 한 번만 계산한다", () => {
+    const assigned = assignGrammarToFirstSentence(curriculum, [" 水だけ飲みます。", "水だけ飲みます。 "]);
+    expect(assigned.size).toBe(1);
+    expect([...assigned.get("水だけ飲みます。")!]).toEqual(patternsIn("水だけ飲みます。"));
   });
 });
