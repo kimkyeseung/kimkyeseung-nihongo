@@ -16,8 +16,12 @@ const exitVariants = {
 
 /**
  * 복습 카드. **앞면은 단어만 보여준다** — 예전엔 읽기·뜻이 처음부터 다 보여서, 떠올려 보는
- * 과정 없이 "보고 넘기기"가 됐고 "안다"는 답을 믿을 수 없었다. 탭해서 뒤집은 뒤에만 넘길
- * 수 있다(`revealed`가 아니면 drag를 끈다).
+ * 과정 없이 "보고 넘기기"가 됐고 "안다"는 답을 믿을 수 없었다.
+ *
+ * **뒤집기 전에도 스와이프할 수 있다**(사용자 요청). 예전엔 뒤집어야만 drag가 켜졌는데, 보자마자
+ * 아는 단어까지 매번 탭 → 스와이프 두 번을 해야 해서 번거로웠다. 앞면은 단어만 보이므로 여기서
+ * "알아요"로 넘기는 것도 떠올려 보고 답한 것이라 SRS에 그대로 반영해도 된다. 탭(뒤집기)과
+ * 드래그는 framer-motion이 알아서 가른다 — 조금이라도 끌면 onTap이 불리지 않는다.
  */
 function WordbookCard({
   entry,
@@ -42,7 +46,7 @@ function WordbookCard({
     <motion.div
       className="absolute inset-0 flex flex-col justify-between rounded-3xl border-2 border-gray-100 bg-white p-6 shadow-lg"
       style={{ x, rotate }}
-      drag={showBack ? "x" : false}
+      drag={isTop ? "x" : false}
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.7}
       onTap={() => {
@@ -96,7 +100,7 @@ function WordbookCard({
       </div>
 
       <p className="text-center text-xs text-gray-300">
-        {showBack ? "← 모르겠어요 · 알아요 →" : "탭해서 뒤집기"}
+        {showBack ? "← 모르겠어요 · 알아요 →" : "탭해서 뒤집기 · 바로 넘겨도 돼요"}
       </p>
     </motion.div>
   );
