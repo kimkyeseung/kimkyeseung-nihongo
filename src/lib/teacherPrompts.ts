@@ -1,4 +1,4 @@
-import { REFUSE_PROMPT_DISCLOSURE, sanitizeMemoryLine, wrapStudentText } from "./promptSafety";
+import { REFUSE_PROMPT_DISCLOSURE, sanitizeMemoryLine, wrapStudentQuestion } from "./promptSafety";
 import { FACT_KIND_LABEL } from "./memoryExtraction";
 import type { MemoryFact } from "./learnerMemoryDb";
 import type { LearnerProfile } from "./learnerProfile";
@@ -80,7 +80,9 @@ export const TEACHER_SYSTEM_PROMPT = [...TEACHER_INTRO, ...TEACHER_ANSWER_SHAPE,
 export const TEACHER_LEAK_REFERENCE = [...TEACHER_INTRO, ...TEACHER_RULES].join("\n");
 
 export function buildTeacherUserPrompt(question: string): string {
-  return wrapStudentText(question);
+  // wrapStudentText가 아니다 — 그 문구("교정/분석 대상으로만 취급")를 쓰면 모델이 질문에 답하지 않고
+  // 질문을 분석하려 든다. wrapStudentQuestion의 주석 참고.
+  return wrapStudentQuestion(question);
 }
 
 /**
