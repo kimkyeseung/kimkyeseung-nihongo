@@ -150,7 +150,8 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
 src/router.tsx     react-router-dom 라우트 정의 (완료)
 src/App.tsx        RouterProvider + 대문(`/`)까지 덮어야 하는 상주물: 기억 미리 읽기 ·
                      PwaUpdatePrompt(서비스워커 등록 + 새 버전 안내 — Layout에 두면 안 된다,
-                     "PWA" 절 참고) · Vercel Analytics
+                     "PWA" 절 참고) · 화면 모드 적용(`followSystemTheme` — "다크 모드" 절) ·
+                     Vercel Analytics
 src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 GamificationBar 포함) +
                      Layout에 상주하는 것들: BadgeWatcher(뱃지 신규 획득 감지) · Confetti ·
                        ConversationSessionController(회화 세션 — 페이지 밖에 둬야 탭 이동에도
@@ -164,7 +165,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        WordMeaningDialog, JapaneseSuggestionList,
                        MarkdownAnswer(선생님 답변 렌더링), LoadingMascot, ProgressBar,
                        AssetLoadingBar(대문 프리로드) ·
-                       SegmentedTabs(알약 세그먼트 탭 공용 — 오십음도·한자 급수·단어장 두 탭) ·
+                       SegmentedTabs(알약 세그먼트 탭 공용 — 오십음도·한자 급수·단어장 두 탭·
+                         한자 상세의 획순/따라 쓰기·/about의 화면 모드) ·
                        SentencebookList(단어장의 문장 칸 목록) · SentenceReviewDeck(문장 칸 복습) ·
                        BackupCard(/about의 학습 데이터 백업·되돌리기 — "백업" 절 참고) ·
                        ConjugationDrillSheet(단어장 동사로 푸는 활용 연습) ·
@@ -254,7 +256,8 @@ src/stores/        Zustand 스토어:
                      aiEngineStore (전부 localStorage persist) · confettiStore(휘발성, persist 안 함) ·
                      learnerMemoryStore(학습자 기억 — 저장은 IndexedDB, store는 그 거울 +
                        모듈 함수 recordStudyEvent) · curriculumStore(시작 단계·수동 완료 유닛, persist) ·
-                     conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태) ·
+                     conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태 +
+                       useSentenceReview(문장 복습 큐, 메모리) · useAppearance(화면 모드, persist)) ·
                      teacherChatStore(선생님 대화 — 날짜별, IndexedDB 저장) ·
                      teacherSessionStore(선생님 세션 상태 + 질문 큐, 메모리 전용) ·
                      gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
@@ -1334,7 +1337,8 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   뜨면 2초 안에 소리 내 읽는다. 마이크 입력은 브라우저 음성 인식(Web Speech API의
   `SpeechRecognition`, `ja-JP`)이 받아 적고, 채점은 `kanaPronunciation.ts`가 한다.
 - **Chrome의 음성 인식은 기기에서 돌지 않는다 — 목소리를 구글 서버로 보낸다.** 이 앱에서
-  사용자 데이터가 외부 서버로 가는 **유일한** 기능이라 게임 첫 화면에 그 사실을 적어 뒀다.
+  사용자 데이터(목소리)가 외부 서버로 가는 **유일한** 기능이라 게임 첫 화면과 `/about`·README에
+  그 사실을 적어 뒀다. "입력한 문장은 기기를 벗어나지 않는다"는 문구를 쓸 때 이 예외를 빼먹지 말 것.
   오프라인이면 `"network"` 오류가 난다. Firefox에는 API가 아예 없다(안내만 보인다).
   Chrome은 요즘 접두사 없는 `SpeechRecognition`도 노출하므로 `getSpeechRecognition()`이 둘 다 본다.
   (기기 안 인식 — Chrome의 `processLocally` — 은 아직 붙이지 않았다.)
@@ -1374,7 +1378,7 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
 - **실제 마이크로는 아직 확인 못 했다.** 헤드리스 브라우저에서 권한 거부 경로는 진짜 API로,
   나머지(정답·시간 초과·오답·늦게 말하기)는 이벤트 순서를 흉내 낸 가짜 인식기로 확인했다.
   남은 확인거리: **짧은 한 글자를 실제 인식기가 얼마나 잘 받아 적는지**(특히 Android Chrome),
-  1.5초 유예가 충분한지.
+  2.5초 유예가 충분한지, "거의 맞음"이 너무 후한지(탁음을 구분 못 하는 학습자도 통과시킨다).
 
 ## 발음 재생(TTS) 구현 노트
 - 문장/단어 끝의 🔊 버튼은 전부 `SpeakButton` 하나다(내부에서 `useJapaneseSpeech` 사용).
@@ -1723,6 +1727,10 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   **이 버그는 운영에서만 보인다** — 로컬에서 멀쩡하다고 넘어가지 말 것.
 - 파일시스템이 rewrite보다 먼저라서 `/assets/*`·`/hero.png` 같은 실제 파일은 그대로 나간다.
   대신 없는 파일을 요청해도 404 대신 index.html(200)이 돌아온다 — SPA에서는 정상이다.
+- **`index.html`에 구글 애드센스 스크립트가 있다**(사용자가 main에 직접 넣었다). 순서는 **다크 모드 인라인 스크립트가
+  먼저**다 — 광고 스크립트는 `async`지만 앞에 두면 첫 페인트 전에 모드를 칠하는 쪽이 밀릴 수 있다.
+  광고는 학습자가 친 문장이나 기록을 받지 않지만, 개인정보 문구("기기를 벗어나지 않는다")를
+  고칠 때는 이 스크립트의 존재를 염두에 둘 것.
 - `sw.js`·`workbox-*.js`·`manifest.webmanifest`도 실제 파일이라 rewrite에 안 걸린다. 반대로
   **`sw.js`를 rewrite 대상 경로로 옮기거나 이름을 바꾸면** 서비스워커 요청에 index.html이
   돌아가 등록이 조용히 실패한다(스크립트 MIME 오류). 로컬 미리보기에서는 안 보이는 종류다.
