@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import { useCurriculum } from "../hooks/useCurriculumPlan";
 import { assignGrammarToFirstSentence } from "../lib/grammarPatterns";
+import { findExampleTranslation } from "../lib/sentenceReview";
 
 const HAS_JAPANESE = /[぀-ヿ㐀-䶿一-鿿]/;
 
@@ -137,7 +138,13 @@ function MarkdownAnswer({ text, isStreaming = false }: { text: string; isStreami
                     <ClickableSentence text={content} {...handlers} />
                   </span>
                   {/* 칩 안이라 여백을 따로 주지 않는다(기본값 ml-1은 문장 뒤에 붙는 자리용). */}
-                  <SentenceActions text={content} subject="예문" className="" />
+                  <SentenceActions
+                    text={content}
+                    subject="예문"
+                    // 예문 다음 줄의 `*(번역)*`을 같이 담는다 — 문장 복습 카드의 뒷면이 된다.
+                    translation={findExampleTranslation(text, content)}
+                    className=""
+                  />
                 </span>
                 <SentenceGrammar
                   text={content}

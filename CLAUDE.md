@@ -67,6 +67,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   - 약한 것 모아 풀기(`weakReview`의 `collectReviewTargets`, `weakReviewQuiz`) — 다 익힌 단어가 계속
     나오거나, 보기에 한국어 정답과 영어 오답이 섞여 뜻을 몰라도 맞히는 식으로 조용히 틀린다.
 
+  - 문장 복습의 번역 찾기(`sentenceReview`의 `findExampleTranslation`) — 선생님의 설명 한 줄을
+    번역으로 잘못 집으면 복습 카드 뒷면에 엉뚱한 "뜻"이 **영구히** 저장된다.
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
@@ -131,7 +134,7 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        MarkdownAnswer(선생님 답변 렌더링), LoadingMascot, ProgressBar,
                        AssetLoadingBar(대문 프리로드) ·
                        SegmentedTabs(알약 세그먼트 탭 공용 — 오십음도·한자 급수·단어장 두 탭) ·
-                       SentencebookList(단어장의 문장 칸 목록) ·
+                       SentencebookList(단어장의 문장 칸 목록) · SentenceReviewDeck(문장 칸 복습) ·
                        BackupCard(/about의 학습 데이터 백업·되돌리기 — "백업" 절 참고) ·
                        ConjugationDrillSheet(단어장 동사로 푸는 활용 연습) ·
                        WeakReviewSheet(약한 한자·단어 모아 풀기 — 단어장에서 lazy로 연다)
@@ -192,6 +195,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위) +
                      wordLink.ts(단어 상세 주소·돌아갈 곳·조사) +
                      backup.ts(백업 파일 만들기·검증 — 전부 순수 함수) +
+                     sentenceReview.ts(문장 복습 — 옛 문장의 SRS·선생님 답변에서 번역 찾기) +
                      발음 게임: kanaPronunciation.ts(채점·출제) · speechRecognition.ts(음성 인식 창구)
                      커리큘럼: curriculum.ts(동적 import 조회) · curriculumProgress.ts(진도 계산) ·
                        grammarPatterns.ts(문장에서 문형 찾기) ·
@@ -208,7 +212,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
                      grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts ·
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
-                     conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts
+                     conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
+                     sentenceReview.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -645,9 +650,23 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 단어장 페이지는 **상단 탭으로 단어 칸/문장 칸**이 나뉜다. 문장 칸에는 회화 상대의 대사·선생님
   답변의 예문처럼 "통째로 다시 보고 싶은 문장"이 쌓인다. 담는 입구는 `SentenceActions`의
   ⋮ 메뉴 하나뿐이라 **새 화면에 문장을 그릴 때 그 컴포넌트만 붙이면 담기도 따라온다.**
-- **복습(SRS)은 단어 칸에만 있다.** 문장 칸은 목록뿐이고 `복습/목록` 토글도 그 탭에서는
-  감춘다 — 문장은 카드 스와이프로 "안다/모른다"를 가릴 대상이 아니라 다시 읽을 거리다.
-  나중에 문장 복습을 붙이게 되면 `srs.ts`를 재사용할 것(단어와 같은 계산).
+- **문장 칸에도 복습이 있다(`SentenceReviewDeck`).** 문장을 보고 뜻을 떠올린 뒤 "뜻 보기"로
+  **담을 때 같이 저장한 번역**을 확인하고 알아요/모르겠어요를 고른다. `복습/목록` 토글은 두 탭이
+  같은 값을 쓴다. 일정은 단어와 **같은 `srs.ts`** 다(때가 된 것만 세트에, 앞당겨 본 "알아요"는
+  반영 안 함, XP는 때가 된 문장에만 — "단어장 복습" 절 그대로). 세션은 `useSentenceReview`(메모리).
+  - **스와이프가 아니라 버튼이다.** 카드 안 문장은 `ClickableSentence`라 단어를 탭하면 뜻
+    다이얼로그가 열리는데, 카드를 끌 수 있게 하면 그 탭과 드래그가 부딪힌다.
+  - **옛 문장에는 `srs`가 없다** — persist 마이그레이션 대신 `sentenceSrs()`가 "담은 시각에 바로
+    볼 새 카드"로 읽고, 첫 복습 때 저장된다.
+  - **번역은 `SentenceActions`의 `translation` prop으로 담을 때 같이 들어온다**: 회화는 번역 보기
+    결과(`m.translation`), 단어 상세는 생성 예문의 `korean`, 선생님 답변은 `findExampleTranslation`이
+    예문 다음 줄의 `*(번역)*`(프롬프트가 시키는 형식)이나 같은 줄 뒤의 `— 번역`을 찾는다.
+    **통째로 감싼 줄만** 번역으로 친다 — 그냥 한국어 줄은 대개 설명이고, 한 번 잘못 저장되면 뒷면에
+    계속 남는다. 가나가 섞이거나 한글이 없으면(영어 번역) 버린다.
+  - 회화 번역은 늦게 도착한다. 먼저 담은 문장에 번역이 없으면 `SentenceActions`가 번역이 생긴 뒤
+    `fillTranslation`으로 **비어 있을 때만** 채운다(있는 번역을 덮지 않는다).
+  - **번역이 없으면 LLM으로 채우지 않는다** — 뒷면에 "선생님에게 묻기"를 권할 뿐이다. 자동으로
+    번역시키면 모델이 틀린 뜻을 사실처럼 저장하게 된다.
 - 저장은 **단어와 다른 persist 키(`sentencebook`)** 다. 단어 목록과 엮일 이유가 없고, 담을
   때마다 단어장 전체를 다시 직렬화하지 않는다. 둘 다 사용자가 직접 담는 것이라 개수가 폭주하지
   않으므로 localStorage로 충분하다("저장소 선택" 규칙 그대로 — IndexedDB로 넓히지 말 것).
@@ -656,7 +675,7 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 목록(`SentencebookList`)은 회화 말풍선과 **같은 장치**로 그린다 — `ClickableSentence`(사전
   후리가나·단어 탭) + `useSentenceDialogs`(단어 뜻·한자 상세) + `SentenceActions` +
   `SentenceGrammar`. 문장을 보여주는 화면을 새로 만들 때 이 조합을 그대로 재사용할 것.
-- 담은 문장은 `recordStudyEvent`로 남기지 **않는다.** 학습자 프로필(취약/강한 한자·어휘 수준)은
+- 담은 문장과 문장 복습 결과는 `recordStudyEvent`로 남기지 **않는다.** 학습자 프로필(취약/강한 한자·어휘 수준)은
   단어·한자 단위로 세는 값이라 문장 이벤트를 새 타입으로 들이면 그 계산이 흔들린다.
 
 ## 첫 접속 안내 다이얼로그 (`PromptApiOnboardingDialog`)

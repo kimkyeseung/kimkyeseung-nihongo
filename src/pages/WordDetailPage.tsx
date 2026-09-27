@@ -213,7 +213,7 @@ function WordSenses({ entry }: { entry: WordEntry }) {
                                 {...sentenceHandlers}
                                 excludeWord={entry.word}
                               />
-                              <SentenceActions text={ex.japanese} subject="예문" />
+                              <SentenceActions text={ex.japanese} subject="예문" translation={ex.korean} />
                             </p>
                             {ex.korean && (
                               <p className="mt-1 text-sm text-gray-500">{ex.korean}</p>

@@ -253,7 +253,7 @@ function ConversationPage() {
                       showFurigana={showFurigana}
                       {...sentenceHandlers}
                     />
-                    <SentenceActions text={m.text} subject="상대 문장" />
+                    <SentenceActions text={m.text} subject="상대 문장" translation={m.translation} />
                     {/* 사전에 없는 것(문형)은 커리큘럼이 들고 있다 — 걸리는 게 없으면 안 그린다. */}
                     <SentenceGrammar text={m.text} />
                   </>

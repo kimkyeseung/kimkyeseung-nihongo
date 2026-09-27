@@ -330,3 +330,23 @@ export const useTeacherPractice = create<TeacherPracticeState>((set, get) => ({
     return true;
   },
 }));
+
+interface SentenceReviewSession {
+  queue: string[];
+  total: number;
+  extra: boolean;
+}
+
+/**
+ * 단어장 **문장 칸** 복습 큐(메모리 전용). 단어 복습(`useWordbookReview`)과 같은 이유로 여기 둔다
+ * — 탭을 옮겨도 진행이 남는다. 문장에는 그룹이 없어서 세션 하나뿐이다.
+ */
+export const useSentenceReview = create<{
+  session: SentenceReviewSession | null;
+  start: (queue: string[], extra?: boolean) => void;
+  setQueue: (queue: string[]) => void;
+}>((set) => ({
+  session: null,
+  start: (queue, extra = false) => set({ session: { queue, total: queue.length, extra } }),
+  setQueue: (queue) => set((s) => (s.session ? { session: { ...s.session, queue } } : s)),
+}));

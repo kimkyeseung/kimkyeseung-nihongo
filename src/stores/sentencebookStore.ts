@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { reviewSrs, type SrsState } from "../lib/srs";
+import { sentenceSrs } from "../lib/sentenceReview";
 
 /**
  * 단어장의 **문장** 칸. 회화 상대의 대사·선생님 답변의 예문처럼 "이 문장 통째로 다시 보고
@@ -17,6 +19,16 @@ export interface SentenceEntry {
   text: string;
   /** 어디서 담았는지("상대 문장", "예문"...). 목록에서 출처를 알려주는 용도. */
   source?: string;
+  /**
+   * 담을 때 같이 받은 한국어 번역(회화의 번역 보기·선생님 답변의 `*(번역)*`·단어 상세 예문).
+   * 복습 카드의 뒷면이다. 없으면 카드가 선생님에게 묻기를 권한다 — LLM으로 채워 넣지 않는다.
+   */
+  translation?: string;
+  /**
+   * 복습 일정. 단어와 같은 srs.ts 계산이다. **복습 기능 전에 담은 문장에는 없다** —
+   * `sentenceSrs()`가 "담은 시각에 바로 볼 새 카드"로 읽는다(마이그레이션 없이).
+   */
+  srs?: SrsState;
   addedAt: number;
 }
 
@@ -31,7 +43,11 @@ export function sentenceKey(text: string): string {
 interface SentencebookState {
   entries: Record<string, SentenceEntry>;
   /** 새로 담았으면 true, 이미 있었으면 false(XP는 이때만 준다). */
-  addSentence: (text: string, source?: string) => boolean;
+  addSentence: (text: string, source?: string, translation?: string) => boolean;
+  /** 번역이 없는 문장에만 채운다(있는 번역을 덮지 않는다). */
+  fillTranslation: (id: string, translation: string) => void;
+  /** 복습 결과를 SRS에 반영한다(반영할지는 `planReviewOutcome`이 정한다 — 부르는 쪽 몫). */
+  review: (id: string, know: boolean) => void;
   removeSentence: (id: string) => void;
   hasSentence: (text: string) => boolean;
 }
@@ -41,17 +57,34 @@ export const useSentencebookStore = create<SentencebookState>()(
     (set, get) => ({
       entries: {},
 
-      addSentence: (text, source) => {
+      addSentence: (text, source, translation) => {
         const id = sentenceKey(text);
         if (!id || get().entries[id]) return false;
+        // 번역을 고르는 건 부르는 쪽 몫이다(선생님 답변은 findExampleTranslation이 거른다).
+        const cleaned = translation?.trim() || undefined;
         set((state) => ({
           entries: {
             ...state.entries,
-            [id]: { id, text: text.trim(), source, addedAt: Date.now() },
+            [id]: { id, text: text.trim(), source, translation: cleaned, addedAt: Date.now() },
           },
         }));
         return true;
       },
+
+      fillTranslation: (id, translation) =>
+        set((state) => {
+          const entry = state.entries[id];
+          const cleaned = translation.trim();
+          if (!entry || entry.translation || !cleaned) return state;
+          return { entries: { ...state.entries, [id]: { ...entry, translation: cleaned } } };
+        }),
+
+      review: (id, know) =>
+        set((state) => {
+          const entry = state.entries[id];
+          if (!entry) return state;
+          return { entries: { ...state.entries, [id]: { ...entry, srs: reviewSrs(sentenceSrs(entry), know) } } };
+        }),
 
       removeSentence: (id) =>
         set((state) => {

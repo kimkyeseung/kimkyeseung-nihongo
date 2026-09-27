@@ -13,6 +13,7 @@ import { XP_REWARDS } from "../lib/xpRewards";
 import { buildReviewQueue, formatDueIn, isDue, nextDueAt, planReviewOutcome } from "../lib/srs";
 import SegmentedTabs from "../components/SegmentedTabs";
 import SentencebookList from "../components/SentencebookList";
+import SentenceReviewDeck from "../components/SentenceReviewDeck";
 import WordbookCard, { type CardExit } from "../components/WordbookCard";
 import ConjugationDrillSheet from "../components/ConjugationDrillSheet";
 import { isDrillableVerb } from "../lib/conjugationDrill";
@@ -471,17 +472,15 @@ function WordbookPage() {
     <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl text-primary">🗂️ 단어장</h2>
-        {/* 복습/목록은 단어 칸에만 있는 구분이다 — 문장 칸에서는 자리를 비운다. */}
-        {tab === "word" && (
-          <SegmentedTabs
-            options={[
-              { key: "review", label: "복습" },
-              { key: "list", label: "목록" },
-            ]}
-            value={mode}
-            onChange={setMode}
-          />
-        )}
+        {/* 복습/목록은 단어 칸과 문장 칸이 같은 값을 쓴다 — 탭을 바꿔도 하던 방식 그대로. */}
+        <SegmentedTabs
+          options={[
+            { key: "review", label: "복습" },
+            { key: "list", label: "목록" },
+          ]}
+          value={mode}
+          onChange={setMode}
+        />
       </div>
 
       <SegmentedTabs
@@ -496,7 +495,7 @@ function WordbookPage() {
       />
 
       {tab === "sentence" ? (
-        <SentencebookList />
+        mode === "review" ? <SentenceReviewDeck /> : <SentencebookList />
       ) : (
         <>
           <div className="mt-4">
