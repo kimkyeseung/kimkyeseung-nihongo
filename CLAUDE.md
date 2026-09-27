@@ -67,6 +67,10 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   - 약한 것 모아 풀기(`weakReview`의 `collectReviewTargets`, `weakReviewQuiz`) — 다 익힌 단어가 계속
     나오거나, 보기에 한국어 정답과 영어 오답이 섞여 뜻을 몰라도 맞히는 식으로 조용히 틀린다.
 
+  - 한자 쓰기 채점(`kanjiWriting`의 `samplePath`/`judgeStroke`) — 빡빡하면 제대로 쓴 학습자가
+    "틀렸어요"를 듣고, 느슨하면 아무렇게나 그어도 통과한다. **KanjiVG 전체(2,135자·22,356획)**로
+    고정했다.
+
   - 문장 복습의 번역 찾기(`sentenceReview`의 `findExampleTranslation`) — 선생님의 설명 한 줄을
     번역으로 잘못 집으면 복습 카드 뒷면에 엉뚱한 "뜻"이 **영구히** 저장된다.
 
@@ -126,7 +130,7 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        ConversationSessionController(회화 세션 — 페이지 밖에 둬야 탭 이동에도
                        스트리밍이 안 끊긴다) · TeacherSessionController(선생님 수업 세션 — 같은 이유) ·
                        PromptApiOnboardingDialog(첫 접속 1회 안내 모달)
-                     학습 UI: KanjiStrokeOrder, KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
+                     학습 UI: KanjiStrokeOrder, KanjiWritingPad(한자 따라 쓰기), KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
                        ClickableSentence(후리가나·단어 탭 — 일본어 문장은 전부 이걸로 그린다),
                        WritingDiff, BadgeSheet, GamificationBar,
                        KanaDetailDialog, KanaSpeakingGame(오십음도 2초 발음 게임),
@@ -177,6 +181,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      diff.ts(문자 단위 LCS diff) +
                      verbConjugation.ts(ます·ない·た·て·가능·의지형 규칙 활용) +
                      conjugationDrill.ts(활용 연습 출제·채점) + kanjiQuiz.ts(한자 읽기 퀴즈 생성) +
+                     kanjiWriting.ts(한자 쓰기 채점 — KanjiVG 경로를 점으로 바꿔 획마다 대조) +
                      프롬프트: conversationPrompts.ts · teacherPrompts.ts · wordExamples.ts ·
                        writingCorrection.ts(첨삭 프롬프트/응답 파싱) ·
                        teacherPractice.ts(연습 문제 출제·파싱·피드백 프롬프트) ·
@@ -213,7 +218,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts ·
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
                      conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
-                     sentenceReview.test.ts
+                     sentenceReview.test.ts · kanjiWriting.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -1414,6 +1419,22 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   참고). `KanjiDetailSheet`에서 음독/훈독 옆에 표시한다. 새로 한자 관련 다국어 표기가 필요해지면
   `readingMeaning.groups[0].readings`에서 `type`으로 먼저 걸러지는지 확인할 것(예: `pinyin`,
   `vietnam`도 이미 캐시에 있다).
+- **한자 따라 쓰기**(`KanjiWritingPad` / `kanjiWriting.ts`): 한자 상세 시트의 `획순 보기 | ✍️ 따라 쓰기`
+  탭. 획을 하나씩 그으면 KanjiVG 필순과 대조해 **모양·방향·순서**를 채점한다(LLM 없음). 맞은 획은
+  그은 선 대신 **정답 획으로 바꿔 그린다**(삐뚤빼뚤한 선이 쌓이면 다음 획 자리를 가늠하기 어렵다).
+  "보고 쓰기"는 윤곽 + 지금 획의 시작점, "안 보고 쓰기"는 빈 칸. 한 획에서 2번 틀리면 그 획을
+  주황색으로 그려 보여준다. XP는 시트에서 그 글자를 **처음 완성했을 때 한 번**(`kanjiWritingCompleted`).
+  - 채점: 그은 선과 정답 획을 **길이 기준으로 16점씩 다시 나눠** 점끼리 평균 거리를 잰다(캔버스 109
+    기준 15 이하면 같은 모양). 기준값은 KanjiVG 전체로 재서 정했다 — 테스트에 측정 근거가 있다.
+  - **방향은 양 끝점으로 따로 본다.** 평균 거리만 보면 짧은 직선은 거꾸로 맞춰도 가까워서 **전체 획의
+    40%가 거꾸로 그어도 통과했다.** 점(길이 14 미만)은 방향을 안 따진다.
+  - **나란한 획(三·言) 때문에 "뒤에 올 획이 확실히(5) 더 가까우면 순서 오류"를 둔다.** 없으면 다음
+    획을 그어도 17%가 통과했다. 여유를 0으로 두면 조금만(10칸) 비껴 써도 11%가 옆 획 판정을 받았다.
+  - 캔버스에 `touch-action: none` 필수 — 없으면 폰에서 획 대신 시트가 스크롤된다. 좌표는 화면이
+    아니라 KanjiVG 캔버스(109) 단위로 바꿔서 넘긴다.
+  - 학습 기록(`recordStudyEvent`)은 남기지 않는다(새 이벤트 타입을 들이면 프로필 계산이 흔들린다).
+  - **실제 손가락으로는 확인 못 했다** — 헤드리스에서 마우스로 정답 경로를 그어 확인했다. 폰에서
+    기준(15)이 너무 빡빡한지 볼 것.
 - **학습 미완료 한자 테스트**: `KanjiPage`의 "미완료 한자 테스트" 버튼이 현재 급수에서 아직
   학습 완료로 표시하지 않은 한자만 모아 `KanjiQuizSheet`(4지선다 읽기 퀴즈)를 연다. 문제/오답
   보기는 `src/lib/kanjiQuiz.ts`의 `buildKanjiQuiz`가 전부 정적 데이터(`kanjiList`)에서만
