@@ -52,6 +52,7 @@ function SentencebookList() {
                 삭제
               </button>
             </div>
+            {entry.translation && <p className="mt-1 text-sm text-gray-500">{entry.translation}</p>}
             <SentenceGrammar text={entry.text} />
             {entry.source && <p className="mt-1 text-xs text-gray-300">{entry.source}</p>}
           </li>

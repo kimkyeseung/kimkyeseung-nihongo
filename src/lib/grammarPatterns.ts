@@ -128,3 +128,34 @@ export function findGrammarInSentence(
     })
     .slice(0, limit);
 }
+
+/**
+ * 여러 문장(한 답변의 예문들)에서 각 문법 패턴을 **처음 나온 문장에만** 배정한다.
+ * 돌려주는 값은 "문장 → 그 문장에서 보여줄 패턴들"이다.
+ *
+ * 선생님이 `だけ`를 설명하면 예문 다섯 개에 전부 같은 「〜だけ/〜しか〜ない」 칩이 붙었다 —
+ * 한 번 펼쳐 보면 충분한 설명이 반복돼서 정작 새 문형이 묻힌다. 두 번째 문장부터는 앞에서
+ * 이미 나온 패턴을 빼고, 그 문장에만 있는 것만 남긴다.
+ *
+ * 문장은 앞뒤 공백을 떼고 비교한다. **글자가 똑같은 문장이 두 번 나오면 둘 다 같은 칩을
+ * 받는다** — 화면은 문장 글자로만 이 표를 찾을 수 있어서 몇 번째 등장인지 구분할 수 없다.
+ */
+export function assignGrammarToFirstSentence(
+  curriculum: Curriculum,
+  sentences: readonly string[]
+): Map<string, Set<string>> {
+  const shown = new Set<string>();
+  const result = new Map<string, Set<string>>();
+  for (const raw of sentences) {
+    const sentence = raw.trim();
+    if (result.has(sentence)) continue;
+    const fresh = new Set<string>();
+    for (const m of findGrammarInSentence(curriculum, sentence)) {
+      if (shown.has(m.point.pattern)) continue;
+      shown.add(m.point.pattern);
+      fresh.add(m.point.pattern);
+    }
+    result.set(sentence, fresh);
+  }
+  return result;
+}

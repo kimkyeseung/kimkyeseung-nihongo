@@ -3,6 +3,7 @@ import type { KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { FACT_KIND_EMOJI, FACT_KIND_LABEL } from "../lib/memoryExtraction";
 import { sanitizeMemoryLine } from "../lib/promptSafety";
+import { WEAK_REVIEW_PATH } from "../lib/dailyPlan";
 import type { MemoryFactKind } from "../lib/learnerMemoryDb";
 import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 
@@ -206,6 +207,11 @@ function MemoryPage() {
           <Facts label="자주 틀린 한자" items={profile.weakKanji.map((k) => `${k.kanji}(${k.wrong}번)`)} />
           <Facts label="잘 아는 한자" items={profile.strongKanji} />
           <Facts label="뜻을 찾아본 단어" items={profile.weakWords} />
+          {profile.reviewTargets.kanji.length + profile.reviewTargets.words.length > 0 && (
+            <Link to={WEAK_REVIEW_PATH} className="mt-2 inline-block text-sm text-info">
+              🔁 약한 것 모아 풀기 →
+            </Link>
+          )}
           <Facts label="작문에서 지적받은 것" items={profile.strugglePoints} />
           <Facts label="최근에 공부한 것" items={profile.recentStudy} />
           {profile.totalEvents === 0 && (
@@ -245,7 +251,10 @@ function MemoryPage() {
           </button>
         )}
         <p className="mt-2 text-xs text-gray-400">
-          되돌릴 수 없어요. 단어장·스트릭 같은 다른 학습 데이터는 지워지지 않아요.
+          되돌릴 수 없어요. 단어장·스트릭 같은 다른 학습 데이터는 지워지지 않아요.{" "}
+          <Link to="/about" className="text-info">
+            지우기 전에 백업 내려받기 →
+          </Link>
         </p>
       </Section>
     </div>

@@ -21,6 +21,21 @@
       rel="stylesheet"
     />
     <title>김계승 일본어</title>
+    <!-- 화면 모드를 **첫 페인트 전에** 붙인다 — React가 뜬 뒤에 붙이면 어두운 모드에서 흰 화면이
+         한 번 번쩍인다. 판단은 src/lib/theme.ts와 같다(키 `appearance`, zustand persist 모양).
+         한쪽을 바꾸면 다른 쪽도 고칠 것. -->
+    <script>
+      (function () {
+        var pref = "system";
+        try {
+          var saved = JSON.parse(localStorage.getItem("appearance") || "null");
+          var t = saved && saved.state && saved.state.theme;
+          if (t === "light" || t === "dark") pref = t;
+        } catch (e) {}
+        var dark = pref === "dark" || (pref === "system" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      })();
+    </script>
     <script
       async
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3289333115172248"

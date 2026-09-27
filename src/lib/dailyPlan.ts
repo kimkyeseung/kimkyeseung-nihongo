@@ -53,8 +53,11 @@ export interface PlanAction {
 
 /** 한 번에 보여줄 항목 수. 너무 많으면 "오늘 할 일"이 아니라 할 일 목록이 된다. */
 const MAX_ACTIONS = 4;
-/** 복습을 먼저 권할 취약 한자의 최소 개수. */
-const WEAK_KANJI_THRESHOLD = 2;
+/** 복습을 먼저 권할 약한 항목(한자+단어)의 최소 개수. */
+const WEAK_REVIEW_THRESHOLD = 2;
+
+/** "약한 것 모아 풀기"를 여는 주소 — WordbookPage가 이 쿼리를 보고 풀기 시트를 연다. */
+export const WEAK_REVIEW_PATH = "/wordbook?review=weak";
 
 /**
  * 오늘의 추천. **복습 → 새 내용 → 연습** 순서로 쌓는다.
@@ -69,14 +72,18 @@ export function buildDailyPlan(
 ): PlanAction[] {
   const actions: PlanAction[] = [];
 
-  if (profile.weakKanji.length >= WEAK_KANJI_THRESHOLD) {
-    const list = profile.weakKanji.slice(0, 4).map((k) => k.kanji);
+  const targets = profile.reviewTargets;
+  const weakCount = targets.kanji.length + targets.words.length;
+  if (weakCount >= WEAK_REVIEW_THRESHOLD) {
+    // 한자 목록만 보여주던 예전과 달리 단어도 같이 모은다. 예전엔 /kanji로 보내기만 해서
+    // 거기서 어느 글자를 봐야 하는지는 학습자가 기억해야 했다 — 이제 바로 문제로 푼다.
+    const preview = [...targets.kanji, ...targets.words.map((w) => w.word)].slice(0, 4);
     actions.push({
-      id: "review-weak-kanji",
+      id: "review-weak",
       emoji: "🔁",
-      title: "틀렸던 한자 다시 보기",
-      detail: `${list.join(" ")} — 퀴즈에서 자주 놓친 글자예요.`,
-      to: "/kanji",
+      title: `약한 것 ${weakCount}개 모아 풀기`,
+      detail: `${preview.join(" ")} — 틀렸거나 몰랐던 한자·단어예요.`,
+      to: WEAK_REVIEW_PATH,
     });
   }
 

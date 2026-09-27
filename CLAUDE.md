@@ -46,7 +46,7 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     모델의 잡담이 "기억"이 되어 **다음 대화에도 영구히 따라온다**.
   - 문장 분절(`sentenceWords`) — 엉뚱한 단어가 붙어도 콘솔은 멀쩡하고, 눌러본 사용자만
     "왜 ため가 과거형이지?" 하고 만다(실제로 그렇게 보고받았다).
-  - 오십음도 발음 게임 채점(`kanaPronunciation`의 `matchesKana`) — 틀리면 제대로 읽은 학습자가
+  - 오십음도 발음 게임 채점(`kanaPronunciation`의 `matchesKana`/`judgeKana`) — 틀리면 제대로 읽은 학습자가
     "틀렸다"는 소리를 듣는다. 인식기가 か를 蚊로, に를 "2"로 돌려주는 식이라 경우의 수가 많다.
   - 커리큘럼 진도(`curriculumProgress`)·오늘의 추천(`dailyPlan`) — 어긋나도 화면에는 그럴듯한
     퍼센트가 뜨고, 사용자는 엉뚱한 유닛을 공부하게 된다. 커리큘럼 데이터 자체의 검사(깨진
@@ -58,8 +58,27 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     `canAskJudge`/`parseJudgement`) — 정규화가 한 글자만 어긋나도 화면은 멀쩡하고, 제대로 쓴 학습자만
     "틀렸어요"를 듣는다. AI 재확인 게이트가 새면 한글 답으로 판정을 뒤집을 수 있다.
 
+  - 백업 파일 검증(`backup`의 `parseBackup`) — 사용자가 고른 아무 파일을 저장소에 쓰는 자리라,
+    새면 학습 데이터가 조용히 망가지거나 기억(선생님 시스템 프롬프트)에 아무 글이나 들어간다.
+
+  - 동사 활용(`verbConjugation`)·활용 연습(`conjugationDrill`) — 「信ずて」「有らない」 같은 없는 말을
+    보여줘도 콘솔은 조용하고, 학습자는 그대로 외운다. 사전의 실제 항목으로 고정했다.
+
+  - 약한 것 모아 풀기(`weakReview`의 `collectReviewTargets`, `weakReviewQuiz`) — 다 익힌 단어가 계속
+    나오거나, 보기에 한국어 정답과 영어 오답이 섞여 뜻을 몰라도 맞히는 식으로 조용히 틀린다.
+
+  - 한자 쓰기 채점(`kanjiWriting`의 `samplePath`/`judgeStroke`) — 빡빡하면 제대로 쓴 학습자가
+    "틀렸어요"를 듣고, 느슨하면 아무렇게나 그어도 통과한다. **KanjiVG 전체(2,135자·22,356획)**로
+    고정했다.
+
+  - 학습 달력(`studyCalendar`) — 날짜를 UTC로 자르거나 달 경계에서 이웃 날을 문자열로 따지면
+    달력이 하루씩 밀리거나 연속 기록이 끊겨 보인다. 화면은 그럴듯하다.
+
+  - 문장 복습의 번역 찾기(`sentenceReview`의 `findExampleTranslation`) — 선생님의 설명 한 줄을
+    번역으로 잘못 집으면 복습 카드 뒷면에 엉뚱한 "뜻"이 **영구히** 저장된다.
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
-  (`verbConjugation`, `scriptPreference`, `kanjiQuiz`가 다음 후보다.)
+  (`scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
 
 ## 핵심 규칙 (이 프로젝트 고유)
@@ -89,6 +108,8 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   캐시는 서비스워커의 Cache Storage(`reference-data-v1`, 오프라인용)와 브라우저 HTTP 캐시가
   맡는다("번들 최적화" / "PWA" 노트 참고). localStorage·IndexedDB·OPFS에 옮겨 담지 말 것.
   IndexedDB를 쓰는 곳은 `learnerMemoryDb.ts` **하나뿐**이다 — 다른 데로 넓히지 말 것.
+- **새 `persist` 스토어를 만들면 `backup.ts`의 `BACKUP_LOCAL_KEYS`에 넣을지 정할 것.** 빠뜨려도
+  콘솔은 조용하고, 백업에서 되돌린 사람만 그 데이터가 사라진 걸 나중에 안다("백업" 절 참고).
 
 ## 타입 컨벤션
 - `interface`보다 필요한 곳엔 명시적 타입 사용 (예: `WordEntry`, `KanjiEntry`)
@@ -101,6 +122,29 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
 `font-ja`(Kosugi Maru, 일본어만 있는 자리) · `font-mixed`(한·일이 한 줄에 섞이는 자리,
 "입력 문자 전환 토글" 절 참고). 상세 가이드는 스펙 문서의 "디자인/UI 스타일 가이드" 참고.
 
+**다크 모드는 Tailwind 무채색 변수를 뒤집어서 만든다**("다크 모드" 절). 그래서 화면에 쓰는
+무채색은 **`white`·`gray-*`만** 쓸 것 — `slate`·`zinc`·`#e5e7eb` 같은 걸 쓰면 그 자리만 다크
+모드에서 흰 칸으로 남는다. SVG 회색도 `stroke="#..."` 대신 `className="stroke-gray-200"`으로.
+
+## 다크 모드 (`theme.ts` / `index.css`) 구현 노트
+- `/about`의 "화면 모드"에서 기기 설정 / 밝게 / 어둡게를 고른다(`useAppearance`, persist 키
+  `appearance`). 적용은 `<html data-theme="dark|light">` 하나다.
+- **색은 컴포넌트마다 `dark:`를 붙이지 않고 `index.css`에서 `--color-white`·`--color-gray-*` 값을
+  바꾼다.** Tailwind v4의 유틸리티가 전부 `var(--color-…)`를 읽기 때문에 가능하다. 앱이 쓰는 색이
+  무채색 + 브랜드색(primary·info·warning·accent·danger)뿐이라 이것으로 전 화면이 바뀐다.
+  - `white`도 뒤집으므로 **`bg-primary text-white` 버튼의 글자는 어두운 색**이 된다(듀오링고 다크
+    모드와 같은 모양). `black`은 안 뒤집는다 — 시트 뒤 반투명 막(`bg-black/30`)이다.
+  - 새 무채색을 들이면 다크 모드에서 그 자리만 흰 칸이 된다. 확인은 헤드리스로 `colorScheme: "dark"`에서
+    "밝은 배경을 가진 요소"를 훑으면 된다(전 페이지를 그렇게 확인했다).
+- **대문(`/`)은 다크 모드에서도 밝다(`.force-light`)** — hero.png의 크림색 배경이 페이지 배경과 같아야
+  경계가 안 보인다(대문 노트). `.force-light` 안에는 Tailwind 기본값을 다시 적어 뒀다.
+- **첫 페인트는 `index.html`의 인라인 스크립트가 칠한다.** React가 뜬 뒤에 붙이면 어두운 모드 사용자에게
+  흰 화면이 한 번 번쩍인다. 그 스크립트는 TS를 import할 수 없어 `theme.ts`와 같은 판단(키 이름·persist
+  모양)을 손으로 한 번 더 적어 뒀다 — **한쪽을 바꾸면 둘 다 고칠 것.** 그 뒤의 변경(설정 바꾸기, "기기
+  설정"일 때 OS가 저녁에 어둡게 바뀌는 것)은 `App.tsx`의 `followSystemTheme`이 따라간다 — 대문도
+  덮어야 해서 Layout이 아니라 App이다.
+- `appearance`는 **백업에 담지 않는다** — 기기마다 다르다(`ai-engine`과 같은 판단).
+
 ## 프로젝트 구조
 ```
 src/router.tsx     react-router-dom 라우트 정의 (완료)
@@ -110,16 +154,21 @@ src/App.tsx        RouterProvider + 대문(`/`)까지 덮어야 하는 상주물
 src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 GamificationBar 포함) +
                      Layout에 상주하는 것들: BadgeWatcher(뱃지 신규 획득 감지) · Confetti ·
                        ConversationSessionController(회화 세션 — 페이지 밖에 둬야 탭 이동에도
-                       스트리밍이 안 끊긴다) · PromptApiOnboardingDialog(첫 접속 1회 안내 모달)
-                     학습 UI: KanjiStrokeOrder, KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
+                       스트리밍이 안 끊긴다) · TeacherSessionController(선생님 수업 세션 — 같은 이유) ·
+                       PromptApiOnboardingDialog(첫 접속 1회 안내 모달)
+                     학습 UI: KanjiStrokeOrder, KanjiWritingPad(한자 따라 쓰기), KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
                        ClickableSentence(후리가나·단어 탭 — 일본어 문장은 전부 이걸로 그린다),
-                       WritingDiff, BadgeSheet, GamificationBar,
+                       WritingDiff, BadgeSheet(🔥를 누르면 — 학습 달력 + 뱃지), StudyCalendar,
+                       GamificationBar,
                        KanaDetailDialog, KanaSpeakingGame(오십음도 2초 발음 게임),
                        WordMeaningDialog, JapaneseSuggestionList,
                        MarkdownAnswer(선생님 답변 렌더링), LoadingMascot, ProgressBar,
                        AssetLoadingBar(대문 프리로드) ·
                        SegmentedTabs(알약 세그먼트 탭 공용 — 오십음도·한자 급수·단어장 두 탭) ·
-                       SentencebookList(단어장의 문장 칸 목록)
+                       SentencebookList(단어장의 문장 칸 목록) · SentenceReviewDeck(문장 칸 복습) ·
+                       BackupCard(/about의 학습 데이터 백업·되돌리기 — "백업" 절 참고) ·
+                       ConjugationDrillSheet(단어장 동사로 푸는 활용 연습) ·
+                       WeakReviewSheet(약한 한자·단어 모아 풀기 — 단어장에서 lazy로 연다)
                      AI 안내: PromptApiUnsupportedNotice(내장 AI 불가) ·
                        GemmaEngineNotice(Gemma를 골랐는데 못 쓸 때) ·
                        PromptApiTroubleshootDialog(런타임 실패) ·
@@ -157,7 +206,9 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, kanaWords.ts,
                      posTags.ts, sentenceWords.ts, srs.ts) +
                      diff.ts(문자 단위 LCS diff) +
-                     verbConjugation.ts(て형 등 규칙 기반 활용) + kanjiQuiz.ts(한자 읽기 퀴즈 생성) +
+                     verbConjugation.ts(ます·ない·た·て·가능·의지형 규칙 활용) +
+                     conjugationDrill.ts(활용 연습 출제·채점) + kanjiQuiz.ts(한자 읽기 퀴즈 생성) +
+                     kanjiWriting.ts(한자 쓰기 채점 — KanjiVG 경로를 점으로 바꿔 획마다 대조) +
                      프롬프트: conversationPrompts.ts · teacherPrompts.ts · wordExamples.ts ·
                        writingCorrection.ts(첨삭 프롬프트/응답 파싱) ·
                        teacherPractice.ts(연습 문제 출제·파싱·피드백 프롬프트) ·
@@ -171,16 +222,21 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      preloadAssets.ts(대문 프리로드) +
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
                      clipboard.ts(권한 거부 시 execCommand 폴백이 있는 복사) +
+                     studyCalendar.ts(학습 달력 — 날짜별 XP·기록 합치기, 월 칸, 최장 연속) +
+                     theme.ts(화면 모드 — 다크 모드 적용) +
                      localDate.ts(로컬 타임존 YYYY-MM-DD + 날짜 이름 — 스트릭·인사·대화 기록이 공유) +
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위) +
                      wordLink.ts(단어 상세 주소·돌아갈 곳·조사) +
+                     backup.ts(백업 파일 만들기·검증 — 전부 순수 함수) +
+                     sentenceReview.ts(문장 복습 — 옛 문장의 SRS·선생님 답변에서 번역 찾기) +
                      발음 게임: kanaPronunciation.ts(채점·출제) · speechRecognition.ts(음성 인식 창구)
                      커리큘럼: curriculum.ts(동적 import 조회) · curriculumProgress.ts(진도 계산) ·
                        grammarPatterns.ts(문장에서 문형 찾기) ·
                        dailyPlan.ts(오늘의 추천 — 전부 순수 함수, LLM 안 씀)
                      학습자 기억: learnerMemoryDb.ts(IndexedDB — 이 앱의 유일한 사용처) ·
                        learnerProfile.ts(기록에서 취약/강점/수준을 결정적으로 계산) ·
+                       weakReview.ts(다시 풀 약한 한자·단어 고르기) · weakReviewQuiz.ts(그 문제 만들기) ·
                        memoryExtraction.ts(대화에서 개인적인 사실 추출·파싱)
                    테스트: promptSafety.test.ts · conversationPrompts.test.ts ·
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
@@ -189,7 +245,9 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
                      grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts ·
-                     teacherPractice.test.ts
+                     teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
+                     conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
+                     sentenceReview.test.ts · kanjiWriting.test.ts · studyCalendar.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -198,6 +256,7 @@ src/stores/        Zustand 스토어:
                        모듈 함수 recordStudyEvent) · curriculumStore(시작 단계·수동 완료 유닛, persist) ·
                      conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태) ·
                      teacherChatStore(선생님 대화 — 날짜별, IndexedDB 저장) ·
+                     teacherSessionStore(선생님 세션 상태 + 질문 큐, 메모리 전용) ·
                      gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, kana-homophones.json, gojuon.ts) — 완료
@@ -250,6 +309,32 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   자리가 빠듯한 UI라 여백·글자 크기가 한 곳에 있어야 한다. 항목이 넘칠 수 있으면 `scrollable`,
   칸을 n등분하려면 `fill`, 라벨 옆 숫자는 `hint`.
 
+## 학습 데이터 백업 (`/about`의 `BackupCard` / `backup.ts`) 구현 노트
+- 서버가 없어서 단어장·스트릭(localStorage)과 기록·기억·선생님 대화(IndexedDB)가 **이
+  브라우저에만** 있다. 브라우저 데이터를 지우거나 기기를 바꾸면 끝이고, Safari는 한동안 안
+  들른 사이트의 저장소를 비운다. 그래서 JSON 파일로 내려받고 되돌리는 카드를 `/about`에 뒀다
+  (출처 목록보다 위). `/memory`의 "전부 지우기" 옆에도 링크가 있다.
+- 파일 모양: `{ format, version, exportedAt, local: {키: persist 원문}, memory: {events, facts,
+  messages} | null }`. **`memory: null`은 "백업할 때 못 읽었다"**(사생활 보호 모드 등)라 빈
+  배열과 다르다 — 되돌릴 때 지금 기록을 지우지 않는다.
+- **담는 키는 허용 목록(`BACKUP_LOCAL_KEYS`)이다.** `ai-engine`(기기마다 다르다 — Gemma를 받은
+  컴퓨터의 백업을 폰에 풀면 모델도 없는 폰이 Gemma로 설정된다)·`teacher-greeting`·
+  `promptApiNoticeDismissed`는 일부러 뺐다. 되돌릴 때도 파일에 뭐가 들었든 이 목록의 키만 쓴다.
+- **되돌리기는 합치기가 아니라 갈아끼우기다.** 스트릭·XP처럼 "하나의 값"은 합칠 방법이 없다.
+  대신 무엇이 든 백업인지 숫자로 보여주고 한 번 더 묻는다.
+- 순서: **IndexedDB를 한 트랜잭션으로 먼저 갈아끼우고(`replaceAllMemory`), 성공했을 때만
+  localStorage를 쓴 뒤 새로고침한다.** 거꾸로 하면 기록 쪽이 실패했을 때 단어장만 옛날로 돌아간
+  반쪽 상태가 남는다. 새로고침은 각 스토어가 들고 있는 메모리 값을 버리려는 것이다 — 안 하면
+  다음 `set`이 옛 값으로 localStorage를 다시 덮는다.
+- 파일은 믿지 않는다(`parseBackup`): persist 모양(`{state: {...}}`)이 아닌 값·모양이 틀린
+  레코드는 버리고 개수를 알리며, **기억 문장은 `sanitizeMemoryLine`을 다시 통과시킨다**(선생님
+  시스템 프롬프트에 들어가는 자리). 더 새 버전의 파일은 추측하지 않고 거절한다 — 파일 모양을
+  바꾸면 `BACKUP_VERSION`을 올리고 옛 버전 읽기를 남길 것.
+- `exportAllMemory`는 `loadEvents`의 1000개 제한을 쓰지 않는다 — 있는 걸 빠짐없이 옮긴다.
+- 마지막 백업 시각(`last-backup-at`)은 localStorage에 따로 두고 백업에는 담지 않는다.
+- 헤드리스 Chromium에서 "담기 → 전부 지우기 → 파일에서 되돌리기 → 단어장·XP·기록·기억·대화가
+  돌아옴"까지 확인했다. **iOS Safari의 파일 저장(`a[download]`)은 실기기로 확인하지 못했다.**
+
 ## 게이미피케이션 구현 노트
 - `useGamificationStore.recordProgress(xp)` 하나로 XP 지급과 스트릭(연속 학습일) 갱신을 같이
   처리한다. 날짜는 로컬 타임존 기준 `YYYY-MM-DD` 문자열로 비교하며, 같은 날 여러 번 호출해도
@@ -265,6 +350,21 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   ≥ 기준값"이라 되돌아갈 일이 없어 이 방식이 저장소 동기화 걱정 없이 가장 단순하다.
   뱃지를 추가할 땐 `BadgeContext`에 새 필드를 늘리기보다, 최대한 기존 4개 지표(xp/streak/
   wordbookCount/kanjiLearnedCount)로 표현할 수 있는지 먼저 고민할 것.
+- **학습 달력**(`StudyCalendar` / `studyCalendar.ts`): `BadgeSheet`("나의 학습") 맨 위의 월 달력.
+  공부한 날일수록 진한 초록이고, 칸을 누르면 그날의 XP와 한 일("한자 3 · 단어 5")이 나온다.
+  - 근거 ① **날짜별 XP(`gamificationStore.dailyXp`)** — `recordProgress`가 오늘 칸에 더한다. 모든
+    학습 행동이 이 한 곳을 지나므로 학습 기록을 안 남기는 행동(단어·문장 복습, 한자 쓰기, 활용 연습)도
+    잡힌다. 이걸 이벤트로 새로 남기지 않은 이유는 "학습 기록" 규칙과 같다(프로필 계산이 흔들린다).
+  - 근거 ② **학습 기록(IndexedDB 이벤트)** — "무엇을 했나"와, `dailyXp`가 생기기 전 날짜를 채운다.
+    최근 1000개만 남으므로 아주 옛날은 비어 보일 수 있고, **이 기능 전에 기록 없는 행동만 한 날**
+    (단어 복습만 한 날 등)도 비어 보인다 — 그래서 🔥 연속 일수와 달력의 "최장 연속"이 처음엔 다를 수
+    있다. 앞으로 쌓이는 날은 맞는다.
+  - `dailyXp`는 `gamification` 키 안이라 **백업에 같이 담긴다**(`BACKUP_LOCAL_KEYS` 수정 불필요).
+    백업 파일은 믿지 않으므로 `buildActivityByDay`가 날짜 모양이 아닌 키·양수가 아닌 값을 버리고,
+    `recordProgress`도 객체가 아니면 새로 시작한다. 옛 저장값에는 이 필드가 없는데, persist의 기본
+    병합(얕은 병합)이 초기값 `{}`을 남기므로 마이그레이션이 필요 없다.
+  - 스토어를 고친 뒤 헤드리스로 확인할 때는 **vite를 다시 띄울 것** — HMR 뒤 `import()`로 부른
+    스토어가 앱과 다른 인스턴스가 되어 "XP를 올렸는데 달력이 안 바뀐다"처럼 보인다(실제로 헷갈렸다).
 - 상단바(`Layout.tsx`)의 `GamificationBar`를 탭하면 `BadgeSheet`가 열린다 — 스펙의 "상단바에
   표시"를 스트릭/XP 숫자로, 뱃지는 탭해서 보는 상세 뷰로 구현했다.
 
@@ -534,9 +634,13 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   삭제" + 6초 실행 취소). 예전엔 스펙 문구 그대로 왼쪽이 삭제였는데, 그러면 `reviewSrs(…, false)`를
   부르는 곳이 한 군데도 없어서 **간격이 늘어나기만 했다** — 스펙의 "스와이프 결과를 SRS에
   반영"과 서로 안 맞는 설계였다.
-- **카드 앞면은 단어만** 보여준다. 탭(또는 "뜻 보기")해야 읽기·뜻이 나오고, **뒤집기 전에는
-  drag가 꺼져 있다.** 다 보이는 카드를 넘기는 건 떠올리기가 아니라 훑어보기라 "안다"를 믿을
-  수 없다. 스와이프가 불편한 환경을 위해 같은 동작을 버튼으로도 둔다 — 버튼으로 넘기면 x가
+- **카드 앞면은 단어만** 보여준다. 탭(또는 "뜻 보기")해야 읽기·뜻이 나온다. 다 보이는 카드를
+  넘기는 건 떠올리기가 아니라 훑어보기라 "안다"를 믿을 수 없어서다.
+  **뒤집기 전에도 스와이프할 수 있다**(사용자 요청 — 예전엔 뒤집어야만 drag가 켜져서, 보자마자
+  아는 단어도 탭 → 스와이프 두 번이 필요했다). 앞면에는 단어만 있으니 거기서 넘기는 것도 떠올려
+  보고 답한 것이라 SRS에 그대로 반영한다. 탭과 드래그는 framer-motion의 `onTap`이 가른다(끌면
+  탭이 안 불린다) — 카드에 `onClick`을 달면 드래그 끝에 뒤집기가 같이 일어나니 쓰지 말 것.
+  스와이프가 불편한 환경을 위해 같은 동작을 버튼으로도 둔다 — 버튼으로 넘기면 x가
   0이라 카드가 어느 쪽으로 빠질지 모르므로 `AnimatePresence custom`으로 방향을 넘긴다.
 - **세트에는 복습할 때가 된 단어만 들어간다**(`buildReviewQueue`). 예전엔 전체를 `dueAt` 순으로
   정렬만 해서, 간격 계산이 순서에만 쓰였다. 없으면 "다음 복습: 내일"을 보여주고
@@ -550,13 +654,68 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   실행 취소 때 `lastHandledRef`를 반드시 비울 것 — 같은 카드가 다시 큐 맨 앞에 오면 첫
   스와이프가 조용히 무시된다(예전 실행 취소에 실제로 이 버그가 있었다).
 
+## 동사 활용 연습 (`ConjugationDrillSheet` / `conjugationDrill.ts`) 구현 노트
+- 단어장 단어 칸의 그룹 칩 아래 "✍️ 동사 활용 연습" 버튼으로 연다(지금 그룹에 동사가 있을 때만).
+  **지금 보고 있는 그룹의 동사**로 10문제 — 그룹이 곧 "이번에 외우는 단어"다.
+- **LLM을 쓰지 않는다.** 정답은 `verbConjugation.ts`가 계산하므로 채점도 코드가 한다
+  (`isConjugationCorrect` — 선생님 연습의 `normalizeAnswer`를 그대로 써서 한자·가나·가타카나·
+  로마자 어느 것으로 써도 맞다). 선생님 "연습해보기"처럼 AI 재확인이 필요 없다.
+- 출제(`buildConjugationDrill`)는 **동사를 한 바퀴씩 돌며** 아직 안 낸 활용형을 하나씩 뽑는다 —
+  쌍 전체를 그냥 섞으면 한 동사가 연달아 나온다. 같은 (동사, 활용형)은 두 번 내지 않는다.
+- 입력창·Enter 처리는 연습해보기(`PracticeQuestion`)와 같다: `useScriptInput`(uncontrolled) +
+  `InputModeToggle`(기본 일본어), 채점 뒤엔 `readOnly`, 한 번 더 Enter면 다음 문제. 문제마다
+  `key`로 리마운트해 입력을 비운다.
+- XP는 **시트를 연 뒤 첫 완주 한 번**(`conjugationDrillCompleted`). "다시 풀기"로는 안 쌓인다 —
+  "모르겠어요"만 눌러도 완주가 되니 반복으로 긁어가지 못하게.
+- 학습 기록(`recordStudyEvent`)은 남기지 않았다 — 이벤트 타입을 새로 들이면 학습자 프로필
+  계산이 흔들린다(문장 칸과 같은 판단). 틀린 활용을 선생님이 알게 하려면 이벤트 타입부터 설계할 것.
+
+## 약한 것 모아 풀기 (`WeakReviewSheet` / `weakReview.ts` / `weakReviewQuiz.ts`) 구현 노트
+- 한자 퀴즈에서 틀린 글자, 단어장 복습에서 "모르겠어요"한 단어, 문장에서 뜻을 찾아본 단어를 모아
+  4지선다로 다시 푼다. 한자는 읽기(기존 `buildKanjiQuiz` 그대로), 단어는 뜻. **LLM을 쓰지 않는다** —
+  무엇이 약한지는 기록을 세면 나오고, 보기는 전부 사전 데이터다.
+- **목록은 프로필이 계산한다**(`LearnerProfile.reviewTargets` ← `collectReviewTargets`). 대문
+  "오늘의 학습"·`/memory`·풀기 시트가 같은 목록을 봐야 해서다 — 각자 세면 "3개"라더니 열어보니
+  5문제인 식으로 어긋난다. `weakKanji`·`weakWords`는 선생님 프롬프트용 요약이라 따로 있다.
+- 약하다는 판정: 한자는 **틀린 게 맞힌 것보다 많거나 마지막에 틀렸으면**, 단어는 **그 단어에
+  마지막으로 일어난 일이 "모르겠어요"·"찾아봄"이면**. 누적으로 세면 한 번 몰랐던 단어가 다 익힌
+  뒤에도 영영 나온다. 결과는 **기존 이벤트**(`kanji-quiz-*`, `word-review-*`)로 남기므로, 맞힌
+  것은 다음부터 목록에서 빠지고 선생님 프로필에도 그대로 반영된다(새 이벤트 타입을 들이지 않았다).
+- 입구: 단어장 단어 칸의 "🔁 약한 것 모아 풀기" 버튼(단어장에 없는 단어·한자도 나온다), 대문
+  "오늘의 학습"의 복습 항목, `/memory`의 링크. 뒤의 둘은 `WEAK_REVIEW_PATH`(`/wordbook?review=weak`)로
+  보내고, WordbookPage가 **학습 기록을 다 읽은 뒤에**(`loaded`) 시트를 열고 쿼리를 지운다 — 먼저
+  열면 빈 목록이 잡히고, 안 지우면 새로고침·뒤로가기로 또 열린다. 예전 "틀렸던 한자 다시 보기"는
+  `/kanji`로 보내기만 해서 어느 글자를 봐야 하는지는 학습자가 기억해야 했다.
+- 시트는 **연 순간의 목록 스냅샷**으로 문제를 만든다 — 푸는 동안 맞힌 게 목록에서 빠지는데, 그걸
+  따라가면 풀던 문제가 사라진다. 한자 데이터(`kanji.json`)를 끌어오므로 `lazy()`로 연다.
+- **단어 뜻 보기는 정답과 같은 언어로만 고른다 (실제로 겪었다).** 한국어 뜻이 없는 단어는 영어로
+  폴백하는데, 섞어 뽑았더니 정답은 한국어·오답 둘은 영어라 뜻을 몰라도 맞혔다. 또 `displayMeaning`을
+  그대로 쓰면 고어 뜻까지 딸린 몇 줄짜리 보기가 나와서 `shortMeaning`(한국어 첫 뜻풀이의 앞 두 마디,
+  영어 앞 두 뜻, 32자)으로 줄였다. 오답은 같은 급수의 흔한 단어에서, 보기끼리 겹치지 않게 뽑는다.
+- 표기가 같은 단어(上手 じょうず/うわて)는 찾아볼 때 남긴 읽기로 가른다(`resolveReviewWord`).
+- 단어 문제는 답을 고른 뒤에만 읽기를 보여준다(카드 앞면과 같은 이유). XP는 완주에 한 번.
+
 ## 단어장의 문장 칸 (`sentencebookStore`) 구현 노트
 - 단어장 페이지는 **상단 탭으로 단어 칸/문장 칸**이 나뉜다. 문장 칸에는 회화 상대의 대사·선생님
   답변의 예문처럼 "통째로 다시 보고 싶은 문장"이 쌓인다. 담는 입구는 `SentenceActions`의
   ⋮ 메뉴 하나뿐이라 **새 화면에 문장을 그릴 때 그 컴포넌트만 붙이면 담기도 따라온다.**
-- **복습(SRS)은 단어 칸에만 있다.** 문장 칸은 목록뿐이고 `복습/목록` 토글도 그 탭에서는
-  감춘다 — 문장은 카드 스와이프로 "안다/모른다"를 가릴 대상이 아니라 다시 읽을 거리다.
-  나중에 문장 복습을 붙이게 되면 `srs.ts`를 재사용할 것(단어와 같은 계산).
+- **문장 칸에도 복습이 있다(`SentenceReviewDeck`).** 문장을 보고 뜻을 떠올린 뒤 "뜻 보기"로
+  **담을 때 같이 저장한 번역**을 확인하고 알아요/모르겠어요를 고른다. `복습/목록` 토글은 두 탭이
+  같은 값을 쓴다. 일정은 단어와 **같은 `srs.ts`** 다(때가 된 것만 세트에, 앞당겨 본 "알아요"는
+  반영 안 함, XP는 때가 된 문장에만 — "단어장 복습" 절 그대로). 세션은 `useSentenceReview`(메모리).
+  - **스와이프가 아니라 버튼이다.** 카드 안 문장은 `ClickableSentence`라 단어를 탭하면 뜻
+    다이얼로그가 열리는데, 카드를 끌 수 있게 하면 그 탭과 드래그가 부딪힌다.
+  - **옛 문장에는 `srs`가 없다** — persist 마이그레이션 대신 `sentenceSrs()`가 "담은 시각에 바로
+    볼 새 카드"로 읽고, 첫 복습 때 저장된다.
+  - **번역은 `SentenceActions`의 `translation` prop으로 담을 때 같이 들어온다**: 회화는 번역 보기
+    결과(`m.translation`), 단어 상세는 생성 예문의 `korean`, 선생님 답변은 `findExampleTranslation`이
+    예문 다음 줄의 `*(번역)*`(프롬프트가 시키는 형식)이나 같은 줄 뒤의 `— 번역`을 찾는다.
+    **통째로 감싼 줄만** 번역으로 친다 — 그냥 한국어 줄은 대개 설명이고, 한 번 잘못 저장되면 뒷면에
+    계속 남는다. 가나가 섞이거나 한글이 없으면(영어 번역) 버린다.
+  - 회화 번역은 늦게 도착한다. 먼저 담은 문장에 번역이 없으면 `SentenceActions`가 번역이 생긴 뒤
+    `fillTranslation`으로 **비어 있을 때만** 채운다(있는 번역을 덮지 않는다).
+  - **번역이 없으면 LLM으로 채우지 않는다** — 뒷면에 "선생님에게 묻기"를 권할 뿐이다. 자동으로
+    번역시키면 모델이 틀린 뜻을 사실처럼 저장하게 된다.
 - 저장은 **단어와 다른 persist 키(`sentencebook`)** 다. 단어 목록과 엮일 이유가 없고, 담을
   때마다 단어장 전체를 다시 직렬화하지 않는다. 둘 다 사용자가 직접 담는 것이라 개수가 폭주하지
   않으므로 localStorage로 충분하다("저장소 선택" 규칙 그대로 — IndexedDB로 넓히지 말 것).
@@ -565,7 +724,7 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 목록(`SentencebookList`)은 회화 말풍선과 **같은 장치**로 그린다 — `ClickableSentence`(사전
   후리가나·단어 탭) + `useSentenceDialogs`(단어 뜻·한자 상세) + `SentenceActions` +
   `SentenceGrammar`. 문장을 보여주는 화면을 새로 만들 때 이 조합을 그대로 재사용할 것.
-- 담은 문장은 `recordStudyEvent`로 남기지 **않는다.** 학습자 프로필(취약/강한 한자·어휘 수준)은
+- 담은 문장과 문장 복습 결과는 `recordStudyEvent`로 남기지 **않는다.** 학습자 프로필(취약/강한 한자·어휘 수준)은
   단어·한자 단위로 세는 값이라 문장 이벤트를 새 타입으로 들이면 그 계산이 흔들린다.
 
 ## 첫 접속 안내 다이얼로그 (`PromptApiOnboardingDialog`)
@@ -672,7 +831,8 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   유닛"). 커리큘럼은 순서가 있는 물건이다.
 - "오늘의 학습" 추천(`dailyPlan.ts`)도 **LLM을 쓰지 않는다** — 뭐가 남았는지는 진도에서 빼면
   나오고, 모델에게 맡기면 매번 다른 말을 하면서 정작 안 한 한자를 놓친다. 순서는
-  **복습 → 새 내용 → 연습**이고, 각 항목은 새 학습 화면을 만드는 대신 **이미 있는 화면으로
+  **복습 → 새 내용 → 연습**이고(복습은 약한 한자·단어가 둘 이상일 때 "약한 것 모아 풀기"로 — 전용 절
+  참고), 각 항목은 새 학습 화면을 만드는 대신 **이미 있는 화면으로
   보낸다**(한자/사전/회화/작문/선생님). 문법 항목은 `teacherChatStore.requestQuestion()`으로
   선생님에게 대신 물어봐 준다 — 회화 말풍선의 "선생님" 버튼과 같은 경로다.
 - **대신 물어보기는 기억 스냅샷이 확정된 뒤에 보내야 한다 (실제로 겪은 버그).** 스냅샷 갱신은
@@ -717,7 +877,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   반영하면 시스템 프롬프트 문자열이 바뀌어 `useAiModel`이 세션을 새로 만들기 때문에, **대화
   도중에 한자 퀴즈 하나만 풀어도 선생님 세션이 통째로 날아간다.** 갱신은 명시적인 지점에서만
   한다 — 앱을 켤 때(Layout), 기억을 직접 수락·추가·삭제했을 때, 대화를 지웠을 때.
-  `recordStudyEvent`는 프로필만 다시 계산하고 스냅샷은 건드리지 않는다.
+  `recordStudyEvent`는 프로필만 다시 계산하고 스냅샷은 건드리지 않는다. 선생님 세션은 이제
+  페이지 밖에 상주하므로, 스냅샷이 바뀌어도 **답변 중이면 끝날 때까지 반영을 미룬다**
+  (TeacherSessionController의 `committedMemory`).
 - `recordStudyEvent`는 **훅이 아니라 모듈 함수**다 — 퀴즈 시트·단어 다이얼로그·작문 페이지처럼
   여기저기서 한 줄로 부르는 자리라 훅이면 부르는 쪽마다 배선이 붙는다(`gemmaDownloadController`와
   같은 판단). 실패해도 조용히 넘어간다.
@@ -839,6 +1001,17 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   단어 탭·발음/복사 버튼을 붙인다. 그래서 **후리가나는 모델에게 쓰게 하지 않는다**(읽기는 사전
   정보라 LLM이 지어내면 안 된다는 프로젝트 규칙 그대로). 백틱 안이 일본어가 아니면 평범한 코드
   칩으로 둔다.
+- **백틱 안의 일본어라도 예문만 카드로 그린다** (`MarkdownAnswer`의 `isExampleSentence` — 문장부호로
+  끝나거나 `、`가 들었거나 12자 이상). 예전엔 설명 중에 언급만 하는 `だけ`까지 ⋮ 메뉴·문법 칩이 붙은
+  칩이 되어, 두 줄 높이 칩이 한국어 문장을 조각조각 끊어 놓았다. 낱말은 글줄 안에 연두색 배경으로 두고
+  (후리가나·단어 탭은 유지), 예문은 한 줄을 통째로 쓰는 카드라 뒤따르는 번역이 아래 줄에 짝지어 온다.
+  스트리밍 중에도 같은 모양(블록/인라인)을 유지해야 답변이 끝날 때 줄이 튀지 않는다.
+- 답변 말풍선은 **흰 바탕 + 테두리**다. 예전엔 말풍선도 예문 칩도 `bg-gray-50`이라 카드 경계가 안
+  보였다. 넓은 화면에서는 `max-w-3xl`로 한 줄 길이를 묶는다. 350자 넘는 답변에는 "↑ 답변 처음으로"가
+  붙는다 — 긴 설명은 끝까지 따라 내려온 채로 끝나기 때문이다.
+- `useStickToBottom`은 **MutationObserver로 내용 변화도 본다.** 스트리밍이 끝난 뒤 예문 카드에
+  후리가나·문법 칩이 늦게 붙으면(동적 import) 메시지도 컨테이너 크기도 그대로라, 긴 답변 끝 140px이
+  화면 밖에 남았다.
 - 마크다운은 `react-markdown` + `remark-gfm`으로 렌더링하고, 요소별 Tailwind 클래스를 직접
   지정한다(typography 플러그인을 새로 들이지 않으려고). 표(GFM)는 활용형 정리에 쓸모가 있어 켰다.
 - 질문 입력창의 **기본은 한글**이다 — 여기서 치는 건 한국어 질문이다(회화/작문과 다름).
@@ -846,9 +1019,26 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   고른 동안에만** wanakana가 붙는다("입력 문자 전환 토글" 절 참고). 회화의 이름칸도 같다.
 - **대화는 일기처럼 날짜별로 쌓인다** — 세션 개념을 따로 두지 않고 하루가 곧 대화 한 묶음이며,
   지난 날짜는 읽기 전용이다. 저장은 IndexedDB(`learnerMemoryDb.ts`의 `messages` 스토어).
-  자세한 내용은 "선생님 대화 기록" 절 참고. **답변 스트리밍 중에 나가면 세션이 destroy되어
-  생성은 끊긴다**(작문 첨삭과 같은 절충). 백그라운드에서도 계속 받으려면 회화의
-  `ConversationSessionController`처럼 Layout 상주 컨트롤러가 필요하다.
+  자세한 내용은 "선생님 대화 기록" 절 참고.
+- **답변은 페이지 밖에서 받는다 — 다른 탭에 가도 끊기지 않는다.** 예전엔 TeacherPage 안에서
+  스트리밍해서, 긴 설명을 기다리다 다른 탭을 보면 페이지가 언마운트되며 세션이 destroy되고
+  답변이 반 토막으로 남았다. 지금은 Layout에 상주하는 `TeacherSessionController`가 모델·
+  스트리밍·유출 가드·기억 추출·XP를 들고 있고(회화의 `ConversationSessionController`와 같은
+  방식), 페이지는 `teacherSessionStore`로 상태를 읽고 질문을 넣기만 한다. 덤으로 모델 쪽
+  대화 맥락도 탭 이동에 살아남는다.
+  - **질문은 함수 호출이 아니라 큐(`submit`/`take`)로 넘긴다.** 페이지가 기억 스냅샷을 새로
+    만든 직후에 물으면, 컨트롤러가 새 시스템 프롬프트로 다시 렌더되기 전의 옛 함수가 불릴 수
+    있다. 큐는 컨트롤러가 자기 최신 렌더의 effect에서 꺼내므로 항상 최신 세션이 받는다.
+  - **답변 중에는 기억 스냅샷을 반영하지 않는다**(`committedMemory`, 렌더 중 파생 state).
+    시스템 프롬프트가 바뀌면 useAiModel이 세션을 destroy하는데, 답변 도중 /memory에서 기억을
+    수락하거나 TeacherPage에 다시 들어와 스냅샷이 갱신되면 **받던 답변이 한가운데서 끊긴다.**
+    끝난 뒤에 반영한다.
+  - **답변 청크는 `answeringDate`에 붙인다**(보고 있는 날짜가 아니라). 받는 동안 사이드바에서
+    지난 날짜를 열면 `activeDate`가 바뀌어, 예전 코드로는 답변이 통째로 사라졌다.
+  - "대신 물어보기"(`consumePendingQuestion`)는 **답변 중이면 꺼내지 않는다** — 꺼낸 뒤
+    답변 중이라 무시되면 질문이 사라진다. 끝나면 effect가 다시 돌며 꺼낸다.
+  - 헤드리스 브라우저에서 "묻고 → 단어장으로 이동 → 돌아옴"(답변 도중·끝난 뒤 둘 다)을 가짜
+    모델로 확인했다: 답변이 끝까지 받아지고 IndexedDB에 저장된다.
 - **다른 화면에서 대신 질문 보내기**: `AskTeacherButton`이 `teacherChatStore.requestQuestion()`에
   질문을 넣고 `/teacher`로 이동하면, TeacherPage가 마운트되면서 `consumePendingQuestion()`으로
   꺼내 바로 물어본다. **꺼내는 즉시 store를 비우는 게 중요하다** — StrictMode에서 effect가 두 번
@@ -940,8 +1130,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - **한계**: 모델이 **정답 자체를 틀리게** 내는 경우는 코드로 막을 수 없다(모범 답이 틀리면 코드 채점도
   틀린다). **실제 모델로 네 유형을 다 확인하지는 못했다** — 특히 작은 모델이 한 번에 네 형식을 섞어
   지키는지, 배열 조각의 다른 올바른 어순(일본어는 어순이 비교적 자유롭다)을 재확인이 잘 인정하는지.
-  남은 추천 유형: 활용형 바꾸기(`verbConjugation.ts`에 て형밖에 없어 변환 함수부터), 한→일 작문·
-  일→한 해석(사실상 전부 AI 판정이라 점수 밖 "선생님 의견"으로만 둘 것).
+  남은 추천 유형: 한→일 작문·
+  일→한 해석(사실상 전부 AI 판정이라 점수 밖 "선생님 의견"으로만 둘 것). 활용형 바꾸기는 AI가
+  필요 없어서 연습해보기가 아니라 단어장의 "동사 활용 연습"으로 따로 만들었다.
 
 ## 작문 첨삭 페이지 구현 노트
 - `useLanguageModel`을 그대로 재사용(회화 페이지와 동일 패턴). 모델에게 항상 고정된
@@ -1149,7 +1340,8 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   (기기 안 인식 — Chrome의 `processLocally` — 은 아직 붙이지 않았다.)
 - **2초는 "말하기 시작"까지다.** 시계는 `start()`가 아니라 마이크가 실제로 열린 `audiostart`부터
   잰다(첫 판엔 권한 창이 떠 있다). 2초 안에 목소리가 잡혔으면(`speechstart` 또는 interim 결과)
-  결과를 1.5초 더 기다린다 — 인식 지연(서버 왕복)은 학습자 탓이 아니다. `interimResults`를
+  결과를 **2.5초** 더 기다린다 — 인식 지연(서버 왕복)은 학습자 탓이 아니다(1.5초였을 때 제대로 읽고도
+  시간 초과가 났다). `interimResults`를
   켜서 **맞는 순간 바로** 끊는다.
 - **인식기는 가나 한 글자를 가나로 주지 않는다.** か → 蚊·課, て → 手, に → "2", カ, "ka" 식이다.
   그래서 `matchesKana`가 NFKC → 잡음(구두점·장음·말끝 っ) 제거 → 가타카나·로마자를 히라가나로
@@ -1161,6 +1353,18 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
     달라 출제하지 않는다.
   - 표 전체의 모든 칸이 자기 자신을 맞게 판정하는지 테스트가 훑는다 — 표 데이터를 고치면
     `npm test`부터.
+- **너무 빡빡하다는 보고를 받고 세 가지를 풀었다** ("조금만 다르게 들려도 오답"):
+  - **길게 끈 발음을 맞게 본다** — 한 글자를 또렷이 읽으면 인식기는 「かあ」「こう」「かん」으로 받아
+    적는다. 목표 글자 뒤의 모음·ん·っ **두 글자까지만**(`ELONGATION_TAIL`) — 「かさ」「かっこいい」는
+    여전히 틀리다.
+  - **"거의 맞음"(🟡)** — 탁점·반탁점·작은 글자만 다르게 들린 경우(か↔が, は↔ぱ, きゃ↔きや, 그리고
+    짝 글자의 동음 한자 — は를 말했는데 「場」). **맞은 것으로 치고** 무엇으로 들렸는지 알려준다.
+    짧은 한 글자의 유성음은 인식기가 자주 헷갈리고, 학습자도 막 배우는 차이라 떨어뜨리면 제대로
+    읽은 사람까지 떨어진다. 판정은 `judgeKana`(exact/near/wrong). interim에서 near가 나오면 바로
+    끝내지 않고 기억만 해 둔다 — 곧 정확한 결과가 올 수 있다.
+  - **틀리게 들리면 판마다 한 번 더 듣는다**("🔁 한 번 더!"). 시간 초과·무음은 다시 들어도 같아서 제외.
+  - 여전히 틀리는 것: 다른 행의 소리(か↔さ), 요음과 그 앞 글자(きゃ↔き), 외래어 표기의 작은 모음
+    (ふぁ↔ふ). 테스트가 고정한다.
 - **정답 듣기(TTS)와 마이크가 부딪힌다.** 정답 발음을 틀어 둔 채 다음 판으로 넘어가면 마이크가
   그 소리를 듣고 "맞았다"고 한다 — 판을 시작할 때 `speechSynthesis.cancel()`부터 부른다.
 - 판마다 인식기를 새로 만들고(`continuous: false`), 늦게 도착하는 이벤트는 **토큰**으로 버린다.
@@ -1224,8 +1428,12 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   지켜보다가, 이전에 없던 뱃지 id가 생기면 `celebrate()` + 상단 토스트를 띄운다. `BadgeSheet`가
   열려있지 않아도 동작해야 하므로 `Layout.tsx`에 항상 마운트해둔 것 — 뱃지 관련 컴포넌트를
   조건부로만 마운트하지 말 것.
-- **로딩 마스코트**: `LoadingMascot.tsx`(🗻가 위아래로 통통 튀는 애니메이션)를 회화 응답 대기,
-  작문 첨삭 대기에 사용한다. LLM 응답을 기다리는 새 화면에서도 이걸 재사용할 것.
+- **로딩 마스코트**: `LoadingMascot.tsx`(로고 고양이가 통통 튀며 고개를 갸웃하고 귀를 까딱이는
+  애니메이션)를 회화 응답 대기, 작문 첨삭 대기에 사용한다. LLM 응답을 기다리는 새 화면에서도 이걸
+  재사용할 것. 고양이는 `public/favicon.svg`의 경로를 **빨간 바탕만 빼고 그대로** 옮긴 인라인 SVG다
+  (귀만 따로 움직이려면 `<img>`로는 안 된다) — **로고를 바꾸면 여기도 같이 바꿀 것.** 레이아웃 높이는
+  예전 🗻와 같은 28px로 두고 움직임은 전부 transform/absolute라, 이걸 품은 말풍선·시트의 높이가
+  들썩이지 않는다. `prefers-reduced-motion`이면 가만히 앉아 있다.
 - 버튼 "눌리는" 3D 피드백은 새로 만들지 않고 기존 `.btn-press` CSS 클래스(index.css)를 계속
   쓴다 — 개별 버튼마다 framer-motion whileTap을 추가할 필요 없음.
 
@@ -1268,6 +1476,22 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   참고). `KanjiDetailSheet`에서 음독/훈독 옆에 표시한다. 새로 한자 관련 다국어 표기가 필요해지면
   `readingMeaning.groups[0].readings`에서 `type`으로 먼저 걸러지는지 확인할 것(예: `pinyin`,
   `vietnam`도 이미 캐시에 있다).
+- **한자 따라 쓰기**(`KanjiWritingPad` / `kanjiWriting.ts`): 한자 상세 시트의 `획순 보기 | ✍️ 따라 쓰기`
+  탭. 획을 하나씩 그으면 KanjiVG 필순과 대조해 **모양·방향·순서**를 채점한다(LLM 없음). 맞은 획은
+  그은 선 대신 **정답 획으로 바꿔 그린다**(삐뚤빼뚤한 선이 쌓이면 다음 획 자리를 가늠하기 어렵다).
+  "보고 쓰기"는 윤곽 + 지금 획의 시작점, "안 보고 쓰기"는 빈 칸. 한 획에서 2번 틀리면 그 획을
+  주황색으로 그려 보여준다. XP는 시트에서 그 글자를 **처음 완성했을 때 한 번**(`kanjiWritingCompleted`).
+  - 채점: 그은 선과 정답 획을 **길이 기준으로 16점씩 다시 나눠** 점끼리 평균 거리를 잰다(캔버스 109
+    기준 15 이하면 같은 모양). 기준값은 KanjiVG 전체로 재서 정했다 — 테스트에 측정 근거가 있다.
+  - **방향은 양 끝점으로 따로 본다.** 평균 거리만 보면 짧은 직선은 거꾸로 맞춰도 가까워서 **전체 획의
+    40%가 거꾸로 그어도 통과했다.** 점(길이 14 미만)은 방향을 안 따진다.
+  - **나란한 획(三·言) 때문에 "뒤에 올 획이 확실히(5) 더 가까우면 순서 오류"를 둔다.** 없으면 다음
+    획을 그어도 17%가 통과했다. 여유를 0으로 두면 조금만(10칸) 비껴 써도 11%가 옆 획 판정을 받았다.
+  - 캔버스에 `touch-action: none` 필수 — 없으면 폰에서 획 대신 시트가 스크롤된다. 좌표는 화면이
+    아니라 KanjiVG 캔버스(109) 단위로 바꿔서 넘긴다.
+  - 학습 기록(`recordStudyEvent`)은 남기지 않는다(새 이벤트 타입을 들이면 프로필 계산이 흔들린다).
+  - **실제 손가락으로는 확인 못 했다** — 헤드리스에서 마우스로 정답 경로를 그어 확인했다. 폰에서
+    기준(15)이 너무 빡빡한지 볼 것.
 - **학습 미완료 한자 테스트**: `KanjiPage`의 "미완료 한자 테스트" 버튼이 현재 급수에서 아직
   학습 완료로 표시하지 않은 한자만 모아 `KanjiQuizSheet`(4지선다 읽기 퀴즈)를 연다. 문제/오답
   보기는 `src/lib/kanjiQuiz.ts`의 `buildKanjiQuiz`가 전부 정적 데이터(`kanjiList`)에서만
@@ -1303,30 +1527,31 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   새로 "이 한자의 대표 읽기"가 필요한 기능을 또 만들 때도 KANJIDIC2 배열 순서를 그대로
   신뢰하지 말고 이 방식(`kanjiQuiz.ts`의 `primaryReading`/`wordsContaining` 재사용)을 쓸 것.
 
-## 단어 상세 페이지 — 동사 て형 / 형용사 유형 구현 노트
-- `src/lib/verbConjugation.ts`가 스펙의 "동사 て형은 LLM이 아니라 규칙 기반 변환 함수로
-  계산" 규칙을 구현한다. `WordEntry.pos`(JMDict 품사 코드)로 동사 그룹을 판별한다:
-  `v1`/`v1-s`/`vz` → 1단(ichidan, る만 떼고 て), `v5*` → 5단(godan, 어미별 활용:
-  う·つ·る→って, く→いて, ぐ→いで, す→して, ぬ·ぶ·む→んで), `vk` → 来る(불규칙, 来て/きて),
-  `vs`/`vs-i`/`vs-s`/`vs-c` → する류. **주의**: 5단 동사 중 `v5k-s`(行く/逝く 특수활용)는
-  く 어미인데도 いて가 아니라 って가 된다 — 어미만 보고 기계적으로 매핑하면 안 되고 이
-  태그를 반드시 예외 처리해야 한다.
-- する류가 헷갈리는 지점: `vs` 태그는 "する를 붙일 수 있는 명사"라는 뜻이라 표제어 자체엔
-  する가 안 붙어있다(예: "勉強" 단어 자체, する 없이). 반면 `vs-s`/`vs-i` 태그 중 일부는
-  표제어에 이미 する가 붙어있다(예: "察する"). 그래서 `suruTeForm`은 항상 먼저
-  `word.endsWith("する")`인지 확인해서 있으면 떼고, 없으면 그대로 뒤에 して를 붙인다 —
-  둘 중 하나만 처리하면 "勉強して"나 "察して" 둘 중 하나가 깨진다(전체 사전 데이터로
-  두 케이스 다 확인함).
+## 단어 상세 페이지 — 동사 활용 / 형용사 유형 구현 노트
+- `src/lib/verbConjugation.ts`가 스펙의 "동사 て형 등 활용은 LLM이 아니라 규칙 기반 변환 함수로 계산"
+  규칙을 구현한다. 활용형은 **ます·ない·た·て·가능·의지형 여섯**이고(`VERB_FORMS`), 단어 상세에
+  활용표로, 단어장의 활용 연습에 문제로 쓰인다. `WordEntry.pos`(JMDict 품사 코드)로 그룹을 판별한다:
+  `v1`/`v1-s`/`vz` → 1단, `v5*` → 5단(어미를 다른 단으로 옮기는 `GODAN_ROWS` 표), `vk` → 来る,
+  `vs`/`vs-i`/`vs-s` → する류. `v2*`·`v4*`(고어)와 `vs-c`(為 す)는 **null** — 틀린 활용을 보여주느니
+  안 보여준다. 모든 규칙은 `verbConjugation.test.ts`가 사전의 실제 항목으로 고정한다.
+- **예외를 어미만 보고 처리하면 안 된다** — 전부 품사 태그로 가른다:
+  - `v5k-s`(行く): く인데 いて가 아니라 って. `v5u-s`(問う): って가 아니라 うて.
+  - `v5r-i`(ある): 부정이 「あらない」가 아니라 「ない」(한자 有る도 ない).
+  - `v5aru`(なさる·くださる·おっしゃる): ます형이 り가 아니라 い(なさいます).
+  - `vz`(信ずる): ずる → じる로 바꾼 뒤 1단. 예전 て형은 「信ずて」라는 없는 말을 보여줬다.
+  - `vs-s`(愛する·察する): ない·가능·의지형이 5단처럼 갈려(愛さない·愛せる) 단어마다 다르므로
+    **그 셋은 null**, ます·た·て형만 보여준다.
+  - 来る: 표기는 来 그대로, 읽기만 き·こ로 바뀐다(来ない/こない).
+  - 為る(する): 어간이 비어서 「します·して」로 나온다 — 한자 「為て」로 쓰지 않는 게 맞다.
+- する 명사(勉強·`vs`)는 표제어에 する가 없어서 활용할 때 붙이고, 사전형을 보여줄 때도
+  `dictionaryForm`이 붙인다(「勉強 → 의지형」이라고 내면 명사를 활용하라는 것처럼 읽힌다).
+- 활용형은 표기(`word`)와 읽기(`reading`)에 같은 규칙을 적용한다 — 동사는 마지막 글자가 두
+  표기에서 같은 가나라서 통한다. 둘이 같으면 `reading`을 `null`로 둬 중복 표시를 피한다.
 - い형용사/な형용사 판별도 같은 파일의 `detectAdjectiveType`이 담당한다(`adj-i`/`adj-ix`/
   `adj-ku`/`adj-shiku` → い, `adj-na`/`adj-nari` → な). `WordDetailPage`에서 JLPT 배지
-  옆에 뱃지로 표시하고, て형은 있을 때만(동사일 때만) 별도 카드로 보여준다 — 형용사엔
-  당연히 て형 카드가 안 뜬다.
-- `getVerbTeForm`은 `{ kanji, reading }`을 반환한다 — 한자 표기(`entry.word`)뿐 아니라
-  히라가나 읽기(`entry.reading`)도 똑같은 활용 규칙 함수에 그대로 통과시켜 계산한다
-  (동사는 항상 마지막 글자가 두 표기 모두에서 같은 가나이므로 어미 기반 규칙이 그대로
-  통함 — 별도 히라가나 전용 로직을 만들 필요 없음). 단, "アップする"처럼 표제어 자체가
-  가나뿐이라 `kanji === reading`이면 `reading`을 `null`로 둬서 UI에서 중복 표시하지
-  않는다.
+  옆에 뱃지로 표시하고, 활용표는 동사일 때만 보여준다.
+- 단어 상세의 후리가나 줄은 **오쿠리가나 조각에 rt가 없다**(行く의 く). 예전엔 그대로 이어
+  「く(undefined)」가 모든 동사·형용사에 찍혔다.
 - 사전 데이터의 품사 칩(`n`, `vs`, `vt` 같은 JMDict 코드)은 원래 코드를 그대로 노출하고
   있었는데 사용자가 못 알아봐서, `src/lib/posTags.ts`의 `translatePos()`로 한글 라벨로
   바꿔 보여준다. `pos-tags.json`의 62개 코드 전부를 정적으로 매핑해뒀다(LLM 번역 아님 —
@@ -1423,6 +1648,10 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
     매번 1순위로 올라와 정작 그 문장에서 배울 문형(〜たら·〜ても)을 밀어냈다.
   - `うが` — 「〜うが〜うが」(N1)가 **「ほうがいい」의 일부**에 걸렸다. 문자열 대조라 낱말
     경계를 모른다. 새 오탐을 보면 여기에 한 줄 더할 것.
+- **한 답변 안에서는 같은 칩을 처음 나온 예문에만 단다**(`assignGrammarToFirstSentence` →
+  `SentenceGrammar`의 `showOnly`). `だけ`를 설명하는 답변의 예문 다섯 개에 전부 같은
+  「〜だけ/〜しか〜ない」가 붙어, 정작 그 문장에만 있는 새 문형(〜曜日)이 묻혔다. 표는 문장 글자로
+  찾으므로 **글자가 똑같은 예문이 두 번 나오면 둘 다 칩을 받는다**(몇 번째 등장인지 구분할 수 없다).
 - 정렬은 **구체적인 것 먼저**(길게 걸린 순)이고, 같은 자리를 가리키는 패턴은 하나만 남긴다
   (「〜ても」와 「たとえ〜ても」가 같은 ても에 걸린다). 한 문장에 최대 3개.
 - **한계**: 「〜のため、」(に 없이)처럼 커리큘럼에 없는 활용형은 안 걸린다 — 커리큘럼이 들고

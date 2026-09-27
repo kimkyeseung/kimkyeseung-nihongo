@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 import type { IconButtonSize, IconButtonTone } from "./iconButtonClass";
@@ -33,6 +34,12 @@ function SentenceActions({
   subject = "문장",
   /** 이 문장에만 붙는 항목(뒤에 이어 붙는다). */
   extraItems = [],
+  /**
+   * 이 문장의 한국어 번역(있으면). 단어장에 담을 때 같이 저장해 **문장 복습 카드의 뒷면**이 된다.
+   * 번역이 늦게 도착하는 자리(회화의 번역 보기)도 있어서, 이미 담긴 문장에 번역이 없으면 나중에
+   * 채운다.
+   */
+  translation,
   size = "sm",
   tone = "default",
   className = "ml-1",
@@ -40,6 +47,7 @@ function SentenceActions({
   text: string;
   subject?: string;
   extraItems?: ActionMenuItem[];
+  translation?: string | null;
   size?: IconButtonSize;
   tone?: IconButtonTone;
   className?: string;
@@ -53,7 +61,14 @@ function SentenceActions({
   const saved = useSentencebookStore((s) => Boolean(s.entries[key]));
   const addSentence = useSentencebookStore((s) => s.addSentence);
   const removeSentence = useSentencebookStore((s) => s.removeSentence);
+  const missingTranslation = useSentencebookStore((s) => Boolean(s.entries[key] && !s.entries[key].translation));
+  const fillTranslation = useSentencebookStore((s) => s.fillTranslation);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
+
+  // 번역보다 먼저 담은 문장(회화에서 번역이 도착하기 전에 담기)에 뒤늦게 번역을 채운다.
+  useEffect(() => {
+    if (missingTranslation && translation) fillTranslation(key, translation);
+  }, [missingTranslation, translation, key, fillTranslation]);
 
   // 화면 문자열에는 "일본어 (한국어 번역)"처럼 한글이 섞인 항목이 있어서, 읽히기 전에
   // 일본어만 남긴다(speechText.ts). 남는 게 없으면 발음 항목 자체를 빼버린다.
@@ -85,7 +100,7 @@ function SentenceActions({
         }
         // 게이미피케이션 규칙: "아직 안 담긴 → 담긴"으로 바뀔 때만 XP를 준다.
         // 담았다 뺐다를 반복해도 중복 지급되지 않는다.
-        if (addSentence(text, subject)) recordProgress(XP_REWARDS.sentenceAdded);
+        if (addSentence(text, subject, translation ?? undefined)) recordProgress(XP_REWARDS.sentenceAdded);
       },
     },
     {

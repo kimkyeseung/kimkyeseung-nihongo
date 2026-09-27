@@ -47,6 +47,27 @@ export function normalizeHeard(text: string): string {
 export type SpeakingTarget = Pick<KanaCell, "hiragana" | "romaji">;
 
 /**
+ * 목표 글자 뒤에 붙어 와도 되는 꼬리 — 한 글자를 또렷하게 길게 읽으면 인식기는 「かあ」「こう」
+ * 「かん」처럼 받아 적는다. 모음·ん·っ만 두 글자까지 봐준다(「かさ」「かっこいい」는 다른 말이다).
+ */
+const ELONGATION_TAIL = /^[あいうえおんっ]{1,2}$/;
+
+function sameAsGoal(candidate: string, goal: string): boolean {
+  if (candidate === goal) return true;
+  // 「か、か」처럼 같은 글자를 되풀이한 경우(급하게 두 번 말하면 이렇게 온다).
+  if (candidate.length > goal.length && candidate.length % goal.length === 0) {
+    if (candidate === goal.repeat(candidate.length / goal.length)) return true;
+  }
+  // 길게 끈 발음(かあ·かー·かん). ー는 normalizeHeard가 이미 뗐다.
+  return candidate.startsWith(goal) && ELONGATION_TAIL.test(candidate.slice(goal.length));
+}
+
+function kanaMatches(text: string, goal: string): boolean {
+  const kana = sameSound(text);
+  return [kana, kana.replace(TRAILING_TAIL, "")].some((c) => c && sameAsGoal(c, goal));
+}
+
+/**
  * 인식 결과(대안 여러 개) 중 하나라도 목표 글자로 읽히면 맞다.
  * @param heard 인식기가 준 후보들(interim 포함). 순서는 상관없다.
  * @param homophones 목표 글자와 읽기가 같은 표기(kana-homophones.json의 그 글자 항목).
@@ -58,21 +79,70 @@ export function matchesKana(
 ): boolean {
   const goal = sameSound(target.hiragana);
   const homophoneSet = new Set(homophones);
-
   return heard.some((raw) => {
     const text = normalizeHeard(raw);
     if (!text) return false;
-    if (homophoneSet.has(text)) return true;
-
-    const kana = sameSound(text);
-    const candidates = [kana, kana.replace(TRAILING_TAIL, "")];
-    return candidates.some(
-      (c) =>
-        c === goal ||
-        // 「か、か」처럼 같은 글자를 되풀이한 경우(급하게 두 번 말하면 이렇게 온다).
-        (c.length > goal.length && c.length % goal.length === 0 && c === goal.repeat(c.length / goal.length))
-    );
+    return homophoneSet.has(text) || kanaMatches(text, goal);
   });
+}
+
+const SMALL_TO_LARGE: Record<string, string> = {
+  ぁ: "あ", ぃ: "い", ぅ: "う", ぇ: "え", ぉ: "お", ゃ: "や", ゅ: "ゆ", ょ: "よ", ゎ: "わ",
+};
+
+/**
+ * 탁점·반탁점과 작은 글자를 무시한 "뼈대". か·が, は·ば·ぱ, きゃ·きや가 같아진다.
+ * **이건 "거의 맞음"의 기준이다** — 인식기가 짧은 한 글자의 유성음을 자주 헷갈리고(か를 が로),
+ * 학습자도 그 차이를 막 배우는 중이라, 이걸 틀렸다고 하면 제대로 읽은 사람까지 떨어진다
+ * (사용자 보고: "조금만 다르게 들려도 오답"). 대신 화면에 무엇으로 들렸는지 알려준다.
+ */
+function skeleton(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u3099\u309a]/g, "")
+    .normalize("NFC")
+    .replace(/[ぁぃぅぇぉゃゅょゎ]/g, (ch) => SMALL_TO_LARGE[ch]);
+}
+
+export type KanaJudgement =
+  | { result: "exact"; heard: string }
+  /** 탁점·작은 글자만 다르게 들렸다. 맞은 것으로 치고, `heardAs`(들린 글자)를 보여준다. */
+  | { result: "near"; heard: string; heardAs: string }
+  | { result: "wrong"; heard: string | null };
+
+/**
+ * 채점 — 정확히 맞음 / 거의 맞음 / 틀림. 후보 중 가장 좋은 것을 고른다(정확히 맞은 후보가 하나라도
+ * 있으면 exact).
+ * @param homophoneTable kana-homophones.json 전체. 거의 맞음을 한자로 판정하려면(か를 말했는데
+ *   が의 동음어 「蛾」로 온 경우) 목표 글자 아닌 항목도 봐야 한다.
+ */
+export function judgeKana(
+  heard: readonly string[],
+  target: SpeakingTarget,
+  homophoneTable: Readonly<Record<string, readonly string[]>> = {}
+): KanaJudgement {
+  if (matchesKana(heard, target, homophoneTable[target.hiragana] ?? [])) {
+    return { result: "exact", heard: heard.find((h) => h.trim()) ?? "" };
+  }
+  const goal = sameSound(target.hiragana);
+  const goalSkeleton = skeleton(goal);
+  for (const raw of heard) {
+    const text = normalizeHeard(raw);
+    if (!text) continue;
+    const kana = sameSound(text);
+    for (const candidate of [kana, kana.replace(TRAILING_TAIL, "")]) {
+      if (candidate && sameAsGoal(skeleton(candidate), goalSkeleton)) {
+        return { result: "near", heard: raw, heardAs: candidate };
+      }
+    }
+    // 한자로 왔으면, 뼈대가 같은 다른 가나(が·ぱ…)의 동음어인지 본다.
+    for (const [kanaKey, words] of Object.entries(homophoneTable)) {
+      if (kanaKey !== target.hiragana && skeleton(sameSound(kanaKey)) === goalSkeleton && words.includes(text)) {
+        return { result: "near", heard: raw, heardAs: kanaKey };
+      }
+    }
+  }
+  return { result: "wrong", heard: heard.find((h) => h.trim()) ?? null };
 }
 
 /**

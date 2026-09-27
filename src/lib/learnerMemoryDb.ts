@@ -334,3 +334,70 @@ export async function pruneChatDays(keepDays = MAX_CHAT_DAYS): Promise<void> {
   if (dates.length <= keepDays) return;
   for (const date of dates.slice(keepDays)) await deleteMessagesForDate(date);
 }
+
+// ─── 백업 / 복원 ─────────────────────────────────────────────────────────────
+
+/** 세 스토어를 통째로 옮기는 묶음. 백업 파일(`backup.ts`)의 `memory` 칸이 이 모양이다. */
+export interface MemoryDump {
+  events: StudyEvent[];
+  facts: MemoryFact[];
+  messages: StoredMessage[];
+}
+
+function transactionDone(tx: IDBTransaction): Promise<boolean> {
+  return new Promise((resolve) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => resolve(false);
+    tx.onabort = () => resolve(false);
+  });
+}
+
+/**
+ * 기록·기억·대화를 전부 읽는다. **`loadEvents`의 개수 제한을 쓰지 않는다** — 백업은 있는 걸
+ * 빠짐없이 옮기는 게 목적이다. DB를 못 열면 `null`(그 사실을 화면이 알려야 한다 — 빈 배열로
+ * 돌려주면 "기록이 하나도 없던 것"과 구분이 안 된다).
+ */
+export async function exportAllMemory(): Promise<MemoryDump | null> {
+  const db = await openDb();
+  if (!db) return null;
+  try {
+    const tx = db.transaction([EVENT_STORE, FACT_STORE, MESSAGE_STORE], "readonly");
+    const [events, facts, messages] = await Promise.all([
+      runRequest(tx.objectStore(EVENT_STORE).getAll() as IDBRequest<StudyEvent[]>),
+      runRequest(tx.objectStore(FACT_STORE).getAll() as IDBRequest<MemoryFact[]>),
+      runRequest(tx.objectStore(MESSAGE_STORE).getAll() as IDBRequest<StoredMessage[]>),
+    ]);
+    if (!events || !facts || !messages) return null;
+    return { events, facts, messages };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 세 스토어를 백업 내용으로 **갈아끼운다**(합치지 않는다 — 복원은 "그 시점으로 되돌리기"다).
+ *
+ * **한 트랜잭션으로 한다.** 스토어별로 따로 하면 중간에 실패했을 때 대화는 새것, 기억은 옛것인
+ * 어정쩡한 상태가 남는다. 하나라도 실패하면 트랜잭션째 취소되어 원래 데이터가 그대로 남고
+ * `false`를 돌려준다 — 그러면 부르는 쪽은 localStorage도 건드리지 말아야 한다.
+ */
+export async function replaceAllMemory(dump: MemoryDump): Promise<boolean> {
+  const db = await openDb();
+  if (!db) return false;
+  try {
+    const tx = db.transaction([EVENT_STORE, FACT_STORE, MESSAGE_STORE], "readwrite");
+    const done = transactionDone(tx);
+    const events = tx.objectStore(EVENT_STORE);
+    const facts = tx.objectStore(FACT_STORE);
+    const messages = tx.objectStore(MESSAGE_STORE);
+    events.clear();
+    facts.clear();
+    messages.clear();
+    for (const e of dump.events) events.put(e);
+    for (const f of dump.facts) facts.put(f);
+    for (const m of dump.messages) messages.put(m);
+    return await done;
+  } catch {
+    return false;
+  }
+}

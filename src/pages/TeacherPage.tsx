@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -8,34 +8,19 @@ import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import LoadingMascot from "../components/LoadingMascot";
 import MarkdownAnswer from "../components/MarkdownAnswer";
 import MemoryFactPrompt from "../components/MemoryFactPrompt";
-import PromptApiTroubleshootDialog from "../components/PromptApiTroubleshootDialog";
 import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice";
-import { useAiModel } from "../hooks/useAiModel";
 import { useCurriculumPlan } from "../hooks/useCurriculumPlan";
-import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useStickToBottom } from "../hooks/useStickToBottom";
 import { useScriptInput, type InputScript } from "../hooks/useScriptInput";
 import { useWordSuggestions } from "../hooks/useWordSuggestions";
-import {
-  TEACHER_REFUSAL_ANSWER,
-  TEACHER_SAMPLE_QUESTIONS,
-  TEACHER_LEAK_REFERENCE,
-  buildTeacherSystemPrompt,
-  buildTeacherUserPrompt,
-} from "../lib/teacherPrompts";
-import {
-  MEMORY_EXTRACTION_SYSTEM_PROMPT,
-  buildMemoryExtractionPrompt,
-  parseExtractedFacts,
-} from "../lib/memoryExtraction";
+import { TEACHER_SAMPLE_QUESTIONS } from "../lib/teacherPrompts";
 import { buildTeacherGreeting } from "../lib/dailyPlan";
 import { levelLabel } from "../lib/curriculum";
-import { looksLikePromptLeak } from "../lib/promptSafety";
-import { XP_REWARDS } from "../lib/xpRewards";
 import { useInputScriptPrefs, useTeacherGreeting } from "../stores/pageStateStore";
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useGamificationStore } from "../stores/gamificationStore";
-import { useLearnerMemoryStore, recordStudyEvent } from "../stores/learnerMemoryStore";
+import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
+import { useTeacherSessionStore } from "../stores/teacherSessionStore";
 import {
   useActiveMessages,
   useIsViewingToday,
@@ -46,11 +31,13 @@ import TeacherHistorySidebar from "../components/TeacherHistorySidebar";
 import TeacherPracticeSheet, { type PracticeTarget } from "../components/TeacherPracticeSheet";
 import { isPracticeWorthy } from "../lib/teacherPractice";
 
-/**
- * 이보다 짧은 답변에서는 기억할 만한 개인적인 사실이 나올 일이 없다. 추출은 추론이 한 번 더
- * 도는 일이라(Gemma/Safari에서는 체감된다) 값어치 없는 호출은 아예 걸지 않는다.
- */
-const MIN_ANSWER_LENGTH_FOR_EXTRACTION = 40;
+/** 이보다 긴 답변에는 "답변 처음으로" 버튼을 단다 — 375px에서 대략 한 화면을 넘는 길이. */
+const LONG_ANSWER_LENGTH = 350;
+
+/** 답변 말풍선의 DOM id — "답변 처음으로"가 스크롤해 갈 곳. */
+function answerAnchorId(messageId: string) {
+  return `teacher-answer-${messageId}`;
+}
 
 /** 보내기 버튼의 종이비행기. 이 프로젝트에 아이콘 세트가 없어 인라인 SVG로 둔다(currentColor 상속). */
 function PaperPlaneIcon() {
@@ -59,29 +46,6 @@ function PaperPlaneIcon() {
       <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a1 1 0 00-1.39 1.02l1.2 5.4L14 12l-10.79 1.98-1.2 5.4a1 1 0 001.39 1.02z" />
     </svg>
   );
-}
-
-/**
- * 방금 주고받은 대화에서 기억할 만한 사실을 뽑아 "확인 대기"로 넣어둔다.
- *
- * 스트리밍이 아니라 단발성 `prompt()`다 — 화면에 흘려 보여줄 게 아니라 다 받은 뒤 한 번에
- * 파싱하면 되기 때문. 결과는 바로 저장되지 않고 사용자가 수락해야 선생님이 쓴다
- * (learnerMemoryDb.ts의 MemoryFact.status 주석 참고).
- */
-async function extractFacts(
-  extractor: { prompt: (input: string) => Promise<string> },
-  question: string,
-  answer: string,
-  addPendingFacts: (facts: ReturnType<typeof parseExtractedFacts>) => Promise<void>
-) {
-  try {
-    const raw = await extractor.prompt(buildMemoryExtractionPrompt(question, answer));
-    const facts = parseExtractedFacts(raw);
-    if (facts.length > 0) await addPendingFacts(facts);
-  } catch {
-    // 부가 기능이라 조용히 넘어간다. 여기서 실패를 화면에 띄우면 수업과 상관없는 오류로
-    // 사용자를 놀라게 할 뿐이다.
-  }
 }
 
 /** 지금 고른 문자로 예시를 보여준다 — 한글 예시만 띄우면 일본어 모드에서 어색하다. */
@@ -103,17 +67,14 @@ function TeacherPage() {
   // 기억 블록은 store가 들고 있는 **스냅샷**이라 대화 중에는 바뀌지 않는다. 실시간으로
   // 반영하면 퀴즈 하나 풀 때마다 시스템 프롬프트가 바뀌어 선생님 세션이 통째로 날아간다
   // (learnerMemoryStore의 promptMemory 주석 참고).
-  const promptMemory = useLearnerMemoryStore((s) => s.promptMemory);
   const refreshPromptMemory = useLearnerMemoryStore((s) => s.refreshPromptMemory);
-  const addPendingFacts = useLearnerMemoryStore((s) => s.addPendingFacts);
-  const systemPrompt = useMemo(() => buildTeacherSystemPrompt(promptMemory), [promptMemory]);
-
-  const model = useAiModel(systemPrompt);
-  // 기억 추출은 수업 맥락을 오염시키면 안 되므로 세션을 따로 둔다 — 회화의 문법 교정·번역과
-  // 같은 이유다.
-  const extractor = useAiModel(MEMORY_EXTRACTION_SYSTEM_PROMPT);
-  const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
-  const recordProgress = useGamificationStore((s) => s.recordProgress);
+  // 세션·스트리밍은 Layout에 상주하는 TeacherSessionController가 들고 있다 — 이 페이지를 떠나도
+  // 답변이 끊기지 않게. 여기서는 상태를 읽고 질문을 넣기만 한다.
+  const modelStatus = useTeacherSessionStore((s) => s.status);
+  const modelEngine = useTeacherSessionStore((s) => s.engine);
+  const downloadProgress = useTeacherSessionStore((s) => s.downloadProgress);
+  const busyLabel = useTeacherSessionStore((s) => s.busyLabel);
+  const submitQuestion = useTeacherSessionStore((s) => s.submit);
 
   const messages = useActiveMessages();
   const viewingToday = useIsViewingToday();
@@ -124,9 +85,6 @@ function TeacherPage() {
   const input = useTeacherChatStore((s) => s.input);
   const isAnswering = useTeacherChatStore((s) => s.isAnswering);
   const setInput = useTeacherChatStore((s) => s.setInput);
-  const ask = useTeacherChatStore((s) => s.ask);
-  const appendAnswer = useTeacherChatStore((s) => s.appendAnswer);
-  const finishAnswer = useTeacherChatStore((s) => s.finishAnswer);
   const clearToday = useTeacherChatStore((s) => s.clearToday);
   const pendingQuestion = useTeacherChatStore((s) => s.pendingQuestion);
   const consumePendingQuestion = useTeacherChatStore((s) => s.consumePendingQuestion);
@@ -197,10 +155,10 @@ function TeacherPage() {
    * 화면에 들어올 때 기억 스냅샷을 새로 만든다 — 그 사이에 진도가 나갔거나 시작 단계를
    * 바꿨을 수 있다.
    *
-   * 여기서 갱신해도 잃을 것이 없다: 이 페이지를 떠나면 어차피 `useAiModel`이 세션을
-   * destroy하므로(CLAUDE.md의 선생님 페이지 노트), 돌아왔을 때는 늘 새 세션이다.
-   * 대화 **도중에** 갱신하지 않는 것이 핵심이고, 그건 `recordStudyEvent`가 스냅샷을
-   * 건드리지 않는 것으로 지켜진다.
+   * 내용이 바뀌었으면 시스템 프롬프트가 바뀌어 모델 쪽 대화 맥락은 새 세션에서 시작한다(학습
+   * 기록이 쌓였으면 그걸 반영하는 편이 낫다고 봤다). 내용이 같으면 문자열이 같아 세션은 그대로다.
+   * **답변 도중에는** 스냅샷이 바뀌어도 컨트롤러가 반영을 미룬다(TeacherSessionController
+   * 주석) — 받던 답변이 끊기지 않는다.
    *
    * 끝났다는 표시(`memoryFresh`)를 따로 두는 이유는 아래 "대신 물어보기" 때문이다.
    */
@@ -236,60 +194,13 @@ function TeacherPage() {
   }, [isAnswering, questionInput.el]);
 
   const handleAsk = useCallback(
-    async (question: string) => {
+    (question: string) => {
       const text = question.trim();
       if (!text || isAnswering) return;
-      const { assistantId } = ask(text);
-      recordProgress(XP_REWARDS.teacherQuestion);
-      recordStudyEvent({ type: "teacher-question", subject: text });
-      // 실패 안내문은 화면에만 남기고 기록에는 넣지 않는다(finishAnswer 주석 참고).
-      let failed = false;
-      try {
-        let acc = "";
-        for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(text))) {
-          acc += chunk;
-          // 지시문을 그대로 읊기 시작하면 거기서 끊는다 — 프롬프트로 "말하지 말라"고 시키는
-          // 것만으로는 막히지 않아서, 받은 답을 코드에서 한 번 더 본다(promptSafety.ts 주석 참고).
-          //
-          // **고정 지시문에서 답변 모양 지시를 뺀 TEACHER_LEAK_REFERENCE만 넘긴다.** 모델이
-          // 모양 지시(①②③)를 소제목으로 따라 쓰는 건 정상이다. 또 실제로 모델에게 준 시스템
-          // 프롬프트에는 기억 블록이 붙어 있지만, 그것까지 넘기면 선생님이 학습자의 기억을
-          // 정상적으로 되받기만 해도 유출로 오인한다(teacherPrompts.ts 주석 참고).
-          if (looksLikePromptLeak(acc, TEACHER_LEAK_REFERENCE)) {
-            appendAnswer(assistantId, TEACHER_REFUSAL_ANSWER);
-            // 화면만 바꾸고 끝내면 오염된 턴이 히스토리에 남아 다음 질문에서 이어받을 수 있다.
-            model.resetSession();
-            return;
-          }
-          appendAnswer(assistantId, acc);
-        }
-
-        // 답변이 끝난 뒤에 기억할 만한 사실이 있었는지 따로 물어본다. 답변을 기다리게 하지
-        // 않으려고 await하지 않는다 — 실패해도 수업에는 아무 영향이 없는 부가 기능이다.
-        if (acc.length >= MIN_ANSWER_LENGTH_FOR_EXTRACTION) {
-          void extractFacts(extractor, text, acc, addPendingFacts);
-        }
-      } catch (err) {
-        failed = true;
-        appendAnswer(assistantId, "(답변을 만드는 중 오류가 발생했습니다)");
-        reportError(err);
-      } finally {
-        // 여기서 답변이 IndexedDB에 한 번 저장된다(스트리밍 중에는 저장하지 않는다).
-        // 실패했으면 화면에만 남기고 저장은 건너뛴다.
-        finishAnswer(assistantId, { persist: !failed });
-      }
+      // 실제로 묻는 건 컨트롤러다(XP·학습 기록·유출 가드·기억 추출도 거기서 한다).
+      submitQuestion(text);
     },
-    [
-      isAnswering,
-      ask,
-      recordProgress,
-      model,
-      extractor,
-      addPendingFacts,
-      appendAnswer,
-      finishAnswer,
-      reportError,
-    ]
+    [isAnswering, submitQuestion]
   );
 
   /**
@@ -310,10 +221,13 @@ function TeacherPage() {
    * 환경에서도 `load()`는 끝에 반드시 `loaded`를 세우므로 여기서 멈춰 서지 않는다.
    */
   useEffect(() => {
-    if (!memoryFresh || !historyLoaded) return;
+    // **답변 중이면 꺼내지 않는다.** 답변은 이제 페이지 밖에서도 계속 받으므로, 답변을 기다리다
+    // 회화 말풍선의 "선생님에게 묻기"로 넘어오는 일이 생긴다. 그때 꺼내 버리면 handleAsk가 답변
+    // 중이라 무시해서 질문이 사라진다 — 끝날 때까지 두면 `isAnswering`이 풀릴 때 다시 돈다.
+    if (!memoryFresh || !historyLoaded || isAnswering) return;
     const question = consumePendingQuestion();
     if (question) handleAsk(question);
-  }, [memoryFresh, historyLoaded, pendingQuestion, consumePendingQuestion, handleAsk]);
+  }, [memoryFresh, historyLoaded, isAnswering, pendingQuestion, consumePendingQuestion, handleAsk]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     // 자동완성 목록이 떠 있으면 화살표·Enter를 그쪽이 먼저 쓴다(회화 페이지와 같은 순서).
@@ -325,22 +239,22 @@ function TeacherPage() {
     }
   }
 
-  if (model.status === "checking") {
+  if (modelStatus === "checking") {
     return <p className="p-6 text-gray-400">AI 준비 상태 확인 중...</p>;
   }
 
-  if (model.engine === "gemma4" && (model.status === "model-missing" || model.status === "unsupported")) {
+  if (modelEngine === "gemma4" && (modelStatus === "model-missing" || modelStatus === "unsupported")) {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">🧑‍🏫 선생님</h2>
-        <GemmaEngineNotice reason={model.status} feature="선생님에게 질문하기" />
+        <GemmaEngineNotice reason={modelStatus} feature="선생님에게 질문하기" />
       </div>
     );
   }
 
   // "unavailable"은 API 객체는 있는데 모델을 못 쓰는 상태다(Whale 등 크로미움 포크, 플래그 꺼짐).
   // 이걸 빼먹으면 화면은 멀쩡한데 보내는 순간 실패한다 — aiCapability.ts 주석 참고.
-  if (model.status === "unsupported" || model.status === "unavailable") {
+  if (modelStatus === "unsupported" || modelStatus === "unavailable") {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">🧑‍🏫 선생님</h2>
@@ -407,20 +321,20 @@ function TeacherPage() {
           </div>
         </div>
 
-        {model.downloadProgress !== null && (
+        {downloadProgress !== null && (
           <div className="p-3 text-xs text-gray-400">
-            모델 다운로드 중... {Math.round(model.downloadProgress * 100)}%
+            모델 다운로드 중... {Math.round(downloadProgress * 100)}%
             <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
               <div
                 className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${model.downloadProgress * 100}%` }}
+                style={{ width: `${downloadProgress * 100}%` }}
               />
             </div>
           </div>
         )}
-        {model.busyLabel && (
+        {busyLabel && (
           <div className="p-3">
-            <LoadingMascot label={model.busyLabel} />
+            <LoadingMascot label={busyLabel} />
           </div>
         )}
 
@@ -472,6 +386,9 @@ function TeacherPage() {
               // MarkdownAnswer에 이걸 넘겨야 후리가나·문법 칩 재계산으로 인한 흔들림을 막는다
               // (MarkdownAnswer의 isStreaming 주석 참고).
               const isStreaming = isAnswering && i === messages.length - 1 && m.role === "assistant";
+              const isLong = m.role === "assistant" && m.text.length >= LONG_ANSWER_LENGTH;
+              const canPractice =
+                m.role === "assistant" && isPracticeWorthy(m.text) && messages[i - 1]?.role === "user";
               return (
                 <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <motion.div
@@ -480,33 +397,52 @@ function TeacherPage() {
                     className={
                       m.role === "user"
                         ? "max-w-[80%] rounded-2xl bg-primary px-4 py-2 text-white"
-                        : "w-full rounded-2xl bg-gray-50 px-4 py-3 text-gray-800"
+                        : // 흰 바탕이어야 답변 속 예문 카드(bg-gray-50)가 보인다 — 예전엔 말풍선도 회색이라
+                          // 카드 경계가 없었다. 넓은 화면에서 한 줄이 너무 길면 읽기 힘들어 폭을 묶는다.
+                          "w-full max-w-3xl scroll-mt-3 rounded-2xl border-2 border-gray-100 bg-white px-4 py-3 text-gray-800"
                     }
+                    id={m.role === "assistant" ? answerAnchorId(m.id) : undefined}
                   >
                     {m.role === "assistant" && m.text === "" ? (
                       <LoadingMascot label="선생님이 생각하는 중..." />
                     ) : m.role === "assistant" ? (
                       <>
                         <MarkdownAnswer text={m.text} isStreaming={isStreaming} />
-                        {/* 모든 답변에 달지 않는다 — 예문이 여럿 든 설명에만(isPracticeWorthy).
+                        {/* 연습해보기는 모든 답변에 달지 않는다 — 예문이 여럿 든 설명에만(isPracticeWorthy).
                             답변 중에는 감춘다: 스트리밍 중인 답은 아직 다 안 왔고, 지난 답으로
                             문제를 만들면 수업과 추론이 겹친다. 지난 날짜에서도 연다 — 연습은
                             대화 기록에 아무것도 쓰지 않는다. */}
-                        {!isAnswering && isPracticeWorthy(m.text) && messages[i - 1]?.role === "user" && (
-                          <div className="mt-3 flex justify-end">
-                            <button
-                              onClick={() =>
-                                setPracticeTarget({
-                                  messageId: m.id,
-                                  question: messages[i - 1].text,
-                                  answer: m.text,
-                                })
-                              }
-                              className="btn-press rounded-2xl border-2 border-primary/20 bg-white px-4 py-2 text-sm font-bold text-primary"
-                              style={{ ["--btn-shadow" as string]: "#e5e7eb" }}
-                            >
-                              ✏️ 연습해보기
-                            </button>
+                        {!isAnswering && (isLong || canPractice) && (
+                          <div className="mt-3 flex items-center justify-end gap-3">
+                            {/* 긴 설명은 끝까지 따라 내려온 채로 끝난다 — 처음부터 다시 읽을 길을 둔다.
+                                부드러운 스크롤은 누를 때 한 번뿐이라 useStickToBottom의 떨림과 무관하다. */}
+                            {isLong && (
+                              <button
+                                onClick={() =>
+                                  document
+                                    .getElementById(answerAnchorId(m.id))
+                                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                                }
+                                className="mr-auto text-xs text-gray-400"
+                              >
+                                ↑ 답변 처음으로
+                              </button>
+                            )}
+                            {canPractice && (
+                              <button
+                                onClick={() =>
+                                  setPracticeTarget({
+                                    messageId: m.id,
+                                    question: messages[i - 1].text,
+                                    answer: m.text,
+                                  })
+                                }
+                                className="btn-press rounded-2xl border-2 border-primary/20 bg-white px-4 py-2 text-sm font-bold text-primary"
+                                style={{ ["--btn-shadow" as string]: "var(--color-gray-200)" }}
+                              >
+                                ✏️ 연습해보기
+                              </button>
+                            )}
                           </div>
                         )}
                       </>
@@ -572,7 +508,6 @@ function TeacherPage() {
           </div>
         )}
 
-        <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
         <TeacherPracticeSheet target={practiceTarget} onClose={() => setPracticeTarget(null)} />
       </div>
     </div>

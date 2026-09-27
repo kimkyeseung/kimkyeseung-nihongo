@@ -10,6 +10,7 @@
 
 import { JLPT_LEVELS, type JlptLevel } from "../types/jlpt";
 import type { StudyEvent, StudyEventType } from "./learnerMemoryDb";
+import { NO_REVIEW_TARGETS, collectReviewTargets, type ReviewTargets } from "./weakReview";
 
 /** 한 급수를 "공부한 급수"로 인정하는 데 필요한 최소 항목 수. */
 const LEVEL_EVIDENCE_THRESHOLD = 5;
@@ -38,6 +39,11 @@ export interface LearnerProfile {
   /** 마지막에 공부한 것들 — 사람이 읽는 한 줄짜리 문장. */
   recentStudy: string[];
   totalEvents: number;
+  /**
+   * "약한 것 모아 풀기"에 낼 한자·단어(weakReview.ts). `weakKanji`·`weakWords`는 선생님
+   * 프롬프트용 요약이고 이건 **지금 다시 풀어야 할 것**이다 — 다시 맞히면 빠진다.
+   */
+  reviewTargets: ReviewTargets;
 }
 
 export const EMPTY_PROFILE: LearnerProfile = {
@@ -49,6 +55,7 @@ export const EMPTY_PROFILE: LearnerProfile = {
   strugglePoints: [],
   recentStudy: [],
   totalEvents: 0,
+  reviewTargets: NO_REVIEW_TARGETS,
 };
 
 /**
@@ -195,5 +202,6 @@ export function buildLearnerProfile(rawEvents: StudyEvent[]): LearnerProfile {
     strugglePoints: recentSubjects(events, ["writing-corrected"], "detail"),
     recentStudy,
     totalEvents: events.length,
+    reviewTargets: collectReviewTargets(events),
   };
 }

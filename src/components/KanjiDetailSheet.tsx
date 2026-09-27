@@ -1,7 +1,9 @@
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import KanjiStrokeOrder from "./KanjiStrokeOrder";
+import KanjiWritingPad from "./KanjiWritingPad";
+import SegmentedTabs from "./SegmentedTabs";
 import LoadingMascot from "./LoadingMascot";
 import { findWordsContainingKanji, displayMeaning } from "../lib/dictionary";
 import { getKoreanReadingForWord } from "../lib/kanji";
@@ -14,6 +16,8 @@ import { XP_REWARDS } from "../lib/xpRewards";
 import type { KanjiEntry } from "../types/kanji";
 
 function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClose: () => void }) {
+  // 획순 보기 ↔ 따라 쓰기. 열려 있던 시트 상태는 저장하지 않는다는 규칙대로 로컬 state다.
+  const [view, setView] = useState<"order" | "write">("order");
   const wordLink = useWordLink();
   const isLearned = useKanjiProgressStore((s) => (entry ? s.learned.includes(entry.kanji) : false));
   const toggleLearned = useKanjiProgressStore((s) => s.toggleLearned);
@@ -58,6 +62,17 @@ function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClos
               </button>
             </div>
 
+            <SegmentedTabs
+              className="mt-3"
+              fill
+              options={[
+                { key: "order", label: "획순 보기" },
+                { key: "write", label: "✍️ 따라 쓰기" },
+              ]}
+              value={view}
+              onChange={setView}
+            />
+
             <div className="mt-3 flex justify-center">
               <Suspense
                 fallback={
@@ -69,7 +84,12 @@ function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClos
                   </div>
                 }
               >
-                <KanjiStrokeOrder kanji={entry.kanji} size={180} />
+                {view === "write" ? (
+                  // 글자가 바뀌면 처음부터 — 앞 글자의 획 진행이 남으면 안 된다.
+                  <KanjiWritingPad key={entry.kanji} kanji={entry.kanji} />
+                ) : (
+                  <KanjiStrokeOrder kanji={entry.kanji} size={180} />
+                )}
               </Suspense>
             </div>
 

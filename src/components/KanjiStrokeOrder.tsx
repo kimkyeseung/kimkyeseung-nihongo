@@ -23,7 +23,7 @@ function KanjiStrokeOrder({ kanji, size = 160 }: { kanji: string; size?: number 
     <div className="flex flex-col items-center gap-2">
       <svg key={playKey} viewBox={KANJIVG_VIEW_BOX} width={size} height={size} className="rounded-2xl bg-gray-50">
         {/* 완성된 글자 모양을 옅게 미리 보여준다 */}
-        <g stroke="#e5e7eb" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <g className="stroke-gray-200" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round">
           {strokes.map((d, i) => (
             <path key={i} d={d} />
           ))}

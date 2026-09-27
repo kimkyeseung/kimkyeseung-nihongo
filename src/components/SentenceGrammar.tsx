@@ -15,14 +15,26 @@ import { findGrammarInSentence } from "../lib/grammarPatterns";
  * `text` 하나만 주면 된다(ClickableSentence처럼 콜백·시트를 배선할 필요가 없다).
  * 걸리는 문법이 없으면 아무것도 그리지 않는다.
  */
-function SentenceGrammar({ text, className = "" }: { text: string; className?: string }) {
+function SentenceGrammar({
+  text,
+  className = "",
+  showOnly,
+}: {
+  text: string;
+  className?: string;
+  /** 주면 이 안에 든 패턴만 보여준다 — 한 답변에서 같은 칩을 되풀이하지 않으려고(MarkdownAnswer). */
+  showOnly?: ReadonlySet<string>;
+}) {
   const curriculum = useCurriculum();
   const [openPattern, setOpenPattern] = useState<string | null>(null);
 
   // 커리큘럼은 동적 import라 한 박자 늦게 온다 — 그 전에는 빈 목록이다.
   const matches = useMemo(
-    () => (curriculum ? findGrammarInSentence(curriculum, text) : []),
-    [curriculum, text]
+    () =>
+      curriculum
+        ? findGrammarInSentence(curriculum, text).filter((m) => !showOnly || showOnly.has(m.point.pattern))
+        : [],
+    [curriculum, text, showOnly]
   );
 
   if (matches.length === 0) return null;
