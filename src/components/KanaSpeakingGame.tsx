@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import SpeakButton from "./SpeakButton";
-import { matchesKana, pickRounds } from "../lib/kanaPronunciation";
+import { judgeKana, pickRounds } from "../lib/kanaPronunciation";
 import { getSpeechRecognition, transcriptsOf, type KanaSpeechRecognition } from "../lib/speechRecognition";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useConfettiStore } from "../stores/confettiStore";
@@ -19,7 +19,8 @@ import type { KanaCell, ScriptMode } from "../data/gojuon";
  * (`audiostart`)부터 잰다 — 첫 판에는 권한 창이 떠 있는 동안 시간이 흐르면 안 된다.
  */
 const LIMIT_MS = 2000;
-const GRACE_MS = 1500;
+// 1.5초로 두었더니 서버 왕복이 늦은 날엔 제대로 읽고도 시간 초과가 났다(사용자 보고 "너무 빡빡하다").
+const GRACE_MS = 2500;
 /** 맞힌 뒤 다음 글자로 넘어가기까지. 틀렸을 때는 정답을 들어볼 수 있게 직접 넘긴다. */
 const ADVANCE_MS = 900;
 
@@ -37,7 +38,16 @@ type Phase =
   | { kind: "waiting" } // start()는 불렀고 마이크가 열리길 기다리는 중
   | { kind: "listening" } // 2초 시계가 도는 중
   | { kind: "judging" } // 2초 안에 말은 시작했고 인식 결과를 기다리는 중
-  | { kind: "result"; correct: boolean; heard: string | null; timeout: boolean }
+  | {
+      kind: "result";
+      correct: boolean;
+      heard: string | null;
+      timeout: boolean;
+      /** 탁점·작은 글자만 다르게 들린 "거의 맞음"일 때 들린 글자. 맞은 것으로 친다. */
+      nearAs?: string;
+    }
+  /** 한 번 틀리게 들려서 같은 글자를 다시 듣는 중(판마다 한 번). */
+  | { kind: "retry"; heard: string }
   | { kind: "done" }
   | { kind: "fatal"; message: string };
 
@@ -144,9 +154,15 @@ function GameContent({
     };
   }, []);
 
-  function endRound(roundIndex: number, correct: boolean, heard: string | null, timeout: boolean) {
+  function endRound(
+    roundIndex: number,
+    correct: boolean,
+    heard: string | null,
+    timeout: boolean,
+    nearAs?: string
+  ) {
     const cell = rounds[roundIndex];
-    setPhase({ kind: "result", correct, heard, timeout });
+    setPhase({ kind: "result", correct, heard, timeout, nearAs });
     if (correct) {
       setScore((s) => s + 1);
       comboRef.current += 1;
@@ -180,7 +196,11 @@ function GameContent({
     void startRound(roundIndex + 1);
   }
 
-  async function startRound(roundIndex: number) {
+  /**
+   * @param attempt 판 안에서 몇 번째 듣기인지. **틀리게 들리면 한 번 더 듣는다** — 짧은 한 글자는
+   *   인식기가 자주 엉뚱하게 받아 적어서, 한 번에 떨어뜨리면 제대로 읽은 학습자까지 떨어진다.
+   */
+  async function startRound(roundIndex: number, attempt = 0) {
     const Recognition = getSpeechRecognition();
     if (!Recognition) return;
     clearTimers();
@@ -195,7 +215,6 @@ function GameContent({
     if (stale()) return;
 
     const cell = rounds[roundIndex];
-    const homophones = homophonesRef.current[cell.hiragana] ?? [];
     const rec = new Recognition();
     rec.lang = "ja-JP";
     rec.continuous = false;
@@ -206,12 +225,32 @@ function GameContent({
 
     let speechStarted = false;
     let lastHeard: string | null = null;
-    const finish = (correct: boolean, heard: string | null, timeout: boolean) => {
+    // "거의 맞음"은 바로 끝내지 않고 기억만 해 둔다 — 말하는 도중의 interim이라 곧 정확한 결과가
+    // 올 수 있다. 결과가 더 안 오면(최종·시간 끝) 이걸로 맞은 것으로 끝낸다.
+    let near: { heard: string; heardAs: string } | null = null;
+    const finishRaw = (correct: boolean, heard: string | null, timeout: boolean, nearAs?: string) => {
       if (stale()) return;
       tokenRef.current += 1; // 이 판의 나머지 이벤트는 전부 무시
       clearTimers();
       stopRecognition();
-      endRound(roundIndex, correct, heard, timeout);
+      endRound(roundIndex, correct, heard, timeout, nearAs);
+    };
+    const finish = (correct: boolean, heard: string | null, timeout: boolean) => {
+      if (stale()) return;
+      if (!correct && near) {
+        finishRaw(true, near.heard, false, near.heardAs);
+        return;
+      }
+      // 무언가 들렸는데 틀렸으면 한 번 더 듣는다(시간 초과·무음은 제외 — 그건 다시 들어도 같다).
+      if (!correct && heard !== null && !timeout && attempt === 0) {
+        tokenRef.current += 1;
+        clearTimers();
+        stopRecognition();
+        setPhase({ kind: "retry", heard });
+        timersRef.current.push(window.setTimeout(() => void startRound(roundIndex, 1), 700));
+        return;
+      }
+      finishRaw(correct, heard, timeout);
     };
     const fail = (message: string) => {
       if (stale()) return;
@@ -243,8 +282,12 @@ function GameContent({
       const { texts, isFinal } = transcriptsOf(event);
       if (texts.length === 0) return;
       lastHeard = texts[0];
-      if (matchesKana(texts, cell, homophones)) finish(true, texts[0], false);
-      else if (isFinal) finish(false, texts[0], false);
+      const judged = judgeKana(texts, cell, homophonesRef.current);
+      if (judged.result === "exact") finish(true, texts[0], false);
+      else {
+        if (judged.result === "near") near = { heard: judged.heard, heardAs: judged.heardAs };
+        if (isFinal) finish(false, texts[0], false);
+      }
     };
     rec.onerror = (event) => {
       switch (event.error) {
@@ -356,6 +399,7 @@ function GameContent({
         {(phase.kind === "waiting" ||
           phase.kind === "listening" ||
           phase.kind === "judging" ||
+          phase.kind === "retry" ||
           phase.kind === "result") &&
           current && (
             <div className="mt-4">
@@ -403,12 +447,29 @@ function GameContent({
                 {phase.kind === "waiting" && <p className="text-sm text-gray-400">마이크 준비 중…</p>}
                 {phase.kind === "listening" && <p className="text-lg text-primary">🎤 지금 말하세요!</p>}
                 {phase.kind === "judging" && <p className="text-sm text-gray-400">듣고 있어요…</p>}
+                {phase.kind === "retry" && (
+                  <>
+                    <p className="text-lg text-warning">🔁 한 번 더!</p>
+                    <p className="mt-1 font-mixed text-sm text-gray-500">「{phase.heard}」로 들렸어요</p>
+                  </>
+                )}
                 {phase.kind === "result" && (
                   <>
                     <p className={`text-lg font-bold ${phase.correct ? "text-primary" : "text-danger"}`}>
-                      {phase.correct ? "✅ 정확해요!" : phase.timeout && !phase.heard ? "⏰ 시간 초과" : "❌ 아쉬워요"}
+                      {phase.correct
+                        ? phase.nearAs
+                          ? "🟡 거의 맞아요!"
+                          : "✅ 정확해요!"
+                        : phase.timeout && !phase.heard
+                          ? "⏰ 시간 초과"
+                          : "❌ 아쉬워요"}
                     </p>
-                    {phase.heard && (
+                    {phase.nearAs ? (
+                      // 탁점·작은 글자만 다르게 들린 경우. 맞은 것으로 치되 무엇으로 들렸는지는 알려준다.
+                      <p className="mt-1 font-mixed text-sm text-gray-500">
+                        「{phase.nearAs}」처럼 들렸어요 — 탁점(゛)·작은 글자까지 또렷하게!
+                      </p>
+                    ) : phase.heard && (
                       <p className="mt-1 font-mixed text-sm text-gray-500">들린 말: 「{phase.heard}」</p>
                     )}
                     {!phase.correct && (

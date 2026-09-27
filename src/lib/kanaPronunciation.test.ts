@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import homophones from "../data/kana-homophones.json";
 import { GOJUON_SECTIONS } from "../data/gojuon";
-import { matchesKana, normalizeHeard, pickRounds, speakableCells } from "./kanaPronunciation";
+import { judgeKana, matchesKana, normalizeHeard, pickRounds, speakableCells } from "./kanaPronunciation";
 
 const H = homophones as Record<string, string[]>;
 const ka = { hiragana: "か", romaji: "ka" };
@@ -49,6 +49,15 @@ describe("matchesKana — 인식기가 실제로 돌려주는 모양들", () => 
 
   it("후보 중 하나만 맞아도 맞다", () => {
     expect(matchesKana(["が", "課"], ka, H["か"])).toBe(true);
+  });
+
+  it("길게 끈 발음(かあ·こう·かん)도 맞다 — 한 글자를 또렷이 읽으면 이렇게 온다", () => {
+    expect(matchesKana(["かあ"], ka)).toBe(true);
+    expect(matchesKana(["カア"], ka)).toBe(true);
+    expect(matchesKana(["kaa"], ka)).toBe(true);
+    expect(matchesKana(["かん"], ka)).toBe(true);
+    expect(matchesKana(["こう"], { hiragana: "こ", romaji: "ko" })).toBe(true);
+    expect(matchesKana(["きゃあ"], { hiragana: "きゃ", romaji: "kya" })).toBe(true);
   });
 
   it("외래어 표기는 작은 모음을 떼지 않은 형태로 맞춘다 (ファ → ふぁ)", () => {
@@ -121,5 +130,38 @@ describe("출제", () => {
       expect(matchesKana([cell.hiragana], cell, H[cell.hiragana]), cell.hiragana).toBe(true);
       expect(matchesKana([cell.katakana], cell, H[cell.hiragana]), cell.katakana).toBe(true);
     }
+  });
+});
+
+describe("judgeKana — 정확히 / 거의 / 틀림", () => {
+  const ga = { hiragana: "が", romaji: "ga" };
+
+  it("정확히 맞으면 exact", () => {
+    expect(judgeKana(["蚊"], ka, H).result).toBe("exact");
+    expect(judgeKana(["が", "か"], ka, H).result).toBe("exact");
+  });
+
+  it("탁점만 다르게 들리면 거의 맞음 — 무엇으로 들렸는지 알려준다", () => {
+    expect(judgeKana(["が"], ka, H)).toEqual({ result: "near", heard: "が", heardAs: "が" });
+    expect(judgeKana(["か"], ga, H)).toMatchObject({ result: "near", heardAs: "か" });
+    expect(judgeKana(["ぱ"], { hiragana: "は", romaji: "ha" }, H)).toMatchObject({ result: "near", heardAs: "ぱ" });
+    expect(judgeKana(["があ"], ka, H)).toMatchObject({ result: "near" });
+  });
+
+  it("작은 글자를 큰 글자로 받아 적어도 거의 맞음 (きゃ → きや)", () => {
+    expect(judgeKana(["きや"], { hiragana: "きゃ", romaji: "kya" }, H)).toMatchObject({ result: "near", heardAs: "きや" });
+  });
+
+  it("탁음 짝의 동음 한자로 와도 거의 맞음 (は를 말했는데 ば의 한자 「場」로)", () => {
+    expect(judgeKana(["場"], { hiragana: "は", romaji: "ha" }, H)).toMatchObject({ result: "near", heardAs: "ば" });
+    expect(judgeKana(["字"], { hiragana: "し", romaji: "shi" }, H)).toMatchObject({ result: "near", heardAs: "じ" });
+  });
+
+  it("다른 소리는 여전히 틀림", () => {
+    expect(judgeKana(["さ"], ka, H)).toEqual({ result: "wrong", heard: "さ" });
+    expect(judgeKana(["かさ"], ka, H).result).toBe("wrong");
+    expect(judgeKana(["き"], { hiragana: "きゃ", romaji: "kya" }, H).result).toBe("wrong");
+    expect(judgeKana(["ふ"], { hiragana: "ふぁ", romaji: "fa" }, H).result).toBe("wrong");
+    expect(judgeKana([], ka, H)).toEqual({ result: "wrong", heard: null });
   });
 });
