@@ -245,7 +245,10 @@ function MemoryPage() {
           </button>
         )}
         <p className="mt-2 text-xs text-gray-400">
-          되돌릴 수 없어요. 단어장·스트릭 같은 다른 학습 데이터는 지워지지 않아요.
+          되돌릴 수 없어요. 단어장·스트릭 같은 다른 학습 데이터는 지워지지 않아요.{" "}
+          <Link to="/about" className="text-info">
+            지우기 전에 백업 내려받기 →
+          </Link>
         </p>
       </Section>
     </div>

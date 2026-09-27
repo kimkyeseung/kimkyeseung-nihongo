@@ -58,6 +58,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     `canAskJudge`/`parseJudgement`) — 정규화가 한 글자만 어긋나도 화면은 멀쩡하고, 제대로 쓴 학습자만
     "틀렸어요"를 듣는다. AI 재확인 게이트가 새면 한글 답으로 판정을 뒤집을 수 있다.
 
+  - 백업 파일 검증(`backup`의 `parseBackup`) — 사용자가 고른 아무 파일을 저장소에 쓰는 자리라,
+    새면 학습 데이터가 조용히 망가지거나 기억(선생님 시스템 프롬프트)에 아무 글이나 들어간다.
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`verbConjugation`, `scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
@@ -89,6 +92,8 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   캐시는 서비스워커의 Cache Storage(`reference-data-v1`, 오프라인용)와 브라우저 HTTP 캐시가
   맡는다("번들 최적화" / "PWA" 노트 참고). localStorage·IndexedDB·OPFS에 옮겨 담지 말 것.
   IndexedDB를 쓰는 곳은 `learnerMemoryDb.ts` **하나뿐**이다 — 다른 데로 넓히지 말 것.
+- **새 `persist` 스토어를 만들면 `backup.ts`의 `BACKUP_LOCAL_KEYS`에 넣을지 정할 것.** 빠뜨려도
+  콘솔은 조용하고, 백업에서 되돌린 사람만 그 데이터가 사라진 걸 나중에 안다("백업" 절 참고).
 
 ## 타입 컨벤션
 - `interface`보다 필요한 곳엔 명시적 타입 사용 (예: `WordEntry`, `KanjiEntry`)
@@ -119,7 +124,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        MarkdownAnswer(선생님 답변 렌더링), LoadingMascot, ProgressBar,
                        AssetLoadingBar(대문 프리로드) ·
                        SegmentedTabs(알약 세그먼트 탭 공용 — 오십음도·한자 급수·단어장 두 탭) ·
-                       SentencebookList(단어장의 문장 칸 목록)
+                       SentencebookList(단어장의 문장 칸 목록) ·
+                       BackupCard(/about의 학습 데이터 백업·되돌리기 — "백업" 절 참고)
                      AI 안내: PromptApiUnsupportedNotice(내장 AI 불가) ·
                        GemmaEngineNotice(Gemma를 골랐는데 못 쓸 때) ·
                        PromptApiTroubleshootDialog(런타임 실패) ·
@@ -175,6 +181,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위) +
                      wordLink.ts(단어 상세 주소·돌아갈 곳·조사) +
+                     backup.ts(백업 파일 만들기·검증 — 전부 순수 함수) +
                      발음 게임: kanaPronunciation.ts(채점·출제) · speechRecognition.ts(음성 인식 창구)
                      커리큘럼: curriculum.ts(동적 import 조회) · curriculumProgress.ts(진도 계산) ·
                        grammarPatterns.ts(문장에서 문형 찾기) ·
@@ -189,7 +196,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
                      grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts ·
-                     teacherPractice.test.ts
+                     teacherPractice.test.ts · backup.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -249,6 +256,32 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   단어장의 단어/문장·복습/목록). 네 자리가 같은 마크업을 복붙하고 있어서 모았다 — 375px에서
   자리가 빠듯한 UI라 여백·글자 크기가 한 곳에 있어야 한다. 항목이 넘칠 수 있으면 `scrollable`,
   칸을 n등분하려면 `fill`, 라벨 옆 숫자는 `hint`.
+
+## 학습 데이터 백업 (`/about`의 `BackupCard` / `backup.ts`) 구현 노트
+- 서버가 없어서 단어장·스트릭(localStorage)과 기록·기억·선생님 대화(IndexedDB)가 **이
+  브라우저에만** 있다. 브라우저 데이터를 지우거나 기기를 바꾸면 끝이고, Safari는 한동안 안
+  들른 사이트의 저장소를 비운다. 그래서 JSON 파일로 내려받고 되돌리는 카드를 `/about`에 뒀다
+  (출처 목록보다 위). `/memory`의 "전부 지우기" 옆에도 링크가 있다.
+- 파일 모양: `{ format, version, exportedAt, local: {키: persist 원문}, memory: {events, facts,
+  messages} | null }`. **`memory: null`은 "백업할 때 못 읽었다"**(사생활 보호 모드 등)라 빈
+  배열과 다르다 — 되돌릴 때 지금 기록을 지우지 않는다.
+- **담는 키는 허용 목록(`BACKUP_LOCAL_KEYS`)이다.** `ai-engine`(기기마다 다르다 — Gemma를 받은
+  컴퓨터의 백업을 폰에 풀면 모델도 없는 폰이 Gemma로 설정된다)·`teacher-greeting`·
+  `promptApiNoticeDismissed`는 일부러 뺐다. 되돌릴 때도 파일에 뭐가 들었든 이 목록의 키만 쓴다.
+- **되돌리기는 합치기가 아니라 갈아끼우기다.** 스트릭·XP처럼 "하나의 값"은 합칠 방법이 없다.
+  대신 무엇이 든 백업인지 숫자로 보여주고 한 번 더 묻는다.
+- 순서: **IndexedDB를 한 트랜잭션으로 먼저 갈아끼우고(`replaceAllMemory`), 성공했을 때만
+  localStorage를 쓴 뒤 새로고침한다.** 거꾸로 하면 기록 쪽이 실패했을 때 단어장만 옛날로 돌아간
+  반쪽 상태가 남는다. 새로고침은 각 스토어가 들고 있는 메모리 값을 버리려는 것이다 — 안 하면
+  다음 `set`이 옛 값으로 localStorage를 다시 덮는다.
+- 파일은 믿지 않는다(`parseBackup`): persist 모양(`{state: {...}}`)이 아닌 값·모양이 틀린
+  레코드는 버리고 개수를 알리며, **기억 문장은 `sanitizeMemoryLine`을 다시 통과시킨다**(선생님
+  시스템 프롬프트에 들어가는 자리). 더 새 버전의 파일은 추측하지 않고 거절한다 — 파일 모양을
+  바꾸면 `BACKUP_VERSION`을 올리고 옛 버전 읽기를 남길 것.
+- `exportAllMemory`는 `loadEvents`의 1000개 제한을 쓰지 않는다 — 있는 걸 빠짐없이 옮긴다.
+- 마지막 백업 시각(`last-backup-at`)은 localStorage에 따로 두고 백업에는 담지 않는다.
+- 헤드리스 Chromium에서 "담기 → 전부 지우기 → 파일에서 되돌리기 → 단어장·XP·기록·기억·대화가
+  돌아옴"까지 확인했다. **iOS Safari의 파일 저장(`a[download]`)은 실기기로 확인하지 못했다.**
 
 ## 게이미피케이션 구현 노트
 - `useGamificationStore.recordProgress(xp)` 하나로 XP 지급과 스트릭(연속 학습일) 갱신을 같이

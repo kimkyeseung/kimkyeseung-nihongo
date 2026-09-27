@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import BackupCard from "../components/BackupCard";
 
 const SOURCES = [
   {
@@ -58,6 +59,10 @@ function AboutPage() {
         사전 뜻풀이·읽기·JLPT 급수·한자 정보처럼 정답이 정해진 내용은 AI가 만들지 않고, 아래 공개
         데이터셋을 가공한 정적 데이터에서만 가져옵니다.
       </p>
+
+      {/* 서버가 없는 앱이라 학습 데이터를 지킬 방법이 이것뿐이다 — 출처 목록보다 위에 둔다. */}
+      <h3 id="backup" className="mt-6 text-sm font-bold text-gray-500">내 학습 데이터 백업</h3>
+      <BackupCard />
 
       <h3 className="mt-6 text-sm font-bold text-gray-500">데이터 출처</h3>
       <ul className="mt-2 flex flex-col gap-2">
