@@ -13,6 +13,9 @@ import { buildReviewQueue, formatDueIn, isDue, nextDueAt, planReviewOutcome } fr
 import SegmentedTabs from "../components/SegmentedTabs";
 import SentencebookList from "../components/SentencebookList";
 import WordbookCard, { type CardExit } from "../components/WordbookCard";
+import ConjugationDrillSheet from "../components/ConjugationDrillSheet";
+import { isDrillableVerb } from "../lib/conjugationDrill";
+import type { WordEntry } from "../types/dictionary";
 import { dangerChipClass } from "../components/iconButtonClass";
 import { ALL_GROUP, useWordbookReview, useWordbookView } from "../stores/pageStateStore";
 
@@ -429,6 +432,18 @@ function WordbookPage() {
     [allEntries, activeGroup]
   );
 
+  // 지금 보고 있는 그룹의 동사만 활용 연습에 낸다 — 그룹이 곧 "이번에 외우는 단어"다.
+  const drillVerbs = useMemo(
+    () =>
+      filteredEntries
+        .map((e) => findWordById(e.wordId))
+        .filter((w): w is WordEntry => w !== undefined && isDrillableVerb(w)),
+    [filteredEntries]
+  );
+  const [drillPool, setDrillPool] = useState<WordEntry[] | null>(null);
+  // 열 때마다 새로 섞도록 리마운트 키를 올린다(한자 퀴즈의 quizSessionId와 같은 방식).
+  const [drillSession, setDrillSession] = useState(0);
+
   return (
     <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between gap-3">
@@ -465,6 +480,18 @@ function WordbookPage() {
             <GroupChips activeGroup={activeGroup} onSelect={setActiveGroup} />
           </div>
 
+          {drillVerbs.length > 0 && (
+            <button
+              onClick={() => {
+                setDrillSession((n) => n + 1);
+                setDrillPool(drillVerbs);
+              }}
+              className="mt-3 w-full rounded-2xl border-2 border-primary/20 bg-white py-2 text-sm text-primary"
+            >
+              ✍️ 동사 활용 연습 <span className="text-xs text-gray-400">동사 {drillVerbs.length}개</span>
+            </button>
+          )}
+
           {mode === "review" ? (
             <ReviewDeck key={activeGroup} group={activeGroup} entries={filteredEntries} />
           ) : (
@@ -472,6 +499,8 @@ function WordbookPage() {
           )}
         </>
       )}
+
+      <ConjugationDrillSheet key={drillSession} pool={drillPool} onClose={() => setDrillPool(null)} />
     </div>
   );
 }

@@ -61,8 +61,11 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   - 백업 파일 검증(`backup`의 `parseBackup`) — 사용자가 고른 아무 파일을 저장소에 쓰는 자리라,
     새면 학습 데이터가 조용히 망가지거나 기억(선생님 시스템 프롬프트)에 아무 글이나 들어간다.
 
+  - 동사 활용(`verbConjugation`)·활용 연습(`conjugationDrill`) — 「信ずて」「有らない」 같은 없는 말을
+    보여줘도 콘솔은 조용하고, 학습자는 그대로 외운다. 사전의 실제 항목으로 고정했다.
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
-  (`verbConjugation`, `scriptPreference`, `kanjiQuiz`가 다음 후보다.)
+  (`scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
 
 ## 핵심 규칙 (이 프로젝트 고유)
@@ -125,7 +128,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        AssetLoadingBar(대문 프리로드) ·
                        SegmentedTabs(알약 세그먼트 탭 공용 — 오십음도·한자 급수·단어장 두 탭) ·
                        SentencebookList(단어장의 문장 칸 목록) ·
-                       BackupCard(/about의 학습 데이터 백업·되돌리기 — "백업" 절 참고)
+                       BackupCard(/about의 학습 데이터 백업·되돌리기 — "백업" 절 참고) ·
+                       ConjugationDrillSheet(단어장 동사로 푸는 활용 연습)
                      AI 안내: PromptApiUnsupportedNotice(내장 AI 불가) ·
                        GemmaEngineNotice(Gemma를 골랐는데 못 쓸 때) ·
                        PromptApiTroubleshootDialog(런타임 실패) ·
@@ -163,7 +167,8 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, kanaWords.ts,
                      posTags.ts, sentenceWords.ts, srs.ts) +
                      diff.ts(문자 단위 LCS diff) +
-                     verbConjugation.ts(て형 등 규칙 기반 활용) + kanjiQuiz.ts(한자 읽기 퀴즈 생성) +
+                     verbConjugation.ts(ます·ない·た·て·가능·의지형 규칙 활용) +
+                     conjugationDrill.ts(활용 연습 출제·채점) + kanjiQuiz.ts(한자 읽기 퀴즈 생성) +
                      프롬프트: conversationPrompts.ts · teacherPrompts.ts · wordExamples.ts ·
                        writingCorrection.ts(첨삭 프롬프트/응답 파싱) ·
                        teacherPractice.ts(연습 문제 출제·파싱·피드백 프롬프트) ·
@@ -196,7 +201,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
                      grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts ·
-                     teacherPractice.test.ts · backup.test.ts
+                     teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
+                     conjugationDrill.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -586,6 +592,22 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 끝낸 세션도 빈 큐로 store에 남아 있으므로, 새 세트는 **버튼(`begin`)으로만** 연다. 그때와
   실행 취소 때 `lastHandledRef`를 반드시 비울 것 — 같은 카드가 다시 큐 맨 앞에 오면 첫
   스와이프가 조용히 무시된다(예전 실행 취소에 실제로 이 버그가 있었다).
+
+## 동사 활용 연습 (`ConjugationDrillSheet` / `conjugationDrill.ts`) 구현 노트
+- 단어장 단어 칸의 그룹 칩 아래 "✍️ 동사 활용 연습" 버튼으로 연다(지금 그룹에 동사가 있을 때만).
+  **지금 보고 있는 그룹의 동사**로 10문제 — 그룹이 곧 "이번에 외우는 단어"다.
+- **LLM을 쓰지 않는다.** 정답은 `verbConjugation.ts`가 계산하므로 채점도 코드가 한다
+  (`isConjugationCorrect` — 선생님 연습의 `normalizeAnswer`를 그대로 써서 한자·가나·가타카나·
+  로마자 어느 것으로 써도 맞다). 선생님 "연습해보기"처럼 AI 재확인이 필요 없다.
+- 출제(`buildConjugationDrill`)는 **동사를 한 바퀴씩 돌며** 아직 안 낸 활용형을 하나씩 뽑는다 —
+  쌍 전체를 그냥 섞으면 한 동사가 연달아 나온다. 같은 (동사, 활용형)은 두 번 내지 않는다.
+- 입력창·Enter 처리는 연습해보기(`PracticeQuestion`)와 같다: `useScriptInput`(uncontrolled) +
+  `InputModeToggle`(기본 일본어), 채점 뒤엔 `readOnly`, 한 번 더 Enter면 다음 문제. 문제마다
+  `key`로 리마운트해 입력을 비운다.
+- XP는 **시트를 연 뒤 첫 완주 한 번**(`conjugationDrillCompleted`). "다시 풀기"로는 안 쌓인다 —
+  "모르겠어요"만 눌러도 완주가 되니 반복으로 긁어가지 못하게.
+- 학습 기록(`recordStudyEvent`)은 남기지 않았다 — 이벤트 타입을 새로 들이면 학습자 프로필
+  계산이 흔들린다(문장 칸과 같은 판단). 틀린 활용을 선생님이 알게 하려면 이벤트 타입부터 설계할 것.
 
 ## 단어장의 문장 칸 (`sentencebookStore`) 구현 노트
 - 단어장 페이지는 **상단 탭으로 단어 칸/문장 칸**이 나뉜다. 문장 칸에는 회화 상대의 대사·선생님
@@ -1355,30 +1377,31 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   새로 "이 한자의 대표 읽기"가 필요한 기능을 또 만들 때도 KANJIDIC2 배열 순서를 그대로
   신뢰하지 말고 이 방식(`kanjiQuiz.ts`의 `primaryReading`/`wordsContaining` 재사용)을 쓸 것.
 
-## 단어 상세 페이지 — 동사 て형 / 형용사 유형 구현 노트
-- `src/lib/verbConjugation.ts`가 스펙의 "동사 て형은 LLM이 아니라 규칙 기반 변환 함수로
-  계산" 규칙을 구현한다. `WordEntry.pos`(JMDict 품사 코드)로 동사 그룹을 판별한다:
-  `v1`/`v1-s`/`vz` → 1단(ichidan, る만 떼고 て), `v5*` → 5단(godan, 어미별 활용:
-  う·つ·る→って, く→いて, ぐ→いで, す→して, ぬ·ぶ·む→んで), `vk` → 来る(불규칙, 来て/きて),
-  `vs`/`vs-i`/`vs-s`/`vs-c` → する류. **주의**: 5단 동사 중 `v5k-s`(行く/逝く 특수활용)는
-  く 어미인데도 いて가 아니라 って가 된다 — 어미만 보고 기계적으로 매핑하면 안 되고 이
-  태그를 반드시 예외 처리해야 한다.
-- する류가 헷갈리는 지점: `vs` 태그는 "する를 붙일 수 있는 명사"라는 뜻이라 표제어 자체엔
-  する가 안 붙어있다(예: "勉強" 단어 자체, する 없이). 반면 `vs-s`/`vs-i` 태그 중 일부는
-  표제어에 이미 する가 붙어있다(예: "察する"). 그래서 `suruTeForm`은 항상 먼저
-  `word.endsWith("する")`인지 확인해서 있으면 떼고, 없으면 그대로 뒤에 して를 붙인다 —
-  둘 중 하나만 처리하면 "勉強して"나 "察して" 둘 중 하나가 깨진다(전체 사전 데이터로
-  두 케이스 다 확인함).
+## 단어 상세 페이지 — 동사 활용 / 형용사 유형 구현 노트
+- `src/lib/verbConjugation.ts`가 스펙의 "동사 て형 등 활용은 LLM이 아니라 규칙 기반 변환 함수로 계산"
+  규칙을 구현한다. 활용형은 **ます·ない·た·て·가능·의지형 여섯**이고(`VERB_FORMS`), 단어 상세에
+  활용표로, 단어장의 활용 연습에 문제로 쓰인다. `WordEntry.pos`(JMDict 품사 코드)로 그룹을 판별한다:
+  `v1`/`v1-s`/`vz` → 1단, `v5*` → 5단(어미를 다른 단으로 옮기는 `GODAN_ROWS` 표), `vk` → 来る,
+  `vs`/`vs-i`/`vs-s` → する류. `v2*`·`v4*`(고어)와 `vs-c`(為 す)는 **null** — 틀린 활용을 보여주느니
+  안 보여준다. 모든 규칙은 `verbConjugation.test.ts`가 사전의 실제 항목으로 고정한다.
+- **예외를 어미만 보고 처리하면 안 된다** — 전부 품사 태그로 가른다:
+  - `v5k-s`(行く): く인데 いて가 아니라 って. `v5u-s`(問う): って가 아니라 うて.
+  - `v5r-i`(ある): 부정이 「あらない」가 아니라 「ない」(한자 有る도 ない).
+  - `v5aru`(なさる·くださる·おっしゃる): ます형이 り가 아니라 い(なさいます).
+  - `vz`(信ずる): ずる → じる로 바꾼 뒤 1단. 예전 て형은 「信ずて」라는 없는 말을 보여줬다.
+  - `vs-s`(愛する·察する): ない·가능·의지형이 5단처럼 갈려(愛さない·愛せる) 단어마다 다르므로
+    **그 셋은 null**, ます·た·て형만 보여준다.
+  - 来る: 표기는 来 그대로, 읽기만 き·こ로 바뀐다(来ない/こない).
+  - 為る(する): 어간이 비어서 「します·して」로 나온다 — 한자 「為て」로 쓰지 않는 게 맞다.
+- する 명사(勉強·`vs`)는 표제어에 する가 없어서 활용할 때 붙이고, 사전형을 보여줄 때도
+  `dictionaryForm`이 붙인다(「勉強 → 의지형」이라고 내면 명사를 활용하라는 것처럼 읽힌다).
+- 활용형은 표기(`word`)와 읽기(`reading`)에 같은 규칙을 적용한다 — 동사는 마지막 글자가 두
+  표기에서 같은 가나라서 통한다. 둘이 같으면 `reading`을 `null`로 둬 중복 표시를 피한다.
 - い형용사/な형용사 판별도 같은 파일의 `detectAdjectiveType`이 담당한다(`adj-i`/`adj-ix`/
   `adj-ku`/`adj-shiku` → い, `adj-na`/`adj-nari` → な). `WordDetailPage`에서 JLPT 배지
-  옆에 뱃지로 표시하고, て형은 있을 때만(동사일 때만) 별도 카드로 보여준다 — 형용사엔
-  당연히 て형 카드가 안 뜬다.
-- `getVerbTeForm`은 `{ kanji, reading }`을 반환한다 — 한자 표기(`entry.word`)뿐 아니라
-  히라가나 읽기(`entry.reading`)도 똑같은 활용 규칙 함수에 그대로 통과시켜 계산한다
-  (동사는 항상 마지막 글자가 두 표기 모두에서 같은 가나이므로 어미 기반 규칙이 그대로
-  통함 — 별도 히라가나 전용 로직을 만들 필요 없음). 단, "アップする"처럼 표제어 자체가
-  가나뿐이라 `kanji === reading`이면 `reading`을 `null`로 둬서 UI에서 중복 표시하지
-  않는다.
+  옆에 뱃지로 표시하고, 활용표는 동사일 때만 보여준다.
+- 단어 상세의 후리가나 줄은 **오쿠리가나 조각에 rt가 없다**(行く의 く). 예전엔 그대로 이어
+  「く(undefined)」가 모든 동사·형용사에 찍혔다.
 - 사전 데이터의 품사 칩(`n`, `vs`, `vt` 같은 JMDict 코드)은 원래 코드를 그대로 노출하고
   있었는데 사용자가 못 알아봐서, `src/lib/posTags.ts`의 `translatePos()`로 한글 라벨로
   바꿔 보여준다. `pos-tags.json`의 62개 코드 전부를 정적으로 매핑해뒀다(LLM 번역 아님 —

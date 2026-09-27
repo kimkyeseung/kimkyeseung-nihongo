@@ -23,7 +23,7 @@ import {
   type ParsedExample,
   type WordExample,
 } from "../lib/wordExamples";
-import { detectAdjectiveType, getVerbTeForm } from "../lib/verbConjugation";
+import { VERB_FORM_LABEL, detectAdjectiveType, getVerbConjugations } from "../lib/verbConjugation";
 import { translatePos } from "../lib/posTags";
 import { useWordbookStore } from "../stores/wordbookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
@@ -313,7 +313,7 @@ function WordDetailPage() {
   const recordProgress = useGamificationStore((s) => s.recordProgress);
   const koreanReading = entry ? getKoreanReadingForWord(entry.word) : null;
   const adjectiveType = entry ? detectAdjectiveType(entry) : null;
-  const verbTeForm = entry ? getVerbTeForm(entry) : null;
+  const conjugations = entry ? getVerbConjugations(entry) : null;
 
   function handleToggleWordbook() {
     if (!entry) return;
@@ -381,7 +381,8 @@ function WordDetailPage() {
 
       {entry.furigana && entry.furigana.length > 0 && (
         <p className="mt-1 font-ja text-sm text-gray-400">
-          {entry.furigana.map((f) => `${f.ruby}(${f.rt})`).join(" ")}
+          {/* 오쿠리가나 조각(行く의 く)에는 rt가 없다 — 그대로 이으면 「く(undefined)」가 찍혔다. */}
+          {entry.furigana.map((f) => (f.rt ? `${f.ruby}(${f.rt})` : f.ruby)).join(" ")}
         </p>
       )}
 
@@ -394,14 +395,22 @@ function WordDetailPage() {
       )}
 
       {/* 뜻 목록보다 위에 둔다 — 뜻마다 예문이 딸려 붙으면서 목록이 길어졌고, 그 아래에 두면
-          て형이 화면 몇 개 밖으로 밀려난다. */}
-      {verbTeForm && (
+          활용표가 화면 몇 개 밖으로 밀려난다. 전부 규칙으로 계산한 값이다(verbConjugation.ts). */}
+      {conjugations && (
         <div className="mt-4 rounded-2xl bg-gray-50 p-4">
-          <p className="text-sm text-gray-400">て형</p>
-          <p className="mt-1 font-ja text-2xl text-gray-700">{verbTeForm.kanji}</p>
-          {verbTeForm.reading && (
-            <p className="mt-0.5 font-ja text-base text-gray-400">{verbTeForm.reading}</p>
-          )}
+          <p className="text-sm text-gray-400">활용</p>
+          <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-3">
+            {conjugations.map((row) => (
+              <div key={row.form} className="min-w-0">
+                <dt className="text-xs text-gray-400">
+                  {VERB_FORM_LABEL[row.form].name}
+                  <span className="ml-1 text-gray-300">{VERB_FORM_LABEL[row.form].hint}</span>
+                </dt>
+                <dd className="font-ja text-lg break-all text-gray-700">{row.kanji}</dd>
+                {row.reading && <dd className="font-ja text-xs break-all text-gray-400">{row.reading}</dd>}
+              </div>
+            ))}
+          </dl>
         </div>
       )}
 
