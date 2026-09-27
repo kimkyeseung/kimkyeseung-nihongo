@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDailyPlan, buildTeacherGreeting } from "./dailyPlan";
+import { WEAK_REVIEW_PATH, buildDailyPlan, buildTeacherGreeting } from "./dailyPlan";
 import { EMPTY_PROFILE, type LearnerProfile } from "./learnerProfile";
 import type { UnitProgress } from "./curriculumProgress";
 import type { CurriculumUnit } from "../types/curriculum";
@@ -38,7 +38,7 @@ function unit(overrides: Partial<CurriculumUnit> = {}): CurriculumUnit {
 }
 
 function profileWithWeakKanji(kanji: string[]): LearnerProfile {
-  return { ...EMPTY_PROFILE, weakKanji: kanji.map((k) => ({ kanji: k, wrong: 2, correct: 0 })) };
+  return { ...EMPTY_PROFILE, reviewTargets: { kanji, words: [] } };
 }
 
 describe("buildDailyPlan", () => {
@@ -72,12 +72,23 @@ describe("buildDailyPlan", () => {
       unit(),
       profileWithWeakKanji(["薔", "鬱"])
     );
-    expect(actions[0].id).toBe("review-weak-kanji");
+    expect(actions[0].id).toBe("review-weak");
+  });
+
+  it("한자와 단어를 합쳐서 센다 — 한 개씩이어도 복습을 권한다", () => {
+    const profile: LearnerProfile = {
+      ...EMPTY_PROFILE,
+      reviewTargets: { kanji: ["薔"], words: [{ word: "約束" }] },
+    };
+    const actions = buildDailyPlan(progress({ kanjiTodo: ["私"] }), unit(), profile);
+    expect(actions[0].id).toBe("review-weak");
+    expect(actions[0].to).toBe(WEAK_REVIEW_PATH);
+    expect(actions[0].detail).toContain("約束");
   });
 
   it("취약 한자가 하나뿐이면 진도를 막지 않는다", () => {
     const actions = buildDailyPlan(progress({ kanjiTodo: ["私"] }), unit(), profileWithWeakKanji(["薔"]));
-    expect(actions[0].id).not.toBe("review-weak-kanji");
+    expect(actions[0].id).not.toBe("review-weak");
   });
 
   it("문법은 선생님에게 대신 물어봐 줄 질문을 함께 준다", () => {

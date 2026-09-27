@@ -13,4 +13,5 @@ export const XP_REWARDS = {
   exampleGenerated: 5,
   teacherPracticeCompleted: 5,
   conjugationDrillCompleted: 5,
+  weakReviewCompleted: 5,
 } as const;

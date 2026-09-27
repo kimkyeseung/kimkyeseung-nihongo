@@ -64,6 +64,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   - 동사 활용(`verbConjugation`)·활용 연습(`conjugationDrill`) — 「信ずて」「有らない」 같은 없는 말을
     보여줘도 콘솔은 조용하고, 학습자는 그대로 외운다. 사전의 실제 항목으로 고정했다.
 
+  - 약한 것 모아 풀기(`weakReview`의 `collectReviewTargets`, `weakReviewQuiz`) — 다 익힌 단어가 계속
+    나오거나, 보기에 한국어 정답과 영어 오답이 섞여 뜻을 몰라도 맞히는 식으로 조용히 틀린다.
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
@@ -130,7 +133,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        SegmentedTabs(알약 세그먼트 탭 공용 — 오십음도·한자 급수·단어장 두 탭) ·
                        SentencebookList(단어장의 문장 칸 목록) ·
                        BackupCard(/about의 학습 데이터 백업·되돌리기 — "백업" 절 참고) ·
-                       ConjugationDrillSheet(단어장 동사로 푸는 활용 연습)
+                       ConjugationDrillSheet(단어장 동사로 푸는 활용 연습) ·
+                       WeakReviewSheet(약한 한자·단어 모아 풀기 — 단어장에서 lazy로 연다)
                      AI 안내: PromptApiUnsupportedNotice(내장 AI 불가) ·
                        GemmaEngineNotice(Gemma를 골랐는데 못 쓸 때) ·
                        PromptApiTroubleshootDialog(런타임 실패) ·
@@ -194,6 +198,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                        dailyPlan.ts(오늘의 추천 — 전부 순수 함수, LLM 안 씀)
                      학습자 기억: learnerMemoryDb.ts(IndexedDB — 이 앱의 유일한 사용처) ·
                        learnerProfile.ts(기록에서 취약/강점/수준을 결정적으로 계산) ·
+                       weakReview.ts(다시 풀 약한 한자·단어 고르기) · weakReviewQuiz.ts(그 문제 만들기) ·
                        memoryExtraction.ts(대화에서 개인적인 사실 추출·파싱)
                    테스트: promptSafety.test.ts · conversationPrompts.test.ts ·
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
@@ -203,7 +208,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
                      grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts ·
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
-                     conjugationDrill.test.ts
+                     conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -611,6 +616,31 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 학습 기록(`recordStudyEvent`)은 남기지 않았다 — 이벤트 타입을 새로 들이면 학습자 프로필
   계산이 흔들린다(문장 칸과 같은 판단). 틀린 활용을 선생님이 알게 하려면 이벤트 타입부터 설계할 것.
 
+## 약한 것 모아 풀기 (`WeakReviewSheet` / `weakReview.ts` / `weakReviewQuiz.ts`) 구현 노트
+- 한자 퀴즈에서 틀린 글자, 단어장 복습에서 "모르겠어요"한 단어, 문장에서 뜻을 찾아본 단어를 모아
+  4지선다로 다시 푼다. 한자는 읽기(기존 `buildKanjiQuiz` 그대로), 단어는 뜻. **LLM을 쓰지 않는다** —
+  무엇이 약한지는 기록을 세면 나오고, 보기는 전부 사전 데이터다.
+- **목록은 프로필이 계산한다**(`LearnerProfile.reviewTargets` ← `collectReviewTargets`). 대문
+  "오늘의 학습"·`/memory`·풀기 시트가 같은 목록을 봐야 해서다 — 각자 세면 "3개"라더니 열어보니
+  5문제인 식으로 어긋난다. `weakKanji`·`weakWords`는 선생님 프롬프트용 요약이라 따로 있다.
+- 약하다는 판정: 한자는 **틀린 게 맞힌 것보다 많거나 마지막에 틀렸으면**, 단어는 **그 단어에
+  마지막으로 일어난 일이 "모르겠어요"·"찾아봄"이면**. 누적으로 세면 한 번 몰랐던 단어가 다 익힌
+  뒤에도 영영 나온다. 결과는 **기존 이벤트**(`kanji-quiz-*`, `word-review-*`)로 남기므로, 맞힌
+  것은 다음부터 목록에서 빠지고 선생님 프로필에도 그대로 반영된다(새 이벤트 타입을 들이지 않았다).
+- 입구: 단어장 단어 칸의 "🔁 약한 것 모아 풀기" 버튼(단어장에 없는 단어·한자도 나온다), 대문
+  "오늘의 학습"의 복습 항목, `/memory`의 링크. 뒤의 둘은 `WEAK_REVIEW_PATH`(`/wordbook?review=weak`)로
+  보내고, WordbookPage가 **학습 기록을 다 읽은 뒤에**(`loaded`) 시트를 열고 쿼리를 지운다 — 먼저
+  열면 빈 목록이 잡히고, 안 지우면 새로고침·뒤로가기로 또 열린다. 예전 "틀렸던 한자 다시 보기"는
+  `/kanji`로 보내기만 해서 어느 글자를 봐야 하는지는 학습자가 기억해야 했다.
+- 시트는 **연 순간의 목록 스냅샷**으로 문제를 만든다 — 푸는 동안 맞힌 게 목록에서 빠지는데, 그걸
+  따라가면 풀던 문제가 사라진다. 한자 데이터(`kanji.json`)를 끌어오므로 `lazy()`로 연다.
+- **단어 뜻 보기는 정답과 같은 언어로만 고른다 (실제로 겪었다).** 한국어 뜻이 없는 단어는 영어로
+  폴백하는데, 섞어 뽑았더니 정답은 한국어·오답 둘은 영어라 뜻을 몰라도 맞혔다. 또 `displayMeaning`을
+  그대로 쓰면 고어 뜻까지 딸린 몇 줄짜리 보기가 나와서 `shortMeaning`(한국어 첫 뜻풀이의 앞 두 마디,
+  영어 앞 두 뜻, 32자)으로 줄였다. 오답은 같은 급수의 흔한 단어에서, 보기끼리 겹치지 않게 뽑는다.
+- 표기가 같은 단어(上手 じょうず/うわて)는 찾아볼 때 남긴 읽기로 가른다(`resolveReviewWord`).
+- 단어 문제는 답을 고른 뒤에만 읽기를 보여준다(카드 앞면과 같은 이유). XP는 완주에 한 번.
+
 ## 단어장의 문장 칸 (`sentencebookStore`) 구현 노트
 - 단어장 페이지는 **상단 탭으로 단어 칸/문장 칸**이 나뉜다. 문장 칸에는 회화 상대의 대사·선생님
   답변의 예문처럼 "통째로 다시 보고 싶은 문장"이 쌓인다. 담는 입구는 `SentenceActions`의
@@ -733,7 +763,8 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   유닛"). 커리큘럼은 순서가 있는 물건이다.
 - "오늘의 학습" 추천(`dailyPlan.ts`)도 **LLM을 쓰지 않는다** — 뭐가 남았는지는 진도에서 빼면
   나오고, 모델에게 맡기면 매번 다른 말을 하면서 정작 안 한 한자를 놓친다. 순서는
-  **복습 → 새 내용 → 연습**이고, 각 항목은 새 학습 화면을 만드는 대신 **이미 있는 화면으로
+  **복습 → 새 내용 → 연습**이고(복습은 약한 한자·단어가 둘 이상일 때 "약한 것 모아 풀기"로 — 전용 절
+  참고), 각 항목은 새 학습 화면을 만드는 대신 **이미 있는 화면으로
   보낸다**(한자/사전/회화/작문/선생님). 문법 항목은 `teacherChatStore.requestQuestion()`으로
   선생님에게 대신 물어봐 준다 — 회화 말풍선의 "선생님" 버튼과 같은 경로다.
 - **대신 물어보기는 기억 스냅샷이 확정된 뒤에 보내야 한다 (실제로 겪은 버그).** 스냅샷 갱신은

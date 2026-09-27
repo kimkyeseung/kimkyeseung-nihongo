@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useWordbookStore, type WordbookEntry } from "../stores/wordbookStore";
 import { useSentencebookStore } from "../stores/sentencebookStore";
 import { useGamificationStore } from "../stores/gamificationStore";
-import { recordStudyEvent } from "../stores/learnerMemoryStore";
+import { recordStudyEvent, useLearnerMemoryStore } from "../stores/learnerMemoryStore";
+import { reviewTargetCount, type ReviewTargets } from "../lib/weakReview";
 import { useConfettiStore } from "../stores/confettiStore";
 import { findWordById } from "../lib/dictionary";
 import { useWordLink } from "../hooks/useWordLink";
@@ -16,6 +17,10 @@ import WordbookCard, { type CardExit } from "../components/WordbookCard";
 import ConjugationDrillSheet from "../components/ConjugationDrillSheet";
 import { isDrillableVerb } from "../lib/conjugationDrill";
 import type { WordEntry } from "../types/dictionary";
+
+// 한자 데이터(kanji.json)를 끌어오는 시트라, 열 때만 받도록 lazy로 둔다 — 단어장 청크를
+// 가볍게 유지한다(번들 최적화 노트).
+const WeakReviewSheet = lazy(() => import("../components/WeakReviewSheet"));
 import { dangerChipClass } from "../components/iconButtonClass";
 import { ALL_GROUP, useWordbookReview, useWordbookView } from "../stores/pageStateStore";
 
@@ -441,6 +446,24 @@ function WordbookPage() {
     [filteredEntries]
   );
   const [drillPool, setDrillPool] = useState<WordEntry[] | null>(null);
+
+  // "약한 것 모아 풀기" — 단어장에 없는 단어·한자도 포함한다(문장에서 찾아본 단어, 한자 퀴즈).
+  // 목록은 학습자 프로필이 계산한다(weakReview.ts).
+  const memoryLoaded = useLearnerMemoryStore((s) => s.loaded);
+  const reviewTargets = useLearnerMemoryStore((s) => s.profile.reviewTargets);
+  const weakCount = reviewTargetCount(reviewTargets);
+  // 열 때의 목록을 붙들고 연다(푸는 동안 맞힌 게 목록에서 빠져도 문제가 사라지지 않게).
+  const [weakSnapshot, setWeakSnapshot] = useState<ReviewTargets | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // 대문 "오늘의 학습"의 "약한 것 모아 풀기"는 `?review=weak`로 들어온다. 기록을 다 읽은 뒤에
+  // 연다 — 먼저 열면 빈 목록이 잡혀 "풀 게 없어요"가 뜬다. 쿼리는 지워서 새로고침·뒤로가기로
+  // 다시 열리지 않게 한다.
+  useEffect(() => {
+    if (searchParams.get("review") !== "weak" || !memoryLoaded) return;
+    setWeakSnapshot(useLearnerMemoryStore.getState().profile.reviewTargets);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, memoryLoaded, setSearchParams]);
   // 열 때마다 새로 섞도록 리마운트 키를 올린다(한자 퀴즈의 quizSessionId와 같은 방식).
   const [drillSession, setDrillSession] = useState(0);
 
@@ -480,6 +503,14 @@ function WordbookPage() {
             <GroupChips activeGroup={activeGroup} onSelect={setActiveGroup} />
           </div>
 
+          {weakCount > 0 && (
+            <button
+              onClick={() => setWeakSnapshot(reviewTargets)}
+              className="mt-3 w-full rounded-2xl border-2 border-warning/40 bg-white py-2 text-sm text-gray-700"
+            >
+              🔁 약한 것 모아 풀기 <span className="text-xs text-gray-400">한자·단어 {weakCount}개</span>
+            </button>
+          )}
           {drillVerbs.length > 0 && (
             <button
               onClick={() => {
@@ -501,6 +532,11 @@ function WordbookPage() {
       )}
 
       <ConjugationDrillSheet key={drillSession} pool={drillPool} onClose={() => setDrillPool(null)} />
+      {weakSnapshot && (
+        <Suspense fallback={null}>
+          <WeakReviewSheet targets={weakSnapshot} onClose={() => setWeakSnapshot(null)} />
+        </Suspense>
+      )}
     </div>
   );
 }
