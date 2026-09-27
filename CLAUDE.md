@@ -71,6 +71,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     "틀렸어요"를 듣고, 느슨하면 아무렇게나 그어도 통과한다. **KanjiVG 전체(2,135자·22,356획)**로
     고정했다.
 
+  - 학습 달력(`studyCalendar`) — 날짜를 UTC로 자르거나 달 경계에서 이웃 날을 문자열로 따지면
+    달력이 하루씩 밀리거나 연속 기록이 끊겨 보인다. 화면은 그럴듯하다.
+
   - 문장 복습의 번역 찾기(`sentenceReview`의 `findExampleTranslation`) — 선생님의 설명 한 줄을
     번역으로 잘못 집으면 복습 카드 뒷면에 엉뚱한 "뜻"이 **영구히** 저장된다.
 
@@ -132,7 +135,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        PromptApiOnboardingDialog(첫 접속 1회 안내 모달)
                      학습 UI: KanjiStrokeOrder, KanjiWritingPad(한자 따라 쓰기), KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
                        ClickableSentence(후리가나·단어 탭 — 일본어 문장은 전부 이걸로 그린다),
-                       WritingDiff, BadgeSheet, GamificationBar,
+                       WritingDiff, BadgeSheet(🔥를 누르면 — 학습 달력 + 뱃지), StudyCalendar,
+                       GamificationBar,
                        KanaDetailDialog, KanaSpeakingGame(오십음도 2초 발음 게임),
                        WordMeaningDialog, JapaneseSuggestionList,
                        MarkdownAnswer(선생님 답변 렌더링), LoadingMascot, ProgressBar,
@@ -195,6 +199,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      preloadAssets.ts(대문 프리로드) +
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
                      clipboard.ts(권한 거부 시 execCommand 폴백이 있는 복사) +
+                     studyCalendar.ts(학습 달력 — 날짜별 XP·기록 합치기, 월 칸, 최장 연속) +
                      localDate.ts(로컬 타임존 YYYY-MM-DD + 날짜 이름 — 스트릭·인사·대화 기록이 공유) +
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위) +
@@ -218,7 +223,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts ·
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
                      conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
-                     sentenceReview.test.ts · kanjiWriting.test.ts
+                     sentenceReview.test.ts · kanjiWriting.test.ts · studyCalendar.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -321,6 +326,21 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   ≥ 기준값"이라 되돌아갈 일이 없어 이 방식이 저장소 동기화 걱정 없이 가장 단순하다.
   뱃지를 추가할 땐 `BadgeContext`에 새 필드를 늘리기보다, 최대한 기존 4개 지표(xp/streak/
   wordbookCount/kanjiLearnedCount)로 표현할 수 있는지 먼저 고민할 것.
+- **학습 달력**(`StudyCalendar` / `studyCalendar.ts`): `BadgeSheet`("나의 학습") 맨 위의 월 달력.
+  공부한 날일수록 진한 초록이고, 칸을 누르면 그날의 XP와 한 일("한자 3 · 단어 5")이 나온다.
+  - 근거 ① **날짜별 XP(`gamificationStore.dailyXp`)** — `recordProgress`가 오늘 칸에 더한다. 모든
+    학습 행동이 이 한 곳을 지나므로 학습 기록을 안 남기는 행동(단어·문장 복습, 한자 쓰기, 활용 연습)도
+    잡힌다. 이걸 이벤트로 새로 남기지 않은 이유는 "학습 기록" 규칙과 같다(프로필 계산이 흔들린다).
+  - 근거 ② **학습 기록(IndexedDB 이벤트)** — "무엇을 했나"와, `dailyXp`가 생기기 전 날짜를 채운다.
+    최근 1000개만 남으므로 아주 옛날은 비어 보일 수 있고, **이 기능 전에 기록 없는 행동만 한 날**
+    (단어 복습만 한 날 등)도 비어 보인다 — 그래서 🔥 연속 일수와 달력의 "최장 연속"이 처음엔 다를 수
+    있다. 앞으로 쌓이는 날은 맞는다.
+  - `dailyXp`는 `gamification` 키 안이라 **백업에 같이 담긴다**(`BACKUP_LOCAL_KEYS` 수정 불필요).
+    백업 파일은 믿지 않으므로 `buildActivityByDay`가 날짜 모양이 아닌 키·양수가 아닌 값을 버리고,
+    `recordProgress`도 객체가 아니면 새로 시작한다. 옛 저장값에는 이 필드가 없는데, persist의 기본
+    병합(얕은 병합)이 초기값 `{}`을 남기므로 마이그레이션이 필요 없다.
+  - 스토어를 고친 뒤 헤드리스로 확인할 때는 **vite를 다시 띄울 것** — HMR 뒤 `import()`로 부른
+    스토어가 앱과 다른 인스턴스가 되어 "XP를 올렸는데 달력이 안 바뀐다"처럼 보인다(실제로 헷갈렸다).
 - 상단바(`Layout.tsx`)의 `GamificationBar`를 탭하면 `BadgeSheet`가 열린다 — 스펙의 "상단바에
   표시"를 스트릭/XP 숫자로, 뱃지는 탭해서 보는 상세 뷰로 구현했다.
 

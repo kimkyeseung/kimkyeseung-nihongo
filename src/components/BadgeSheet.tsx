@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
+import StudyCalendar from "./StudyCalendar";
 import { BADGES, type BadgeContext } from "../lib/badges";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useWordbookStore } from "../stores/wordbookStore";
@@ -30,7 +31,7 @@ function BadgeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-primary">나의 뱃지</h3>
+              <h3 className="text-lg font-bold text-primary">나의 학습</h3>
               <button onClick={onClose} className="text-2xl leading-none text-gray-400" aria-label="닫기">
                 ×
               </button>
@@ -41,7 +42,11 @@ function BadgeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
               <span>⭐ XP {xp}</span>
             </div>
 
-            <ul className="mt-4 grid grid-cols-2 gap-3">
+            {/* 🔥 스트릭을 누르면 여기로 온다 — 연속 일수 옆에 "어느 날 했나"를 같이 보여준다. */}
+            <StudyCalendar />
+
+            <h4 className="mt-5 text-sm font-bold text-gray-500">뱃지</h4>
+            <ul className="mt-2 grid grid-cols-2 gap-3">
               {BADGES.map((badge) => {
                 const unlocked = badge.isUnlocked(ctx);
                 return (
