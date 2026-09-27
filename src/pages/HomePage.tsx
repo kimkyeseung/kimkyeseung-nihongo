@@ -89,7 +89,9 @@ function HomePage() {
   const returning = xp > 0;
 
   return (
-    <div className="min-h-svh bg-[#faf4e4]">
+    // 대문은 다크 모드에서도 밝게 둔다(force-light) — 그림의 크림색 배경이 페이지 배경과 같아야
+    // 경계가 안 보인다(index.css 주석).
+    <div className="force-light min-h-svh bg-[#faf4e4]">
       {/* 그림의 배경색이 페이지 배경(#faf4e4)과 정확히 같아서 테두리·모서리 없이 좌우 여백
           바깥까지 꽉 채워도 경계가 보이지 않는다 — 그림이 배경에 그대로 이어지는 효과. */}
       <motion.img

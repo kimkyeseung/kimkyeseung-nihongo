@@ -50,10 +50,61 @@
   }
 }
 
+/*
+ * 다크 모드 — **Tailwind의 무채색 변수 자체를 뒤집는다.** 화면 곳곳의 `bg-white`·`bg-gray-50`·
+ * `text-gray-700`·`border-gray-100`이 전부 `var(--color-...)`를 읽으므로(v4), 여기 한 곳에서 값만
+ * 바꾸면 컴포넌트마다 `dark:`를 붙이지 않아도 된다. 컴포넌트가 쓰는 색은 무채색(white·gray) +
+ * 브랜드색뿐이라 가능한 방식이다 — **새 화면에 `slate`·`zinc`나 `#hex` 무채색을 쓰지 말 것.**
+ * 그러면 그 자리만 다크 모드에서 흰 칸으로 남는다.
+ *
+ * `white`도 뒤집으므로 `bg-primary text-white` 같은 색 버튼의 글자는 어두운 색이 된다(듀오링고의
+ * 다크 모드와 같은 모양이다). `black`은 뒤집지 않는다 — 시트 뒤의 반투명 막(`bg-black/30`)이다.
+ *
+ * 값은 `data-theme`로 고른다(index.html의 인라인 스크립트가 첫 페인트 전에 붙인다 — theme.ts).
+ * 레이어 밖에 둬서 Tailwind의 `@layer theme` 기본값을 이긴다.
+ */
+:root {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-white: #131f24;
+  --color-gray-50: #1a2b32;
+  --color-gray-100: #22343c;
+  --color-gray-200: #37464f;
+  --color-gray-300: #4f626b;
+  --color-gray-400: #7c8f97;
+  --color-gray-500: #9aabb2;
+  --color-gray-600: #b6c4ca;
+  --color-gray-700: #cfd9de;
+  --color-gray-800: #e2e9ec;
+  --color-gray-900: #f0f4f6;
+  --color-gray-950: #f8fafb;
+}
+/*
+ * 다크 모드에서도 밝게 두는 자리. 대문(`/`)은 그림(hero.png)의 배경색이 페이지 배경과 같아야
+ * 경계가 안 보이는데(대문 노트), 그림은 밝은 크림색이다. 값은 Tailwind 기본값 그대로.
+ */
+:root[data-theme="dark"] .force-light {
+  color-scheme: light;
+  color: #000;
+  --color-white: #fff;
+  --color-gray-50: oklch(98.5% 0.002 247.839);
+  --color-gray-100: oklch(96.7% 0.003 264.542);
+  --color-gray-200: oklch(92.8% 0.006 264.531);
+  --color-gray-300: oklch(87.2% 0.01 258.338);
+  --color-gray-400: oklch(70.7% 0.022 261.325);
+  --color-gray-500: oklch(55.1% 0.027 264.364);
+  --color-gray-600: oklch(44.6% 0.03 256.802);
+  --color-gray-700: oklch(37.3% 0.034 259.733);
+  --color-gray-800: oklch(27.8% 0.033 256.848);
+  --color-gray-900: oklch(21% 0.034 264.665);
+  --color-gray-950: oklch(13% 0.028 261.692);
+}
+
 body {
   margin: 0;
-  color-scheme: light;
-  background: #ffffff;
+  background: var(--color-white);
 }
 
 /* 버튼의 "눌리는" 3D 느낌: 하단 두꺼운 그림자 + 클릭 시 눌림 */
@@ -69,7 +120,7 @@ body {
 /* 비활성 상태에서는 --btn-shadow(보통 원색 그림자)가 배경이 회색(bg-gray-200)으로 바뀐
    뒤에도 그대로 남아있어서 부자연스러웠다 — 그림자와 글씨색도 함께 무채색으로 바꾼다. */
 .btn-press:disabled {
-  color: rgb(156 163 175); /* text-gray-400 */
+  color: var(--color-gray-400);
   box-shadow: 0 4px 0 0 rgb(0 0 0 / 0.15);
   cursor: not-allowed;
 }

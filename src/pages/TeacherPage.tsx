@@ -438,7 +438,7 @@ function TeacherPage() {
                                   })
                                 }
                                 className="btn-press rounded-2xl border-2 border-primary/20 bg-white px-4 py-2 text-sm font-bold text-primary"
-                                style={{ ["--btn-shadow" as string]: "#e5e7eb" }}
+                                style={{ ["--btn-shadow" as string]: "var(--color-gray-200)" }}
                               >
                                 ✏️ 연습해보기
                               </button>

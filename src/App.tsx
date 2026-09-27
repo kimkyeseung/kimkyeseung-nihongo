@@ -4,6 +4,8 @@ import { RouterProvider } from "react-router-dom";
 import { router } from "./router";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import { useLearnerMemoryStore } from "./stores/learnerMemoryStore";
+import { useAppearance } from "./stores/pageStateStore";
+import { followSystemTheme } from "./lib/theme";
 
 function App() {
   // 기억은 IndexedDB에 있어 읽는 데 한 박자 걸린다. 화면에 들어간 뒤에 읽기 시작하면
@@ -15,6 +17,11 @@ function App() {
   useEffect(() => {
     void loadMemory();
   }, [loadMemory]);
+
+  // 화면 모드. 첫 페인트는 index.html의 인라인 스크립트가 이미 칠했고, 여기서는 바꿨을 때와
+  // "시스템"일 때 OS 설정이 바뀌는 것을 따라간다. 대문도 덮어야 해서 역시 Layout이 아니라 여기다.
+  const theme = useAppearance((s) => s.theme);
+  useEffect(() => followSystemTheme(theme), [theme]);
 
   return (
     <>

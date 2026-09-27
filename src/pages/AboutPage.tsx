@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import BackupCard from "../components/BackupCard";
+import SegmentedTabs from "../components/SegmentedTabs";
+import { useAppearance } from "../stores/pageStateStore";
 
 const SOURCES = [
   {
@@ -35,6 +37,8 @@ const SOURCES = [
 ];
 
 function AboutPage() {
+  const theme = useAppearance((s) => s.theme);
+  const setTheme = useAppearance((s) => s.setTheme);
   return (
     <div className="p-4 sm:p-6">
       <Link to="/gojuon" className="text-info">
@@ -61,6 +65,19 @@ function AboutPage() {
       </p>
 
       {/* 서버가 없는 앱이라 학습 데이터를 지킬 방법이 이것뿐이다 — 출처 목록보다 위에 둔다. */}
+      <h3 className="mt-6 text-sm font-bold text-gray-500">화면 모드</h3>
+      <SegmentedTabs
+        className="mt-2"
+        fill
+        options={[
+          { key: "system", label: "기기 설정" },
+          { key: "light", label: "☀️ 밝게" },
+          { key: "dark", label: "🌙 어둡게" },
+        ]}
+        value={theme}
+        onChange={setTheme}
+      />
+
       <h3 id="backup" className="mt-6 text-sm font-bold text-gray-500">내 학습 데이터 백업</h3>
       <BackupCard />
 

@@ -132,18 +132,18 @@ function KanjiWritingPad({ kanji, size = 240 }: { kanji: string; size?: number }
         aria-label={`${kanji} 쓰기 칸`}
       >
         {/* 칸 가운데 십자선 — 글자의 위치를 가늠하는 기준. */}
-        <g stroke="#e5e7eb" strokeWidth={0.6} strokeDasharray="2 2">
+        <g className="stroke-gray-200" strokeWidth={0.6} strokeDasharray="2 2">
           <line x1={CANVAS / 2} y1={0} x2={CANVAS / 2} y2={CANVAS} />
           <line x1={0} y1={CANVAS / 2} x2={CANVAS} y2={CANVAS / 2} />
         </g>
         {guide && (
-          <g stroke="#e5e7eb" strokeWidth={4} fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <g className="stroke-gray-200" strokeWidth={4} fill="none" strokeLinecap="round" strokeLinejoin="round">
             {strokes.map((d, i) => (
               <path key={i} d={d} />
             ))}
           </g>
         )}
-        <g stroke="#374151" strokeWidth={4} fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <g className="stroke-gray-700" strokeWidth={4} fill="none" strokeLinecap="round" strokeLinejoin="round">
           {strokes.slice(0, index).map((d, i) => (
             <path key={i} d={d} />
           ))}

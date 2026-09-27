@@ -26,6 +26,7 @@ export const BACKUP_VERSION = 1;
  *    Gemma로 설정되어 "모델을 받아주세요" 안내부터 본다.
  *  - `teacher-greeting` — "오늘 인사를 했나"라서 옮길 이유가 없다.
  *  - `promptApiNoticeDismissed` — 이 브라우저의 AI 지원 여부에 달린 안내라 기기마다 다르다.
+ *  - `appearance` — 화면 모드. 폰은 어둡게, 컴퓨터는 밝게 쓰는 식으로 기기마다 다르다.
  *
  * **새 `persist` 스토어를 만들면 여기에 넣을지 정할 것** — 빠뜨려도 콘솔은 조용하고, 복원한
  * 사람만 그 설정이 사라진 걸 나중에 안다.

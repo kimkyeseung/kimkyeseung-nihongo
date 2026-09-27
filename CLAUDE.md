@@ -122,6 +122,29 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
 `font-ja`(Kosugi Maru, 일본어만 있는 자리) · `font-mixed`(한·일이 한 줄에 섞이는 자리,
 "입력 문자 전환 토글" 절 참고). 상세 가이드는 스펙 문서의 "디자인/UI 스타일 가이드" 참고.
 
+**다크 모드는 Tailwind 무채색 변수를 뒤집어서 만든다**("다크 모드" 절). 그래서 화면에 쓰는
+무채색은 **`white`·`gray-*`만** 쓸 것 — `slate`·`zinc`·`#e5e7eb` 같은 걸 쓰면 그 자리만 다크
+모드에서 흰 칸으로 남는다. SVG 회색도 `stroke="#..."` 대신 `className="stroke-gray-200"`으로.
+
+## 다크 모드 (`theme.ts` / `index.css`) 구현 노트
+- `/about`의 "화면 모드"에서 기기 설정 / 밝게 / 어둡게를 고른다(`useAppearance`, persist 키
+  `appearance`). 적용은 `<html data-theme="dark|light">` 하나다.
+- **색은 컴포넌트마다 `dark:`를 붙이지 않고 `index.css`에서 `--color-white`·`--color-gray-*` 값을
+  바꾼다.** Tailwind v4의 유틸리티가 전부 `var(--color-…)`를 읽기 때문에 가능하다. 앱이 쓰는 색이
+  무채색 + 브랜드색(primary·info·warning·accent·danger)뿐이라 이것으로 전 화면이 바뀐다.
+  - `white`도 뒤집으므로 **`bg-primary text-white` 버튼의 글자는 어두운 색**이 된다(듀오링고 다크
+    모드와 같은 모양). `black`은 안 뒤집는다 — 시트 뒤 반투명 막(`bg-black/30`)이다.
+  - 새 무채색을 들이면 다크 모드에서 그 자리만 흰 칸이 된다. 확인은 헤드리스로 `colorScheme: "dark"`에서
+    "밝은 배경을 가진 요소"를 훑으면 된다(전 페이지를 그렇게 확인했다).
+- **대문(`/`)은 다크 모드에서도 밝다(`.force-light`)** — hero.png의 크림색 배경이 페이지 배경과 같아야
+  경계가 안 보인다(대문 노트). `.force-light` 안에는 Tailwind 기본값을 다시 적어 뒀다.
+- **첫 페인트는 `index.html`의 인라인 스크립트가 칠한다.** React가 뜬 뒤에 붙이면 어두운 모드 사용자에게
+  흰 화면이 한 번 번쩍인다. 그 스크립트는 TS를 import할 수 없어 `theme.ts`와 같은 판단(키 이름·persist
+  모양)을 손으로 한 번 더 적어 뒀다 — **한쪽을 바꾸면 둘 다 고칠 것.** 그 뒤의 변경(설정 바꾸기, "기기
+  설정"일 때 OS가 저녁에 어둡게 바뀌는 것)은 `App.tsx`의 `followSystemTheme`이 따라간다 — 대문도
+  덮어야 해서 Layout이 아니라 App이다.
+- `appearance`는 **백업에 담지 않는다** — 기기마다 다르다(`ai-engine`과 같은 판단).
+
 ## 프로젝트 구조
 ```
 src/router.tsx     react-router-dom 라우트 정의 (완료)
@@ -200,6 +223,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      speechText.ts(TTS에 넘기기 전 일본어만 남기는 전처리) +
                      clipboard.ts(권한 거부 시 execCommand 폴백이 있는 복사) +
                      studyCalendar.ts(학습 달력 — 날짜별 XP·기록 합치기, 월 칸, 최장 연속) +
+                     theme.ts(화면 모드 — 다크 모드 적용) +
                      localDate.ts(로컬 타임존 YYYY-MM-DD + 날짜 이름 — 스트릭·인사·대화 기록이 공유) +
                      scriptPreference.ts(첨삭 수정문에서 학습자의 가나/한자 표기 되살리기) +
                      romajiInput.ts(입력창의 로마자→히라가나 변환 범위) +

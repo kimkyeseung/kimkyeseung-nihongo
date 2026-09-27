@@ -6,6 +6,7 @@ import type { JlptLevel } from "../types/jlpt";
 import type { WordExample } from "../lib/wordExamples";
 import type { PracticeProblem } from "../lib/teacherPractice";
 import { localDateKey } from "../lib/localDate";
+import { THEME_STORAGE_KEY, type ThemePreference } from "../lib/theme";
 
 /**
  * 페이지를 떠났다 돌아와도 화면이 그대로이도록, 라우트 전환 때 사라지는 페이지 로컬 state를
@@ -350,3 +351,23 @@ export const useSentenceReview = create<{
   start: (queue, extra = false) => set({ session: { queue, total: queue.length, extra } }),
   setQueue: (queue) => set((s) => (s.session ? { session: { ...s.session, queue } } : s)),
 }));
+
+/**
+ * 화면 모드(밝게/어둡게/시스템). 적용은 App.tsx가 theme.ts로 한다. persist 키 `appearance`는
+ * index.html의 인라인 스크립트도 읽는다(첫 페인트 전에 — theme.ts 주석 참고).
+ *
+ * **백업에는 담지 않는다** — 폰은 어둡게, 컴퓨터는 밝게 쓰는 식으로 기기마다 다르다(`ai-engine`과
+ * 같은 판단).
+ */
+export const useAppearance = create<{
+  theme: ThemePreference;
+  setTheme: (theme: ThemePreference) => void;
+}>()(
+  persist(
+    (set) => ({
+      theme: "system",
+      setTheme: (theme) => set({ theme }),
+    }),
+    { name: THEME_STORAGE_KEY }
+  )
+);
