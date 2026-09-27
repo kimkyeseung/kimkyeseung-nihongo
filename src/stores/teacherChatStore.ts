@@ -34,6 +34,13 @@ interface TeacherChatState {
    */
   pendingQuestion: string | null;
   isAnswering: boolean;
+  /**
+   * 지금 답변을 받고 있는 대화의 날짜(`ask` 때의 오늘). 답변 청크는 **보고 있는 날짜가 아니라
+   * 여기에** 붙인다 — 답변은 페이지 밖(TeacherSessionController)에서 계속 받으므로, 받는 동안
+   * 사이드바에서 지난 날짜를 열면 `activeDate`가 바뀐다. 그 날짜에 붙이려 하면 답변이 통째로
+   * 사라진다.
+   */
+  answeringDate: string | null;
 
   load: () => Promise<void>;
   openDate: (date: string) => Promise<void>;
@@ -66,8 +73,8 @@ const NO_MESSAGES: TeacherMessage[] = [];
  * **스트리밍 중에는 저장하지 않는다.** 답변은 청크마다 바뀌므로 그때마다 쓰면 한 번의 답변에
  * 수백 번 저장한다. 화면은 store가, 저장은 `finishAnswer`가 한 번만 한다.
  *
- * 스트리밍 자체는 회화와 달리 페이지 안에서 돌린다. 답변 도중에 다른 탭으로 나가면 LLM 세션이
- * destroy되어 생성이 끊기고, 그때까지 받은 답변만 남는다(작문 첨삭과 같은 절충).
+ * 스트리밍은 페이지가 아니라 Layout에 상주하는 `TeacherSessionController`가 돌린다 — 답변을
+ * 기다리다 다른 탭에 가도 끊기지 않는다(회화의 ConversationSessionController와 같은 방식).
  */
 export const useTeacherChatStore = create<TeacherChatState>((set, get) => ({
   dates: [],
@@ -77,6 +84,7 @@ export const useTeacherChatStore = create<TeacherChatState>((set, get) => ({
   input: "",
   pendingQuestion: null,
   isAnswering: false,
+  answeringDate: null,
 
   /**
    * 지난 대화를 IndexedDB에서 읽어온다. 앱을 켤 때 한 번.
@@ -166,6 +174,7 @@ export const useTeacherChatStore = create<TeacherChatState>((set, get) => ({
       },
       input: "",
       isAnswering: true,
+      answeringDate: today,
     }));
 
     // 질문은 바로 남긴다 — 답변을 받다 브라우저가 죽어도 물어본 사실은 남는 편이 낫다.
@@ -175,7 +184,7 @@ export const useTeacherChatStore = create<TeacherChatState>((set, get) => ({
 
   appendAnswer: (assistantId, text) =>
     set((s) => {
-      const date = s.activeDate;
+      const date = s.answeringDate ?? s.activeDate;
       const messages = s.messagesByDate[date];
       if (!messages) return s;
       return {
@@ -187,9 +196,10 @@ export const useTeacherChatStore = create<TeacherChatState>((set, get) => ({
     }),
 
   finishAnswer: (assistantId, options) => {
-    const { activeDate, messagesByDate } = get();
-    const message = messagesByDate[activeDate]?.find((m) => m.id === assistantId);
-    set({ isAnswering: false });
+    const { activeDate, answeringDate, messagesByDate } = get();
+    const date = answeringDate ?? activeDate;
+    const message = messagesByDate[date]?.find((m) => m.id === assistantId);
+    set({ isAnswering: false, answeringDate: null });
     /**
      * **실패 안내문은 기록에 남기지 않는다.** "(답변을 만드는 중 오류가 발생했습니다)"는
      * 그때 그 순간의 상황이지 선생님이 한 말이 아니다. 남겨두면 다음에 그 날짜를 열었을 때
@@ -202,7 +212,7 @@ export const useTeacherChatStore = create<TeacherChatState>((set, get) => ({
     if (!message || !message.text) return;
     void saveMessage({
       id: assistantId,
-      date: activeDate,
+      date,
       role: "assistant",
       text: message.text,
       at: Date.now(),
@@ -220,6 +230,7 @@ export const useTeacherChatStore = create<TeacherChatState>((set, get) => ({
       activeDate: today,
       input: "",
       isAnswering: false,
+      answeringDate: null,
       pendingQuestion: null,
     }));
   },

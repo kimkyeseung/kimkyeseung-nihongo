@@ -118,7 +118,8 @@ src/App.tsx        RouterProvider + 대문(`/`)까지 덮어야 하는 상주물
 src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 GamificationBar 포함) +
                      Layout에 상주하는 것들: BadgeWatcher(뱃지 신규 획득 감지) · Confetti ·
                        ConversationSessionController(회화 세션 — 페이지 밖에 둬야 탭 이동에도
-                       스트리밍이 안 끊긴다) · PromptApiOnboardingDialog(첫 접속 1회 안내 모달)
+                       스트리밍이 안 끊긴다) · TeacherSessionController(선생님 수업 세션 — 같은 이유) ·
+                       PromptApiOnboardingDialog(첫 접속 1회 안내 모달)
                      학습 UI: KanjiStrokeOrder, KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
                        ClickableSentence(후리가나·단어 탭 — 일본어 문장은 전부 이걸로 그린다),
                        WritingDiff, BadgeSheet, GamificationBar,
@@ -211,6 +212,7 @@ src/stores/        Zustand 스토어:
                        모듈 함수 recordStudyEvent) · curriculumStore(시작 단계·수동 완료 유닛, persist) ·
                      conversationSessionStore(회화 세션) · pageStateStore(페이지 화면 상태) ·
                      teacherChatStore(선생님 대화 — 날짜별, IndexedDB 저장) ·
+                     teacherSessionStore(선생님 세션 상태 + 질문 큐, 메모리 전용) ·
                      gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, kana-homophones.json, gojuon.ts) — 완료
@@ -776,7 +778,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   반영하면 시스템 프롬프트 문자열이 바뀌어 `useAiModel`이 세션을 새로 만들기 때문에, **대화
   도중에 한자 퀴즈 하나만 풀어도 선생님 세션이 통째로 날아간다.** 갱신은 명시적인 지점에서만
   한다 — 앱을 켤 때(Layout), 기억을 직접 수락·추가·삭제했을 때, 대화를 지웠을 때.
-  `recordStudyEvent`는 프로필만 다시 계산하고 스냅샷은 건드리지 않는다.
+  `recordStudyEvent`는 프로필만 다시 계산하고 스냅샷은 건드리지 않는다. 선생님 세션은 이제
+  페이지 밖에 상주하므로, 스냅샷이 바뀌어도 **답변 중이면 끝날 때까지 반영을 미룬다**
+  (TeacherSessionController의 `committedMemory`).
 - `recordStudyEvent`는 **훅이 아니라 모듈 함수**다 — 퀴즈 시트·단어 다이얼로그·작문 페이지처럼
   여기저기서 한 줄로 부르는 자리라 훅이면 부르는 쪽마다 배선이 붙는다(`gemmaDownloadController`와
   같은 판단). 실패해도 조용히 넘어간다.
@@ -916,9 +920,26 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   고른 동안에만** wanakana가 붙는다("입력 문자 전환 토글" 절 참고). 회화의 이름칸도 같다.
 - **대화는 일기처럼 날짜별로 쌓인다** — 세션 개념을 따로 두지 않고 하루가 곧 대화 한 묶음이며,
   지난 날짜는 읽기 전용이다. 저장은 IndexedDB(`learnerMemoryDb.ts`의 `messages` 스토어).
-  자세한 내용은 "선생님 대화 기록" 절 참고. **답변 스트리밍 중에 나가면 세션이 destroy되어
-  생성은 끊긴다**(작문 첨삭과 같은 절충). 백그라운드에서도 계속 받으려면 회화의
-  `ConversationSessionController`처럼 Layout 상주 컨트롤러가 필요하다.
+  자세한 내용은 "선생님 대화 기록" 절 참고.
+- **답변은 페이지 밖에서 받는다 — 다른 탭에 가도 끊기지 않는다.** 예전엔 TeacherPage 안에서
+  스트리밍해서, 긴 설명을 기다리다 다른 탭을 보면 페이지가 언마운트되며 세션이 destroy되고
+  답변이 반 토막으로 남았다. 지금은 Layout에 상주하는 `TeacherSessionController`가 모델·
+  스트리밍·유출 가드·기억 추출·XP를 들고 있고(회화의 `ConversationSessionController`와 같은
+  방식), 페이지는 `teacherSessionStore`로 상태를 읽고 질문을 넣기만 한다. 덤으로 모델 쪽
+  대화 맥락도 탭 이동에 살아남는다.
+  - **질문은 함수 호출이 아니라 큐(`submit`/`take`)로 넘긴다.** 페이지가 기억 스냅샷을 새로
+    만든 직후에 물으면, 컨트롤러가 새 시스템 프롬프트로 다시 렌더되기 전의 옛 함수가 불릴 수
+    있다. 큐는 컨트롤러가 자기 최신 렌더의 effect에서 꺼내므로 항상 최신 세션이 받는다.
+  - **답변 중에는 기억 스냅샷을 반영하지 않는다**(`committedMemory`, 렌더 중 파생 state).
+    시스템 프롬프트가 바뀌면 useAiModel이 세션을 destroy하는데, 답변 도중 /memory에서 기억을
+    수락하거나 TeacherPage에 다시 들어와 스냅샷이 갱신되면 **받던 답변이 한가운데서 끊긴다.**
+    끝난 뒤에 반영한다.
+  - **답변 청크는 `answeringDate`에 붙인다**(보고 있는 날짜가 아니라). 받는 동안 사이드바에서
+    지난 날짜를 열면 `activeDate`가 바뀌어, 예전 코드로는 답변이 통째로 사라졌다.
+  - "대신 물어보기"(`consumePendingQuestion`)는 **답변 중이면 꺼내지 않는다** — 꺼낸 뒤
+    답변 중이라 무시되면 질문이 사라진다. 끝나면 effect가 다시 돌며 꺼낸다.
+  - 헤드리스 브라우저에서 "묻고 → 단어장으로 이동 → 돌아옴"(답변 도중·끝난 뒤 둘 다)을 가짜
+    모델로 확인했다: 답변이 끝까지 받아지고 IndexedDB에 저장된다.
 - **다른 화면에서 대신 질문 보내기**: `AskTeacherButton`이 `teacherChatStore.requestQuestion()`에
   질문을 넣고 `/teacher`로 이동하면, TeacherPage가 마운트되면서 `consumePendingQuestion()`으로
   꺼내 바로 물어본다. **꺼내는 즉시 store를 비우는 게 중요하다** — StrictMode에서 effect가 두 번
@@ -1010,8 +1031,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - **한계**: 모델이 **정답 자체를 틀리게** 내는 경우는 코드로 막을 수 없다(모범 답이 틀리면 코드 채점도
   틀린다). **실제 모델로 네 유형을 다 확인하지는 못했다** — 특히 작은 모델이 한 번에 네 형식을 섞어
   지키는지, 배열 조각의 다른 올바른 어순(일본어는 어순이 비교적 자유롭다)을 재확인이 잘 인정하는지.
-  남은 추천 유형: 활용형 바꾸기(`verbConjugation.ts`에 て형밖에 없어 변환 함수부터), 한→일 작문·
-  일→한 해석(사실상 전부 AI 판정이라 점수 밖 "선생님 의견"으로만 둘 것).
+  남은 추천 유형: 한→일 작문·
+  일→한 해석(사실상 전부 AI 판정이라 점수 밖 "선생님 의견"으로만 둘 것). 활용형 바꾸기는 AI가
+  필요 없어서 연습해보기가 아니라 단어장의 "동사 활용 연습"으로 따로 만들었다.
 
 ## 작문 첨삭 페이지 구현 노트
 - `useLanguageModel`을 그대로 재사용(회화 페이지와 동일 패턴). 모델에게 항상 고정된

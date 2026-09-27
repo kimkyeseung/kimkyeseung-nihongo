@@ -7,6 +7,7 @@ import GamificationBar from "./GamificationBar";
 import Confetti from "./Confetti";
 import BadgeWatcher from "./BadgeWatcher";
 import ConversationSessionController from "./ConversationSessionController";
+import TeacherSessionController from "./TeacherSessionController";
 import GemmaDownloadBar from "./GemmaDownloadBar";
 import LoadingMascot from "./LoadingMascot";
 import PromptApiOnboardingDialog from "./PromptApiOnboardingDialog";
@@ -213,6 +214,8 @@ function Layout() {
       <BadgeWatcher />
       <PromptApiOnboardingDialog />
       <ConversationSessionController />
+      {/* 선생님 답변도 탭을 옮겨도 끊기지 않게 페이지 밖에 둔다(회화와 같은 이유). */}
+      <TeacherSessionController />
     </div>
   );
 }
