@@ -1,4 +1,4 @@
-import { animate, motion, useMotionValue, useTransform } from "framer-motion";
+import { motion, useMotionValue, useTransform } from "framer-motion";
 import type { WordEntry } from "../types/dictionary";
 import { displayMeaning } from "../lib/dictionary";
 
@@ -53,17 +53,11 @@ function WordbookCard({
         if (isTop && !revealed) onReveal();
       }}
       onDragEnd={(_, info) => {
-        if (info.offset.x > SWIPE_THRESHOLD) {
-          onSwipe("right");
-        } else if (info.offset.x < -SWIPE_THRESHOLD) {
-          // "모르는 단어"는 부정적이지 않게 살짝 흔들어준 다음 카드를 치운다.
-          const start = x.get();
-          animate(x, [start, start - 10, start + 10, start - 6, start], {
-            duration: 0.35,
-            ease: "easeInOut",
-            onComplete: () => onSwipe("left"),
-          });
-        }
+        // 왼쪽도 오른쪽과 똑같이 놓는 즉시 날려 보낸다. 예전엔 "모르겠어요"를 부드럽게 한다고
+        // 그 자리에서 0.35초 흔든 뒤에 치웠는데, 드래그가 끝나며 가운데로 돌아가려는 스프링과
+        // 흔들림이 같은 x를 두고 싸워서 카드가 공중에서 멈칫·덜컥거렸다(왼쪽만 부자연스러웠다).
+        if (info.offset.x > SWIPE_THRESHOLD) onSwipe("right");
+        else if (info.offset.x < -SWIPE_THRESHOLD) onSwipe("left");
       }}
       animate={isTop ? { scale: 1, y: 0 } : { scale: 0.96, y: 10 }}
       variants={exitVariants}
