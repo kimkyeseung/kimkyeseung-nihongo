@@ -17,6 +17,7 @@
 
 import { toHiragana } from "wanakana";
 import { REFUSE_PROMPT_DISCLOSURE, wrapStudentText } from "./promptSafety";
+import { XP_REWARDS } from "./xpRewards";
 
 export type PracticeKind = "blank" | "choice" | "order" | "fix";
 
@@ -94,16 +95,12 @@ export function isPracticeWorthy(answer: string): boolean {
 // ---------------------------------------------------------------------------
 // 문제 만들기
 
-export const PRACTICE_SYSTEM_PROMPT = [
-  "당신은 한국인 학습자를 가르치는 일본어 선생님입니다.",
-  "방금 학습자에게 해준 설명을 보고, 그 내용을 제대로 이해했는지 확인하는 연습 문제를 내세요.",
-  "",
-  "규칙:",
-  `- 문제는 ${MIN_PRACTICE_PROBLEMS + 1}~${MAX_PRACTICE_PROBLEMS}개입니다. 아래 네 유형을 섞어서 내세요.`,
-  "- **설명에서 다룬 내용만** 물어보세요. 설명에 없는 문법이나 어려운 단어를 끌어오지 마세요.",
-  "- 설명에 나온 예문을 그대로 쓰지 말고, 같은 문형으로 새 문장을 만드세요.",
-  "- 문제와 해설은 한국어로 쓰고, 일본어는 백틱 하나로 감싸세요. 후리가나(읽는 법)는 쓰지 마세요.",
-  "- 정답은 반드시 하나로 정해져야 합니다. 확실하지 않은 문제는 내지 마세요.",
+/**
+ * 문제 유형 설명·출력 형식·예시. "연습해보기"와 `/test`(levelTest.ts)가 같이 쓴다 — 파서가
+ * 하나라서 형식도 하나여야 한다. **반드시 `\n유형:`으로 시작할 것**: 유출 검사 기준
+ * (`*_LEAK_REFERENCE`)이 그 자리에서 잘라 형식·예시를 뺀다.
+ */
+export const PRACTICE_FORMAT = [
   "",
   "유형:",
   "- 빈칸: 한국어 뜻과 빈칸 ＿＿ 이 하나 있는 일본어 문장. 정답은 빈칸에 들어갈 짧은 말. 여럿이면 / 로 나눠 모두.",
@@ -139,6 +136,24 @@ export const PRACTICE_SYSTEM_PROMPT = [
   "질문: 「물만 마셨습니다」 `水をだけ飲みました。`",
   "정답: 水だけ飲みました。",
   "해설: `を`와 `だけ`를 함께 쓸 때는 `を`를 빼거나 `だけを`로 씁니다.",
+].join("\n");
+
+/** 문제를 쓰는 공통 규칙 — 연습해보기·`/test`가 같이 쓴다. */
+export const PRACTICE_WRITING_RULES = [
+  "- 문제와 해설은 한국어로 쓰고, 일본어는 백틱 하나로 감싸세요. 후리가나(읽는 법)는 쓰지 마세요.",
+  "- 정답은 반드시 하나로 정해져야 합니다. 확실하지 않은 문제는 내지 마세요.",
+].join("\n");
+
+export const PRACTICE_SYSTEM_PROMPT = [
+  "당신은 한국인 학습자를 가르치는 일본어 선생님입니다.",
+  "방금 학습자에게 해준 설명을 보고, 그 내용을 제대로 이해했는지 확인하는 연습 문제를 내세요.",
+  "",
+  "규칙:",
+  `- 문제는 ${MIN_PRACTICE_PROBLEMS + 1}~${MAX_PRACTICE_PROBLEMS}개입니다. 아래 네 유형을 섞어서 내세요.`,
+  "- **설명에서 다룬 내용만** 물어보세요. 설명에 없는 문법이나 어려운 단어를 끌어오지 마세요.",
+  "- 설명에 나온 예문을 그대로 쓰지 말고, 같은 문형으로 새 문장을 만드세요.",
+  PRACTICE_WRITING_RULES,
+  PRACTICE_FORMAT,
   REFUSE_PROMPT_DISCLOSURE,
 ].join("\n");
 
@@ -167,6 +182,35 @@ export const PRACTICE_LEAK_REFERENCE = [
   PRACTICE_SYSTEM_PROMPT.split("\n유형:")[0],
   REFUSE_PROMPT_DISCLOSURE,
 ].join("\n");
+
+/**
+ * 문제 풀기 시트(`TeacherPracticeSheet`)에 넘기는 것. 출제 지시문과 프롬프트만 다르고 푸는 화면·
+ * 채점·피드백은 같다 — 선생님 답변의 "연습해보기"(아래)와 `/test`(levelTest.ts) 둘이 쓴다.
+ */
+export interface PracticeTarget {
+  /** 만든 문제를 이 id로 기억해 둔다(닫았다 열어도 다시 만들지 않게) — XP도 이 id로 한 번. */
+  id: string;
+  title: string;
+  systemPrompt: string;
+  /** 유출 검사 기준 — 형식·예시를 뺀 지시문이어야 한다(PRACTICE_LEAK_REFERENCE 주석). */
+  leakReference: string;
+  prompt: string;
+  maxProblems: number;
+  xp: number;
+}
+
+/** 선생님 답변 하나로 "연습해보기" 문제를 낼 때. id는 답변 메시지 id다. */
+export function answerPracticeTarget(messageId: string, question: string, answer: string): PracticeTarget {
+  return {
+    id: messageId,
+    title: "✏️ 연습해보기",
+    systemPrompt: PRACTICE_SYSTEM_PROMPT,
+    leakReference: PRACTICE_LEAK_REFERENCE,
+    prompt: buildPracticePrompt(question, answer),
+    maxProblems: MAX_PRACTICE_PROBLEMS,
+    xp: XP_REWARDS.teacherPracticeCompleted,
+  };
+}
 
 // 모델은 형식을 정확히 지키지 않는다(실제로 "문제를 만들지 못했어요"만 떴다). 받아줄 수 있는 변형은
 // 받아주되, **정답이 무엇인지 확실하지 않은 문제는 여전히 버린다** — 그게 이 파서의 원칙이다.

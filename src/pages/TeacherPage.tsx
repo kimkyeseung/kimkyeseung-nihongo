@@ -28,8 +28,11 @@ import {
 } from "../stores/teacherChatStore";
 import { formatDayLabel, localDateKey } from "../lib/localDate";
 import TeacherHistorySidebar from "../components/TeacherHistorySidebar";
-import TeacherPracticeSheet, { type PracticeTarget } from "../components/TeacherPracticeSheet";
-import { isPracticeWorthy } from "../lib/teacherPractice";
+import TeacherPracticeSheet from "../components/TeacherPracticeSheet";
+import TeacherCommandList from "../components/TeacherCommandList";
+import TodayPlanCard from "../components/TodayPlanCard";
+import { answerPracticeTarget, isPracticeWorthy, type PracticeTarget } from "../lib/teacherPractice";
+import { useTeacherCommands } from "../hooks/useTeacherCommands";
 
 /** 이보다 긴 답변에는 "답변 처음으로" 버튼을 단다 — 375px에서 대략 한 화면을 넘는 길이. */
 const LONG_ANSWER_LENGTH = 350;
@@ -90,6 +93,18 @@ function TeacherPage() {
   const consumePendingQuestion = useTeacherChatStore((s) => s.consumePendingQuestion);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [practiceTarget, setPracticeTarget] = useState<PracticeTarget | null>(null);
+  // 진도는 인사말·`/test`가 같이 쓴다. 동적 import라 첫 렌더에는 null이다.
+  const curriculum = useCurriculumPlan();
+  const startLevel = useCurriculumStore((s) => s.startLevel);
+  // `/` 명령어. 명령어로 읽힌 입력은 선생님에게 보내지 않는다(useTeacherCommands 주석).
+  const command = useTeacherCommands({
+    input,
+    setInput,
+    enabled: viewingToday,
+    curriculum,
+    onStartTest: setPracticeTarget,
+  });
+  const clearForQuestion = command.clearForQuestion;
 
   // 지난 대화를 IndexedDB에서 읽어온다. 한 번만 부르면 되고, 실패해도 조용히 넘어간다.
   useEffect(() => {
@@ -108,7 +123,9 @@ function TeacherPage() {
       setInput(next);
       questionInput.focus();
     },
-    { enabled: script === "ja" }
+    // 명령어를 치는 중에는 사전을 찾지 않는다 — 일본어 모드의 `・てst`로 사전을 뒤지면 엉뚱한
+    // 단어 목록이 명령어 목록 대신 뜬다.
+    { enabled: script === "ja" && !command.typing }
   );
 
   // 답변이 자라는 동안 목록을 바닥에 붙여 둔다(위로 올려 읽는 중이면 따라가지 않는다).
@@ -124,8 +141,6 @@ function TeacherPage() {
    */
   const streak = useGamificationStore((s) => s.streak);
   const claimGreeting = useTeacherGreeting((s) => s.claimGreeting);
-  const curriculum = useCurriculumPlan();
-  const startLevel = useCurriculumStore((s) => s.startLevel);
   const [greeting, setGreeting] = useState<string | null>(null);
   const greetingClaimedRef = useRef(false);
 
@@ -197,10 +212,13 @@ function TeacherPage() {
     (question: string) => {
       const text = question.trim();
       if (!text || isAnswering) return;
+      // "대신 물어보기" effect에서도 불려 oxlint가 set-state-in-effect로 경고하지만, `/today` 카드의
+      // 문법 항목이 그 경로로 오므로 거기서도 카드가 닫혀야 맞다.
+      clearForQuestion();
       // 실제로 묻는 건 컨트롤러다(XP·학습 기록·유출 가드·기억 추출도 거기서 한다).
       submitQuestion(text);
     },
-    [isAnswering, submitQuestion]
+    [isAnswering, submitQuestion, clearForQuestion]
   );
 
   /**
@@ -229,13 +247,20 @@ function TeacherPage() {
     if (question) handleAsk(question);
   }, [memoryFresh, historyLoaded, isAnswering, pendingQuestion, consumePendingQuestion, handleAsk]);
 
+  /** Enter·보내기 버튼. 명령어(없는 명령어 포함)면 거기서 끝나고, 아니면 선생님에게 묻는다. */
+  function handleSubmit() {
+    if (!command.submit()) handleAsk(input);
+  }
+
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    // 명령어 목록이 떠 있으면 화살표·Enter를 그쪽이 먼저 쓴다.
+    if (command.handleKeyDown(e)) return;
     // 자동완성 목록이 떠 있으면 화살표·Enter를 그쪽이 먼저 쓴다(회화 페이지와 같은 순서).
     if (suggestions.handleSuggestionKeyDown(e)) return;
     // 폼의 암묵적 제출 대신 onKeyDown으로 직접 처리한다(프로젝트 표준, CLAUDE.md 참고).
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      handleAsk(input);
+      handleSubmit();
     }
   }
 
@@ -377,6 +402,9 @@ function TeacherPage() {
                   </button>
                 ))}
               </div>
+              <p className="text-center text-xs text-gray-400">
+                <code className="rounded bg-gray-100 px-1">/</code>를 치면 테스트·복습 같은 명령어를 쓸 수 있어요.
+              </p>
             </div>
           )}
 
@@ -431,11 +459,7 @@ function TeacherPage() {
                             {canPractice && (
                               <button
                                 onClick={() =>
-                                  setPracticeTarget({
-                                    messageId: m.id,
-                                    question: messages[i - 1].text,
-                                    answer: m.text,
-                                  })
+                                  setPracticeTarget(answerPracticeTarget(m.id, messages[i - 1].text, m.text))
                                 }
                                 className="btn-press rounded-2xl border-2 border-primary/20 bg-white px-4 py-2 text-sm font-bold text-primary"
                                 style={{ ["--btn-shadow" as string]: "var(--color-gray-200)" }}
@@ -454,6 +478,18 @@ function TeacherPage() {
               );
             })}
           </div>
+
+          {/* `/today`. 대화 끝에 붙이되 기록에는 남기지 않는다 — 다음 질문을 하면 사라진다. */}
+          {command.showToday && viewingToday && (
+            <div className="mt-3 max-w-3xl rounded-2xl border-2 border-gray-100">
+              <TodayPlanCard />
+              <div className="flex justify-end px-4 pb-3">
+                <button onClick={command.closeToday} className="text-xs text-gray-400">
+                  닫기
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 답변을 받는 동안에는 입력 영역을 통째로 감춘다 — 어차피 보낼 수 없는 상태이고,
@@ -465,6 +501,11 @@ function TeacherPage() {
             {/* 방금 대화에서 건진 "기억해둘까요?" 확인. 입력창 바로 위라 자연스럽게 눈에 들어오고,
                 답변 중에는 입력 영역과 함께 사라진다. */}
             <MemoryFactPrompt />
+            {command.notice && (
+              <p role="status" className="mb-2 rounded-2xl bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                {command.notice}
+              </p>
+            )}
             <div className="flex justify-end pb-2">
               <InputModeToggle value={script} onChange={setScript} />
             </div>
@@ -475,16 +516,30 @@ function TeacherPage() {
                     store에 올린다(변환이 바꾼 값을 React 합성 onChange가 놓치기 때문). */}
                 <input
                   ref={questionInput.ref}
-                  onFocus={() => suggestions.setShowSuggestions(true)}
+                  onFocus={() => {
+                    command.setFocused(true);
+                    suggestions.setShowSuggestions(true);
+                  }}
                   // 목록의 버튼을 누르는 순간 blur가 먼저 와서 목록이 사라지면 클릭이 죽는다.
                   // (목록 쪽에서도 onMouseDown을 막지만, 여기서 한 박자 늦추는 게 회화 페이지와
                   //  같은 방식이다.)
-                  onBlur={() => setTimeout(() => suggestions.setShowSuggestions(false), 150)}
+                  onBlur={() =>
+                    setTimeout(() => {
+                      command.setFocused(false);
+                      suggestions.setShowSuggestions(false);
+                    }, 150)
+                  }
                   onKeyDown={handleKeyDown}
                   placeholder={QUESTION_PLACEHOLDER[script]}
                   className="w-full rounded-2xl border-2 border-gray-100 px-4 py-2 font-mixed focus:border-primary/40 focus:outline-none"
                 />
-                {suggestions.showSuggestions && (
+                {command.open ? (
+                  <TeacherCommandList
+                    commands={command.commands}
+                    activeIndex={command.activeIndex}
+                    onSelect={command.run}
+                  />
+                ) : suggestions.showSuggestions && (
                   // 이 입력창은 화면 맨 아래에 붙어 있어서 목록을 위로 띄운다.
                   <JapaneseSuggestionList
                     placement="above"
@@ -495,7 +550,7 @@ function TeacherPage() {
                 )}
               </div>
               <button
-                onClick={() => handleAsk(input)}
+                onClick={handleSubmit}
                 disabled={!input.trim()}
                 aria-label="질문 보내기"
                 title="질문 보내기"

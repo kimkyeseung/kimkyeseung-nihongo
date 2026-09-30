@@ -8,16 +8,12 @@ import { useAiModel } from "../hooks/useAiModel";
 import type { InputScript } from "../hooks/useScriptInput";
 import { looksLikePromptLeak } from "../lib/promptSafety";
 import {
-  MAX_PRACTICE_PROBLEMS,
   MIN_PRACTICE_PROBLEMS,
   PRACTICE_FEEDBACK_SYSTEM_PROMPT,
   PRACTICE_JUDGE_LEAK_REFERENCE,
   PRACTICE_JUDGE_SYSTEM_PROMPT,
-  PRACTICE_LEAK_REFERENCE,
-  PRACTICE_SYSTEM_PROMPT,
   buildJudgePrompt,
   buildPracticeFeedbackPrompt,
-  buildPracticePrompt,
   canAskJudge,
   countVerdicts,
   isCorrectAnswer,
@@ -26,23 +22,16 @@ import {
   parsePracticeProblems,
   prepareProblem,
   type PracticeProblem,
+  type PracticeTarget,
   type PracticeVerdict,
 } from "../lib/teacherPractice";
-import { XP_REWARDS } from "../lib/xpRewards";
 import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useTeacherPractice } from "../stores/pageStateStore";
 
-export interface PracticeTarget {
-  /** 선생님 답변 메시지 id — 만든 문제를 이 id로 기억해 둔다. */
-  messageId: string;
-  question: string;
-  answer: string;
-}
-
 /**
- * 선생님 답변 끝의 "연습해보기" 시트. 방금 설명한 내용으로 3~4문제(빈칸·객관식·배열·고치기)를
- * 내고, 다 풀면 선생님이 짧게 피드백한다(teacherPractice.ts 참고).
+ * 문제 풀기 시트. 선생님 답변 끝의 "연습해보기"와 `/test`가 쓴다. 3~5문제(빈칸·객관식·배열·
+ * 고치기)를 내고, 다 풀면 선생님이 짧게 피드백한다(teacherPractice.ts 참고).
  *
  * 채점은 코드가 먼저 한다(isCorrectAnswer). 코드가 틀렸다고 본 일본어 답만 AI에게 한 번 더
  * 묻고(canAskJudge), 인정되면 ⭕가 아니라 △로 보여준다.
@@ -56,7 +45,7 @@ function TeacherPracticeSheet({ target, onClose }: { target: PracticeTarget | nu
   // 페이지 안의 `fixed`가 뷰포트가 아니라 그 조상 기준이 될 수 있다.
   return createPortal(
     <AnimatePresence>
-      {target && <PracticeContent key={target.messageId} target={target} onClose={onClose} />}
+      {target && <PracticeContent key={target.id} target={target} onClose={onClose} />}
     </AnimatePresence>,
     document.body
   );
@@ -92,7 +81,7 @@ const JUDGE_TIMEOUT_MS = 20_000;
 /** 모델이 피드백을 못 줬을 때 대신 보여주는 한 줄. 채점 결과만으로 만든다. */
 function fallbackFeedback(verdicts: PracticeVerdict[]): string {
   const { wrong } = countVerdicts(verdicts);
-  if (wrong === 0) return "전부 맞혔어요! 설명한 내용을 잘 이해했네요. 🎉";
+  if (wrong === 0) return "전부 맞혔어요! 잘 이해하고 있네요. 🎉";
   if (wrong === verdicts.length) return "이번엔 어려웠네요. 설명을 한 번 더 읽고 다시 풀어봐요.";
   return "잘했어요! 틀린 문제의 해설을 한 번 더 보고 다시 풀어봐요.";
 }
@@ -103,12 +92,13 @@ function startSolving(problems: PracticeProblem[]): Phase {
 }
 
 function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose: () => void }) {
-  const generator = useAiModel(PRACTICE_SYSTEM_PROMPT);
+  // 지시문은 마운트 동안 바뀌지 않는다(target이 바뀌면 key로 새로 마운트된다).
+  const generator = useAiModel(target.systemPrompt);
   const reviewer = useAiModel(PRACTICE_FEEDBACK_SYSTEM_PROMPT);
   // "이 답도 맞는 표현인가?" 재확인 전용 세션. 출제·피드백 세션과 섞으면 앞 문제의 판정이
   // 다음 판정에 끌려간다 — 판정마다 세션도 버린다.
   const judge = useAiModel(PRACTICE_JUDGE_SYSTEM_PROMPT);
-  const cached = useTeacherPractice((s) => s.byMessageId[target.messageId]);
+  const cached = useTeacherPractice((s) => s.byMessageId[target.id]);
   const saveProblems = useTeacherPractice((s) => s.save);
   const claimXp = useTeacherPractice((s) => s.claimXp);
   const recordProgress = useGamificationStore((s) => s.recordProgress);
@@ -169,7 +159,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
       const collected: PracticeProblem[] = [];
       try {
         for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
-          const raw = await model.prompt(buildPracticePrompt(target.question, target.answer));
+          const raw = await model.prompt(target.prompt);
           // 한 번 만든 세션을 계속 쓰면 재시도·"다른 문제 받기"에 앞서 낸 문제를 모델이 기억해
           // 같은 걸 또 낸다 — 받을 때마다 새 세션으로 시작한다. 유출이 있었다면 오염된 턴을
           // 버리는 의미도 있다.
@@ -178,23 +168,23 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
 
           // 출력 가드는 LLM을 부르는 모든 경로에 건다(promptSafety.ts). 기준은 형식·예시를 뺀
           // 지시문이다 — 형식을 따라 쓴 정상 문제가 걸리면 안 된다(teacherPractice.ts 참고).
-          const leaked = looksLikePromptLeak(raw, PRACTICE_LEAK_REFERENCE);
+          const leaked = looksLikePromptLeak(raw, target.leakReference);
           const parsed = leaked ? [] : parsePracticeProblems(raw);
           for (const p of parsed) {
-            if (collected.length < MAX_PRACTICE_PROBLEMS && !collected.some((c) => c.question === p.question)) {
+            if (collected.length < target.maxProblems && !collected.some((c) => c.question === p.question)) {
               collected.push(p);
             }
           }
           const problems = collected;
           if (problems.length >= MIN_PRACTICE_PROBLEMS) {
-            saveProblems(target.messageId, problems);
+            saveProblems(target.id, problems);
             setPhase(startSolving(problems));
             return;
           }
           // 파서가 무엇을 받았는지 모르면 고칠 수가 없다 — 실패한 원문은 콘솔에 남긴다
           // (학습자 질문이 아니라 모델이 쓴 문제라 남겨도 괜찮다).
           console.warn(
-            `[연습해보기] 문제 형식을 읽지 못함 (시도 ${attempt}/${MAX_GENERATION_ATTEMPTS}, ` +
+            `[${target.title}] 문제 형식을 읽지 못함 (시도 ${attempt}/${MAX_GENERATION_ATTEMPTS}, ` +
               `이번에 읽은 문제 ${parsed.length}개, 모은 문제 ${problems.length}개` +
               `${leaked ? ", 유출 검사에 걸림" : ""})\n${raw}`
           );
@@ -316,11 +306,11 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
     setPhase({ kind: "done", problems: phase.problems, answers, verdicts });
     // 완주라는 명확한 학습 행동에만, 이 문제 묶음에서 처음 한 번만 준다(게이미피케이션 규칙).
     // 다시 풀기로는 안 쌓이고, 새 문제를 받으면(모델을 실제로 다시 돌려야 한다) 다시 받는다.
-    if (claimXp(target.messageId)) recordProgress(XP_REWARDS.teacherPracticeCompleted);
+    if (claimXp(target.id)) recordProgress(target.xp);
     void requestFeedback(phase.problems, answers, verdicts);
     // requestFeedback·resetQuestion은 렌더마다 새로 만들어지지만 ref와 setter만 쓴다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, submitted, verdict, claimXp, recordProgress, target.messageId]);
+  }, [phase, submitted, verdict, claimXp, recordProgress, target.id, target.xp]);
 
   return (
     <motion.div
@@ -333,7 +323,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
       <motion.div
         role="dialog"
         aria-modal="true"
-        aria-label="연습해보기"
+        aria-label={target.title}
         // 결과 화면에서는 높이를 미리 잡아둔다. 바텀시트는 아래에 붙어 있어서 내용이 늘면 **위쪽
         // 모서리가 올라간다** — 피드백이 스트리밍되는 동안 청크마다 시트 전체가 들썩였다(실제로 겪었다).
         // 보통의 결과(점수·틀린 문제 한두 개·피드백·버튼)는 이 안에 들어간다.
@@ -349,7 +339,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
-          <h3 className="text-lg font-bold text-primary">✏️ 연습해보기</h3>
+          <h3 className="text-lg font-bold text-primary">{target.title}</h3>
           <button onClick={onClose} className="text-2xl leading-none text-gray-400" aria-label="닫기">
             ×
           </button>
