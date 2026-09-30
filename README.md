@@ -4,7 +4,9 @@
 프론트엔드로 동작하며, 사전 뜻풀이·읽기·JLPT 급수·한자 정보 같은 "정답이 정해진 정보"는
 AI가 만들지 않고 공개 데이터셋을 가공한 정적 JSON에서만 가져온다. 입력한 문장과 학습 기록은
 어디로도 전송되지 않는다 — 예외는 오십음도 발음 게임 하나로, Chrome의 음성 인식이 목소리를
-구글 서버로 보낸다(게임 첫 화면에도 적혀 있다).
+구글 서버로 보낸다(게임 첫 화면에도 적혀 있다). 별개로 사이트에 Google AdSense 광고가 붙어
+있어 광고 쿠키가 쓰이며, 광고에는 입력한 문장이나 학습 기록이 전달되지 않는다. 외부로 가는
+요청 전체는 앱의 `/privacy`(개인정보 처리방침)에 정리해 두었다.
 
 개인 학습용 프로젝트이며 서비스 출시용이 아니다.
 
@@ -100,7 +102,7 @@ WanaKana(로마자→히라가나 변환), react-markdown + remark-gfm(선생님
 | 사전 뜻풀이·읽기·JLPT 급수·후리가나 | [Bluskyo/JMDict_Extended](https://github.com/Bluskyo/JMDict_Extended) (JMDict 기반) | CC BY-SA (EDRDG) |
 | 단어의 한국어 뜻풀이 | [한국어 위키낱말사전](https://kaikki.org/kowiktionary/) (kaikki.org 가공본) | CC BY-SA 3.0 |
 | 한자 음독·훈독·뜻·획수 | [scriptin/jmdict-simplified](https://github.com/scriptin/jmdict-simplified)의 KANJIDIC2 JSON | CC BY-SA (EDRDG) |
-| 한자 JLPT 급수 매칭 | [AnchorI/jlpt-kanji-dictionary](https://github.com/AnchorI/jlpt-kanji-dictionary) | 원 저장소 라이선스 참고 |
+| 한자 JLPT 급수 매칭 | [AnchorI/jlpt-kanji-dictionary](https://github.com/AnchorI/jlpt-kanji-dictionary) | MIT |
 | 한자 획순 벡터 경로 | [KanjiVG](https://github.com/KanjiVG/kanjivg) | CC BY-SA 3.0 |
 
 가공 스크립트와 상세 스키마는 [scripts/data/README.md](scripts/data/README.md)에 있다.

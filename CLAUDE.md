@@ -194,7 +194,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        SpeakButton(문장 옆 단독 발음 버튼) — iconButtonClass.ts의 공용 클래스를 쓴다
 src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·사전·단어상세·단어장·회화·작문)
                      + TeacherPage(선생님 — 자유 질문, 스펙 밖이지만 하단 네비에 포함)
-                     + HomePage(대문 `/`) + AboutPage(정보/출처) + MemoryPage(`/memory` 선생님의
+                     + HomePage(대문 `/`) + AboutPage(정보/출처) + PrivacyPage(`/privacy` 개인정보 처리방침 —
+                       /about에서 링크) + MemoryPage(`/memory` 선생님의
                        기억 — 확인/수정/삭제) + CurriculumPage(`/curriculum` 학습 로드맵) +
                        PromptApiDiagnosticsPage(`/diagnostics` 자가진단)
                        — 뒤 다섯은 하단 네비게이션 밖
@@ -1778,6 +1779,22 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   먼저**다 — 광고 스크립트는 `async`지만 앞에 두면 첫 페인트 전에 모드를 칠하는 쪽이 밀릴 수 있다.
   광고는 학습자가 친 문장이나 기록을 받지 않지만, 개인정보 문구("기기를 벗어나지 않는다")를
   고칠 때는 이 스크립트의 존재를 염두에 둘 것.
+- **외부로 가는 요청은 `/privacy`(`PrivacyPage`)에 전부 적는다** — 애드센스·Vercel Analytics·
+  Google Fonts·음성 인식·Hugging Face/jsDelivr. 외부 스크립트나 fetch 대상을 새로 붙이면 이 페이지,
+  /about 소개문, README 첫 문단을 같이 고치고 시행일을 바꿀 것. `/privacy`는 헤더 아이콘이 아니라
+  /about에서 링크로 간다(헤더 아이콘은 둘이 한계).
+- **`public/ads.txt`는 실제 파일이어야 한다.** catch-all rewrite 때문에 파일이 없으면 `/ads.txt`에
+  index.html(200)이 돌아가고, 애드센스는 그걸 잘못된 ads.txt로 본다. 게시자 ID를 바꾸면 index.html과
+  둘 다 고칠 것.
+- **애드센스 자동 광고는 끈다.** 하단 앵커 광고가 7칸 하단 네비를 덮고, DOM에 끼워 넣는 광고가
+  `h-svh` + `min-h-0` 스크롤 구조를 흔든다. 광고를 넣을 거면 수동 광고 단위로, 회화·선생님 대화·
+  퀴즈·게임·바텀시트 안은 피한다(학습 흐름을 끊고 실수 클릭을 부른다).
+- **광고 칸은 `AdSlot` 하나로 붙인다**(단위 ID는 `lib/ads.ts`의 `AD_SLOTS`, 자리마다 단위 하나).
+  지금 자리는 셋: 대문 푸터 위 · /about 맨 아래 · 사전 검색 결과 5번째 뒤(결과가 없으면 없음).
+  채워지기 전엔 높이를 잡아 두고(목록 한가운데서 늦게 부풀면 누르려던 자리에 광고가 온다),
+  `unfilled`·차단(8초 안에 상태가 안 붙음)·오프라인이면 접는다. 개발 서버는 `data-adtest="on"`.
+  사전 목록의 광고 `<li>`는 **결과와 같은 층의 형제**로 둬야 key가 유지돼 검색할 때마다 광고를
+  다시 요청하지 않는다(사용자 동작 없는 광고 새로고침은 정책 위반이다).
 - `sw.js`·`workbox-*.js`·`manifest.webmanifest`도 실제 파일이라 rewrite에 안 걸린다. 반대로
   **`sw.js`를 rewrite 대상 경로로 옮기거나 이름을 바꾸면** 서비스워커 요청에 index.html이
   돌아가 등록이 조용히 실패한다(스크립트 MIME 오류). 로컬 미리보기에서는 안 보이는 종류다.

@@ -8,7 +8,11 @@ import { useRecentSearchesStore } from "../stores/recentSearchesStore";
 import { useDictionaryView } from "../stores/pageStateStore";
 import { useWordLink } from "../hooks/useWordLink";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
+import AdSlot from "../components/AdSlot";
+import { AD_SLOTS } from "../lib/ads";
 import type { WordEntry } from "../types/dictionary";
+
+const AD_AFTER_RESULT = 5;
 
 function ResultRow({ entry, onClick }: { entry: WordEntry; onClick: () => void }) {
   return (
@@ -127,6 +131,18 @@ function DictionaryPage() {
     }
   }
 
+  const renderResult = (entry: WordEntry) => (
+    <li key={entry.id}>
+      <ResultRow
+        entry={entry}
+        onClick={() => {
+          const { to, state } = wordLink(entry.id);
+          navigate(to, { state });
+        }}
+      />
+    </li>
+  );
+
   return (
     <div className="p-4 sm:p-6">
       <h2 className="text-xl text-primary">📖 사전</h2>
@@ -186,17 +202,15 @@ function DictionaryPage() {
             <p className="text-gray-300">검색 결과가 없습니다.</p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {results.map((entry) => (
-                <li key={entry.id}>
-                  <ResultRow
-                    entry={entry}
-                    onClick={() => {
-                      const { to, state } = wordLink(entry.id);
-                      navigate(to, { state });
-                    }}
-                  />
-                </li>
-              ))}
+              {results.slice(0, AD_AFTER_RESULT).map(renderResult)}
+              {/* 광고는 다섯 번째 결과 뒤(결과가 그보다 적으면 맨 끝)에 하나만. 결과와 같은 층의
+                  형제로 두어야 key가 유지되어 검색어를 바꿔도 광고를 다시 요청하지 않는다
+                  (Fragment로 결과 안에 넣으면 위치가 바뀔 때마다 새로 마운트된다). 결과가 없을 땐
+                  두지 않는다 — 내용 없는 화면의 광고는 애드센스 정책 위반이다. */}
+              <li key="ad">
+                <AdSlot slot={AD_SLOTS.dictionaryList} className="py-2" />
+              </li>
+              {results.slice(AD_AFTER_RESULT).map(renderResult)}
             </ul>
           )}
         </div>

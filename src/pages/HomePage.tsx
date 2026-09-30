@@ -1,5 +1,7 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
+import AdSlot from "../components/AdSlot";
+import { AD_SLOTS } from "../lib/ads";
 import AssetLoadingBar from "../components/AssetLoadingBar";
 import GemmaModelCard from "../components/GemmaModelCard";
 import TodayPlanCard from "../components/TodayPlanCard";
@@ -208,6 +210,10 @@ function HomePage() {
             ))}
           </ul>
         </section>
+
+        {/* 광고는 소개를 다 읽은 뒤, 푸터 바로 위에만 둔다 — CTA·오늘의 학습 근처에 두면
+            "시작하기"를 누르려던 손이 광고를 누른다. */}
+        <AdSlot slot={AD_SLOTS.homeBottom} />
 
         <footer className="pb-2 text-center text-xs text-gray-400">
           <p>

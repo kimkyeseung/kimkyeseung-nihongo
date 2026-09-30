@@ -21,6 +21,7 @@ const TeacherPage = lazy(() => import("./pages/TeacherPage"));
 const MemoryPage = lazy(() => import("./pages/MemoryPage"));
 const CurriculumPage = lazy(() => import("./pages/CurriculumPage"));
 const AboutPage = lazy(() => import("./pages/AboutPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const PromptApiDiagnosticsPage = lazy(() => import("./pages/PromptApiDiagnosticsPage"));
 
 /**
@@ -54,6 +55,8 @@ export const router = createBrowserRouter([
       { path: "memory", element: <MemoryPage /> },
       { path: "curriculum", element: <CurriculumPage /> },
       { path: "about", element: <AboutPage /> },
+      // 헤더 아이콘 자리는 이미 둘이라(ⓘ·🧠) /about 안에서 링크로 간다.
+      { path: "privacy", element: <PrivacyPage /> },
       { path: "diagnostics", element: <PromptApiDiagnosticsPage /> },
     ],
   },

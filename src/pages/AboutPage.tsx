@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import AdSlot from "../components/AdSlot";
+import { AD_SLOTS } from "../lib/ads";
 import BackupCard from "../components/BackupCard";
 import SegmentedTabs from "../components/SegmentedTabs";
 import { useAppearance } from "../stores/pageStateStore";
@@ -25,7 +27,7 @@ const SOURCES = [
   {
     name: "AnchorI/jlpt-kanji-dictionary",
     desc: "한자 JLPT 급수 매칭",
-    license: "원 저장소 라이선스 참고",
+    license: "MIT",
     url: "https://github.com/AnchorI/jlpt-kanji-dictionary",
   },
   {
@@ -60,7 +62,12 @@ function AboutPage() {
         서비스 출시용이 아닌 개인 프로젝트입니다. 서버 없이 브라우저에서만 동작하며, 회화 연습과
         작문 첨삭 같은 생성형 기능에는 브라우저 안에서 도는 AI(Chrome 내장 Prompt API 또는 직접
         내려받은 Gemma 4)를 사용합니다. 입력한 문장도 학습 기록도 이 기기를 벗어나지 않습니다(오십음도 발음
-        게임만 예외로, Chrome의 음성 인식이 목소리를 구글 서버로 보냅니다).
+        게임만 예외로, Chrome의 음성 인식이 목소리를 구글 서버로 보냅니다). 다만 이 사이트에는 Google
+        광고가 붙어 있어 광고 쿠키가 쓰입니다 — 자세한 건{" "}
+        <Link to="/privacy" className="text-info hover:underline">
+          개인정보 처리방침
+        </Link>
+        에 있습니다.
         사전 뜻풀이·읽기·JLPT 급수·한자 정보처럼 정답이 정해진 내용은 AI가 만들지 않고, 아래 공개
         데이터셋을 가공한 정적 데이터에서만 가져옵니다.
       </p>
@@ -136,7 +143,15 @@ function AboutPage() {
       <p className="mt-4 rounded-2xl bg-gray-50 p-3 text-xs text-gray-400">
         사전 데이터: JMDict/KANJIDIC (EDRDG, CC BY-SA) · 한국어 뜻: 한국어 위키낱말사전 (CC BY-SA) ·
         JLPT 태그: JMDict_Extended,
-        AnchorI/jlpt-kanji-dictionary · 획순: KanjiVG (CC BY-SA)
+        AnchorI/jlpt-kanji-dictionary (MIT) · 획순: KanjiVG (CC BY-SA)
+      </p>
+
+      <AdSlot slot={AD_SLOTS.aboutBottom} className="mt-6" />
+
+      <p className="mt-3 text-center text-xs">
+        <Link to="/privacy" className="text-info hover:underline">
+          개인정보 처리방침
+        </Link>
       </p>
     </div>
   );
