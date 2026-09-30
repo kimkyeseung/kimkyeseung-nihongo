@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { bind, unbind } from "wanakana";
 import { searchDictionary, displayMeaning } from "../lib/dictionary";
@@ -8,6 +7,7 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useRecentSearchesStore } from "../stores/recentSearchesStore";
 import { useDictionaryView } from "../stores/pageStateStore";
 import { useWordLink } from "../hooks/useWordLink";
+import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
 import type { WordEntry } from "../types/dictionary";
 
 function ResultRow({ entry, onClick }: { entry: WordEntry; onClick: () => void }) {
@@ -19,9 +19,11 @@ function ResultRow({ entry, onClick }: { entry: WordEntry; onClick: () => void }
       <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
         {entry.jlptLevel}
       </span>
-      <span className="font-ja text-lg">{entry.word}</span>
-      <span className="font-ja text-sm text-gray-400">{entry.reading}</span>
-      <span className="ml-auto truncate text-sm text-gray-500">{displayMeaning(entry)}</span>
+      <span className="shrink-0 whitespace-nowrap font-ja text-lg">{entry.word}</span>
+      <span className="min-w-0 truncate font-ja text-sm text-gray-400">{entry.reading}</span>
+      <span className="ml-auto min-w-0 flex-1 truncate text-right text-sm text-gray-500">
+        {displayMeaning(entry)}
+      </span>
     </button>
   );
 }
@@ -140,37 +142,18 @@ function DictionaryPage() {
           className="w-full rounded-2xl border-2 border-gray-100 px-4 py-3 font-ja text-lg shadow-sm focus:border-primary/40 focus:outline-none"
         />
 
-        <AnimatePresence>
-          {showSuggestions && query && suggestions.length > 0 && (
-            <motion.ul
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.15 }}
-              className="absolute z-10 mt-2 w-full overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg"
-            >
-              {suggestions.map((s, i) => (
-                <li key={s.id}>
-                  <button
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => goToWord(s)}
-                    className={`flex w-full items-baseline gap-2 px-4 py-2 text-left ${
-                      i === activeIndex ? "bg-primary/10" : ""
-                    }`}
-                  >
-                    <span className="font-ja text-lg">{s.word}</span>
-                    <span className="font-ja text-sm text-gray-400">{s.reading}</span>
-                    <span className="ml-auto truncate text-sm text-gray-500">{displayMeaning(s)}</span>
-                  </button>
-                </li>
-              ))}
-            </motion.ul>
-          )}
-        </AnimatePresence>
+        {/* 회화·작문의 자동완성과 같은 목록이다 — 줄바꿈 처리 같은 모양을 한 곳에서 고치려고. */}
+        <JapaneseSuggestionList
+          suggestions={showSuggestions && query ? suggestions : []}
+          activeIndex={activeIndex}
+          onSelect={goToWord}
+        />
       </div>
 
-      {!query && recent.length > 0 && (
-        <div className="mt-4">
+      {/* 검색 기록은 입력창 바로 아래에 늘 둔다. 예전엔 입력창이 비어 있을 때만 보였는데,
+          검색어는 탭을 옮겨도 남아 있어서(pageStateStore) 사실상 거의 안 보였다. */}
+      {recent.length > 0 && (
+        <div className="mt-3">
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-400">최근 검색어</p>
             <button onClick={clearRecent} className="text-xs text-gray-300">
@@ -185,7 +168,7 @@ function DictionaryPage() {
                   setInputValue(term);
                   commitSearch(term);
                 }}
-                className="rounded-full bg-gray-100 px-3 py-1 font-ja text-sm text-gray-600"
+                className="whitespace-nowrap rounded-full bg-gray-100 px-3 py-1 font-ja text-sm text-gray-600"
               >
                 {term}
               </button>

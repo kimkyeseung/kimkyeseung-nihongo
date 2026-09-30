@@ -42,9 +42,13 @@ function JapaneseSuggestionList({
                   i === activeIndex ? "bg-primary/10" : ""
                 }`}
               >
-                <span className="font-ja text-lg">{s.word}</span>
-                <span className="font-ja text-sm text-gray-400">{s.reading}</span>
-                <span className="ml-auto truncate text-sm text-gray-500">{displayMeaning(s)}</span>
+                {/* 좁은 화면에서 일본어는 아무 글자 사이에서나 접히므로(단어 경계가 없다),
+                    표제어는 줄바꿈을 막고 모자란 자리는 읽기·뜻이 말줄임으로 양보한다. */}
+                <span className="shrink-0 whitespace-nowrap font-ja text-lg">{s.word}</span>
+                <span className="min-w-0 truncate font-ja text-sm text-gray-400">{s.reading}</span>
+                <span className="ml-auto min-w-0 flex-1 truncate text-right text-sm text-gray-500">
+                  {displayMeaning(s)}
+                </span>
               </button>
             </li>
           ))}
