@@ -13,6 +13,7 @@ import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import type { WordEntry } from "../types/dictionary";
 import { findWordById, levelLabel } from "../lib/dictionary";
+import KanjiChips from "../components/KanjiChips";
 import { backLabel, originFromState } from "../lib/wordLink";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import {
@@ -385,6 +386,9 @@ function WordDetailPage() {
           {entry.furigana.map((f) => (f.rt ? `${f.ruby}(${f.rt})` : f.ruby)).join(" ")}
         </p>
       )}
+
+      {/* 이 단어의 한자 — 누르면 한자 페이지와 같은 상세 시트(획순·따라 쓰기·학습 완료). */}
+      <KanjiChips text={entry.word} className="mt-3" />
 
       {/* 한국어 뜻이 있으면 먼저 보여준다. 없는 단어가 절반쯤 되므로(빌드 스크립트 주석 참고)
           영어 뜻 목록은 지우지 않고 그대로 아래에 남긴다 — 지우면 정보가 줄어든다. */}

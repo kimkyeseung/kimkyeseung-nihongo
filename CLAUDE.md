@@ -174,7 +174,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        SentencebookList(단어장의 문장 칸 목록) · SentenceReviewDeck(문장 칸 복습) ·
                        BackupCard(/about의 학습 데이터 백업·되돌리기 — "백업" 절 참고) ·
                        ConjugationDrillSheet(단어장 동사로 푸는 활용 연습) ·
-                       WeakReviewSheet(약한 한자·단어 모아 풀기 — 단어장에서 lazy로 연다)
+                       WeakReviewSheet(약한 한자·단어 모아 풀기 — 단어장에서 lazy로 연다) ·
+                       KanjiChips(단어·검색어에 든 한자 칩 → KanjiDetailSheet — 단어 상세·사전 검색 결과)
                      AI 안내: PromptApiUnsupportedNotice(내장 AI 불가) ·
                        GemmaEngineNotice(Gemma를 골랐는데 못 쓸 때) ·
                        PromptApiTroubleshootDialog(런타임 실패) ·
@@ -1642,6 +1643,12 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
   `wordLink.test.ts`가 고정한다 — 틀려도 콘솔은 조용하고, 탭을 눌렀을 때 엉뚱한 단어가 나오거나
   보던 단어가 그냥 사라질 뿐이다. **"그대로 두기(`null`)"와 "지우기(`{ lastWordId: null }`)"를
   헷갈리지 말 것.**
+- **단어에 든 한자는 `KanjiChips`로 한자 페이지와 잇는다.** "사전에서 찾은 한자가 한자 페이지와 연동이
+  안 된다"는 보고를 받고 붙였다 — 예전엔 단어 상세에서 한자를 볼 길이 없어 획순을 보거나 학습 완료로
+  표시하려면 한자 탭에서 급수를 골라 다시 찾아야 했다. 칩은 **한자 페이지와 같은 `KanjiDetailSheet`**를
+  열므로 학습 완료(✓)·XP·학습 기록이 한 저장소(`kanjiProgressStore`)로 간다. 사전 검색 결과 위에도
+  검색어에 든 한자 칩이 뜬다(水 하나만 쳐도 그 한자 자체를 볼 수 있게). 칩은 `kanji.json`에 있는 한자만
+  그린다(`kanjiInText`). 한자를 보여주는 새 화면에서도 시트를 새로 만들지 말고 이걸 쓸 것.
 - **하단 네비의 "사전"은 목적지가 고정이 아니라서 `NavLink`를 못 쓴다.** 켜짐 여부는
   `isNavActive`가 직접 계산하고, 단어 상세에서도 사전 탭에 불이 들어오도록 `also: "/word"`를
   준다 — 없으면 단어를 보는 동안 **어느 탭에도 불이 안 들어와** 지금 어디인지 알 수 없다.
