@@ -1,6 +1,6 @@
 import { motion, useMotionValue, useTransform } from "framer-motion";
 import type { WordEntry } from "../types/dictionary";
-import { displayMeaning } from "../lib/dictionary";
+import { displayMeaning, levelLabel } from "../lib/dictionary";
 
 const SWIPE_THRESHOLD = 100;
 
@@ -78,7 +78,7 @@ function WordbookCard({
 
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
-          {entry.jlptLevel}
+          {levelLabel(entry.jlptLevel)}
         </span>
         <h3 className="mt-4 font-ja text-5xl">{entry.word}</h3>
         {showBack ? (

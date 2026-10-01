@@ -61,6 +61,7 @@ const POS_LABELS_KO: Record<string, string> = {
   "v5r-i": "5단동사(る, 불규칙)",
   v5aru: "5단동사(ある형)",
 
+  v4b: "사단동사(고어)",
   v4k: "사단동사(고어)",
   v4r: "사단동사(고어)",
   "v2a-s": "이단동사(고어)",

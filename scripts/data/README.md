@@ -42,14 +42,17 @@ node scripts/data/build-kanjivg.mjs   # build-kanji.mjs 이후에 실행할 것 
 
 ## 출력 스키마
 
-### `dictionary.json` — JLPT 태그가 있는 단어 + 조사(품사 `prt`, JLPT 태그 없어도 포함) (총 8,405개)
+### `dictionary.json` — JLPT 태그가 있는 단어 + 흔한 단어(JMDict `common`) + 조사(품사 `prt`) + `EXTRA_WORDS` (총 23,721개)
+
+급수 단어 8,405개 + 급수 외 15,316개. 급수 외 단어는 `jlptLevel: null`이다(급수를 지어내지 않는다).
+`EXTRA_WORDS`는 common 표시도 없지만 실어야 하는 일상어 목록이다(しょっぱい 등 — `build-dictionary.mjs` 참고).
 
 ```ts
 interface WordEntry {
   id: string;
   word: string;        // 표제어 (한자 표기 우선, 없으면 가나)
   reading: string;      // 히라가나 읽기
-  jlptLevel: "N5" | "N4" | "N3" | "N2" | "N1";
+  jlptLevel: "N5" | "N4" | "N3" | "N2" | "N1" | null; // null = 급수 외(흔한 단어)
   common: boolean;
   furigana: { ruby: string; rt: string }[] | null;
   pos: string[];        // 대표 품사 코드 (pos-tags.json에서 설명 조회)
@@ -60,7 +63,7 @@ interface WordEntry {
 }
 ```
 
-**`koreanMeaning`은 전체의 약 47%(3,956/8,405)에만 있다.** 한국어 위키낱말사전에 표기가
+**`koreanMeaning`은 급수 단어의 약 47%(3,956/8,405)에만 있다**(급수 외 단어는 더 적다). 한국어 위키낱말사전에 표기가
 정확히 일치하는 항목이 있을 때만 채워지므로, 화면에서는 반드시 `displayMeaning()`을 거쳐
 없으면 영어로 폴백해야 한다. 읽기로는 매칭하지 않는다(동음이의어에 엉뚱한 뜻이 붙는다 —
 `build-dictionary.mjs`의 `loadKoreanGlosses` 주석 참고).
@@ -110,7 +113,7 @@ type KanaWords = Record<
 interface KanaWord { id: string; word: string; reading: string; meaning: string; }
 ```
 
-`dictionary.json`에서 뽑아온다(별도 원본 없음). 오십음도 페이지가 2.9MB짜리 사전 청크를
+`dictionary.json`에서 뽑아온다(별도 원본 없음). 오십음도 페이지가 7.7MB짜리 사전 청크를
 통째로 끌어오지 않도록 미리 작은 파일로 떠두는 것이 목적이다. 후보 정렬은
 "흔히 쓰는 단어 > 명사 > 낮은 JLPT 급수 > 짧은 읽기" 순이고 같은 표기는 한 번만 담는다.
 한 글자짜리 칸은 뒤에 작은 가나가 오는 단어를 제외한다(り의 예시로 りょこう가 뽑히면 안 되므로).

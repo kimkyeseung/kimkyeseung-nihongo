@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { bind, unbind } from "wanakana";
-import { searchDictionary, displayMeaning } from "../lib/dictionary";
+import { searchDictionary, displayMeaning, levelLabel } from "../lib/dictionary";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useRecentSearchesStore } from "../stores/recentSearchesStore";
 import { useDictionaryView } from "../stores/pageStateStore";
@@ -21,7 +21,7 @@ function ResultRow({ entry, onClick }: { entry: WordEntry; onClick: () => void }
       className="flex w-full items-center gap-2 rounded-2xl border-2 border-gray-100 bg-white px-4 py-3 text-left shadow-sm"
     >
       <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-        {entry.jlptLevel}
+        {levelLabel(entry.jlptLevel)}
       </span>
       <span className="shrink-0 whitespace-nowrap font-ja text-lg">{entry.word}</span>
       <span className="min-w-0 truncate font-ja text-sm text-gray-400">{entry.reading}</span>

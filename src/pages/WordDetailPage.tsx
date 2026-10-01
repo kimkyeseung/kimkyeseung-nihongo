@@ -12,7 +12,7 @@ import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import type { WordEntry } from "../types/dictionary";
-import { findWordById } from "../lib/dictionary";
+import { findWordById, levelLabel } from "../lib/dictionary";
 import { backLabel, originFromState } from "../lib/wordLink";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import {
@@ -320,7 +320,7 @@ function WordDetailPage() {
     if (!inWordbook) {
       recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
       // 급수를 같이 남긴다 — 어휘 수준 추정의 주된 근거다(learnerProfile.ts).
-      recordStudyEvent({ type: "word-added", subject: entry.word, level: entry.jlptLevel });
+      recordStudyEvent({ type: "word-added", subject: entry.word, level: entry.jlptLevel ?? undefined });
     }
     toggleWord(entry.id);
   }
@@ -345,7 +345,7 @@ function WordDetailPage() {
       <div className="mt-3 flex items-center justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
-            {entry.jlptLevel}
+            {levelLabel(entry.jlptLevel)}
           </span>
           {adjectiveType && (
             <span className="rounded-full bg-accent/10 px-3 py-1 text-sm text-accent">
