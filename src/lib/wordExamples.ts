@@ -1,4 +1,4 @@
-import { JLPT_LEVELS } from "../types/jlpt";
+import { JLPT_LEVELS, type JlptLevel } from "../types/jlpt";
 import type { WordEntry } from "../types/dictionary";
 import { REFUSE_PROMPT_DISCLOSURE, wrapStudentText } from "./promptSafety";
 
@@ -25,6 +25,14 @@ export interface WordExample extends ParsedExample {
 }
 
 /**
+ * 예문 난이도로 쓸 급수. 급수 목록에 없는 단어(흔한 단어로 사전에 들어온 것)는 **중간인 N3**로
+ * 맞춘다 — 단어의 급수라고 말하는 게 아니라 프롬프트에 줄 난이도 눈높이일 뿐이다.
+ */
+function exampleLevel(level: WordEntry["jlptLevel"]): JlptLevel {
+  return level ?? "N3";
+}
+
+/**
  * 단어의 JLPT 급수를 기준으로 한 단계 쉽게/어렵게 이동한 급수(양 끝은 고정).
  *
  * **부호를 조심할 것 (실제로 뒤집혀 있었다).** `JLPT_LEVELS`는 `["N5", ..., "N1"]`,
@@ -33,7 +41,7 @@ export interface WordExample extends ParsedExample {
  * 값이라 콘솔에는 아무것도 안 찍히고, 결과가 어려워져도 "모델이 말을 안 듣나 보다" 싶을 뿐이다.
  */
 function shiftJlptLevel(level: WordEntry["jlptLevel"], direction: ExampleDifficulty) {
-  const idx = JLPT_LEVELS.indexOf(level);
+  const idx = JLPT_LEVELS.indexOf(exampleLevel(level));
   const delta = direction === "easier" ? -1 : 1;
   const next = Math.min(JLPT_LEVELS.length - 1, Math.max(0, idx + delta));
   return JLPT_LEVELS[next];
@@ -90,7 +98,7 @@ export function buildExamplePrompt(entry: WordEntry, senseIndex: number): string
     sense.pos.includes("vi")
       ? `${entry.word}는 자동사입니다. 목적어에 「を」를 붙이지 마세요(「〜に${entry.word}」처럼 씁니다).`
       : null,
-    `자연스러운 일본어 예문을 ${EXAMPLE_COUNT}개, ${entry.jlptLevel} 학습자 난이도로 만드세요.`,
+    `자연스러운 일본어 예문을 ${EXAMPLE_COUNT}개, ${exampleLevel(entry.jlptLevel)} 학습자 난이도로 만드세요.`,
     ...formatInstruction(EXAMPLE_COUNT),
     REFUSE_PROMPT_DISCLOSURE,
   ]

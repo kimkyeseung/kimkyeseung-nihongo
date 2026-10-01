@@ -14,7 +14,12 @@ export interface WordEntry {
   id: string;
   word: string;
   reading: string;
-  jlptLevel: JlptLevel;
+  /**
+   * JLPT 급수. **null이면 급수 목록에 없는 단어**다 — 사전에는 급수 단어 외에 흔한 단어(JMDict
+   * common)도 실려 있다(scripts/data/build-dictionary.mjs). 급수를 지어내지 말고, 급수로 세는
+   * 곳(커리큘럼 진도·한자 퀴즈 정답 고르기)은 이 단어들을 빼고 센다.
+   */
+  jlptLevel: JlptLevel | null;
   common: boolean;
   furigana: Furigana[] | null;
   pos: string[];

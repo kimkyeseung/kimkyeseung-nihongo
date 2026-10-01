@@ -28,7 +28,7 @@ function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose:
       type: "word-looked-up",
       subject: word.word,
       detail: word.reading,
-      level: word.jlptLevel,
+      level: word.jlptLevel ?? undefined,
     });
   }, [word]);
 
@@ -36,7 +36,7 @@ function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose:
     if (!word) return;
     if (!inWordbook) {
       recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
-      recordStudyEvent({ type: "word-added", subject: word.word, level: word.jlptLevel });
+      recordStudyEvent({ type: "word-added", subject: word.word, level: word.jlptLevel ?? undefined });
     }
     toggleWord(word.id);
   }

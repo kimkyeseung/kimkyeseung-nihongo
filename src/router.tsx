@@ -6,7 +6,7 @@ import { wordPath } from "./lib/wordLink";
 // 쓰는 큰 데이터는 전부 preloadAssets.ts의 동적 import 뒤에 있어서 진입 청크는 그대로 가볍다.
 import HomePage from "./pages/HomePage";
 
-// 페이지별로 코드 스플리팅한다. 특히 dictionary.json(2.9MB)·kanjivg.json(1.9MB) 같은
+// 페이지별로 코드 스플리팅한다. 특히 dictionary.json(7.7MB)·kanjivg.json(1.9MB) 같은
 // 큰 정적 데이터가 해당 페이지를 실제로 방문하기 전까지는 아예 다운로드되지 않도록 하는 게
 // 목적이다 — 이 파일들을 참조하는 lib(dictionary.ts, kanjivg.ts 등)이 오직 특정 페이지에서만
 // import되므로, 그 페이지를 lazy()로 분리하면 데이터도 자동으로 같은 청크로 분리된다.

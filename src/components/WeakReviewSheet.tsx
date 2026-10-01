@@ -70,7 +70,7 @@ function WeakReviewSheet({ targets, onClose }: { targets: ReviewTargets; onClose
       recordStudyEvent({
         type: correct ? "word-review-known" : "word-review-unknown",
         subject: word.word,
-        level: word.jlptLevel,
+        level: word.jlptLevel ?? undefined,
       });
     }
     if (correct) celebrate();

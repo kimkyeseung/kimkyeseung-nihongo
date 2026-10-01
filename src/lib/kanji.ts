@@ -14,6 +14,19 @@ export function getKanjiEntry(char: string): KanjiEntry | undefined {
   return kanjiByChar.get(char);
 }
 
+/** 글자 순서대로, 앱에 있는 한자만(kanji.json) 한 번씩. */
+export function kanjiInText(text: string): KanjiEntry[] {
+  const seen = new Set<string>();
+  const result: KanjiEntry[] = [];
+  for (const ch of text) {
+    if (seen.has(ch)) continue;
+    seen.add(ch);
+    const entry = kanjiByChar.get(ch);
+    if (entry) result.push(entry);
+  }
+  return result;
+}
+
 // 단어를 이루는 글자가 전부 (한글 한자음을 아는) 한자일 때만 한자음 조합을 반환한다.
 // 食べる처럼 가나가 섞인 고유어 형태는 한자어 독음 개념이 성립하지 않으므로 null.
 export function getKoreanReadingForWord(word: string): string | null {

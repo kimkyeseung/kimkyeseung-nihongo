@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { koreanTokens, scoreKorean, searchDictionary } from "./dictionary";
+import { katakanaToHiragana, koreanTokens, levelLabel, scoreKorean, searchDictionary } from "./dictionary";
 
 /**
  * 한글 검색은 "조용히 나빠지는" 기능이다 — 결과가 0건이 되는 게 아니라 **순서만 엉망이 되어서**,
@@ -61,5 +61,45 @@ describe("searchDictionary (한글)", () => {
     // 한국어 뜻은 절반가량에만 있다 — 없다고 결과에서 사라지면 사전이 반쪽이 된다.
     const results = searchDictionary("たべ", 8);
     expect(results.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * 사전은 원래 JLPT 급수 단어(8,405개)만 실었는데, 「しょっぱい」가 없고 「タテモノ」로 치면 建物가
+ * 0건이라는 보고를 받았다. 급수 없는 흔한 단어를 더하고 검색에서 가나끼리 맞춰 비교하게 했다.
+ */
+describe("searchDictionary (가나·급수 외 단어)", () => {
+  const top = (q: string) => searchDictionary(q, 5).map((e) => e.word);
+
+  it("가타카나로 쳐도 히라가나 읽기를 찾는다", () => {
+    expect(top("タテモノ")[0]).toBe("建物");
+    expect(top("たてもの")[0]).toBe("建物");
+  });
+
+  it("가타카나 단어는 히라가나로 쳐도 찾는다", () => {
+    expect(top("てーぶる")).toContain("テーブル");
+  });
+
+  it("영어 뜻 검색은 로마자를 가나로 바꾸지 않는다", () => {
+    expect(top("salty")).toContain("塩辛い");
+  });
+
+  it("급수 목록에 없는 일상어도 실려 있다", () => {
+    const [salty] = searchDictionary("しょっぱい", 1);
+    expect(salty?.word).toBe("塩っぱい");
+    expect(salty?.jlptLevel).toBeNull();
+    expect(levelLabel(salty!.jlptLevel)).toBe("급수 외");
+  });
+
+  it("같은 점수라면 급수 단어가 급수 외 단어보다 먼저다", () => {
+    const results = searchDictionary("たべ", 50);
+    const firstUnleveled = results.findIndex((e) => !e.jlptLevel);
+    const lastLeveled = results.map((e) => Boolean(e.jlptLevel)).lastIndexOf(true);
+    if (firstUnleveled >= 0) expect(lastLeveled).toBeLessThan(firstUnleveled);
+  });
+
+  it("katakanaToHiragana는 짝이 없는 글자를 그대로 둔다", () => {
+    expect(katakanaToHiragana("テーブル")).toBe("てーぶる");
+    expect(katakanaToHiragana("abc 建物")).toBe("abc 建物");
   });
 });

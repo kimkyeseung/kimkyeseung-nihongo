@@ -179,7 +179,7 @@ function ReviewDeck({ group, entries }: { group: string; entries: WordbookEntry[
         recordStudyEvent({
           type: know ? "word-review-known" : "word-review-unknown",
           subject: word.word,
-          level: word.jlptLevel,
+          level: word.jlptLevel ?? undefined,
         });
       }
     }
