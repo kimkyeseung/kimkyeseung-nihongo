@@ -106,7 +106,7 @@ export const PRACTICE_FORMAT = [
   "유형:",
   "- 빈칸: 한국어 뜻과 빈칸 ＿＿ 이 하나 있는 일본어 문장. 정답은 빈칸에 들어갈 짧은 말. 여럿이면 / 로 나눠 모두.",
   "- 객관식: 보기 4개. 네 보기는 전부 서로 다른 말이어야 합니다.",
-  "- 배열: 한국어 뜻과, 정답 문장을 정답 순서대로 / 로 나눈 조각 3~6개.",
+  "- 배열: 한국어 뜻과, 정답 문장을 정답 순서대로 / 로 나눈 조각 3~6개. 조각을 다 이으면 한국어 뜻의 문장 전체가 되어야 합니다(문장 끝 말까지 조각에 넣으세요).",
   "- 고치기: 문법이 한 군데 틀린 일본어 문장과 한국어 뜻. 정답은 고친 문장.",
   "",
   "출력 형식 (다른 말은 붙이지 말고 이 형식만 반복하세요):",
@@ -404,12 +404,24 @@ function finishBlank(draft: Draft): BlankProblem | null {
   return { kind: "blank", question: draft.question, answers, explanation: draft.explanation };
 }
 
+/**
+ * 배열 정답의 마지막 조각이 이것뿐이면 문장이 덜 끝났다. の·か·ね·よ는 뺐다 — 문장 끝에 올 수 있다
+ * (「行くの」「行きますか」).
+ */
+const TRAILING_PARTICLE = /^(?:は|が|を|に|へ|と|で|も|や|から|まで|より)$/;
+/** 첫 조각이 조사면 앞이 잘린 문장이다. */
+const LEADING_PARTICLE = /^(?:は|が|を|に|へ|と|で|も|の|や|から|まで|より)$/;
+
 function finishOrder(draft: Draft): OrderProblem | null {
   const pieces = draft.pieces;
   if (!pieces || pieces.length < MIN_PIECES || pieces.length > MAX_PIECES) return null;
   if (!pieces.every((p) => p.length <= MAX_BLANK_ANSWER_LENGTH && JAPANESE_WORD.test(p))) return null;
   // 조각이 전부 같으면 섞어도 문제가 안 된다.
   if (new Set(pieces).size < 2) return null;
+  // 조각이 문장의 일부만 담은 문제는 버린다(실제로 받았다: 「그 아이의 이름은 지수입니다」에 조각이
+  // 子 / の / 名前 / は 뿐이라, 「子の名前は」를 맞히면 정답이었다). 뜻과 맞는지는 코드가 알 수 없지만,
+  // 조사로 끝나거나 조사로 시작하는 "문장"은 확실히 덜 끝났다.
+  if (TRAILING_PARTICLE.test(pieces[pieces.length - 1]) || LEADING_PARTICLE.test(pieces[0])) return null;
   return {
     kind: "order",
     question: draft.question,

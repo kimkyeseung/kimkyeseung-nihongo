@@ -173,6 +173,12 @@ describe("parsePracticeProblems — 배열·고치기", () => {
   it("조각이 모자라거나 일본어가 아니면 버린다", () => {
     expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: 水 / だけ")).toEqual([]);
     expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: 물 / 만 / 마셨다")).toEqual([]);
+    // 실제로 받은 문제: 「그 아이의 이름은 지수입니다」인데 조각이 문장 앞부분뿐이었다.
+    expect(parsePracticeProblems("유형: 배열\n질문: 「그 아이의 이름은 지수입니다」\n조각: 子 / の / 名前 / は")).toEqual([]);
+    expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: を / 水 / 飲みました")).toEqual([]);
+    // の·か로 끝나는 문장은 살린다.
+    expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: どこ / に / 行く / の")).toHaveLength(1);
+    expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: 何 / を / 食べます / か")).toHaveLength(1);
   });
 
   it("고치기: 앞에 낱말 백틱이 있어도 문장을 고칠 대상으로 본다", () => {
