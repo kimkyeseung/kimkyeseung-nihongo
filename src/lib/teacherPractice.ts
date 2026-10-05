@@ -174,6 +174,26 @@ export function buildPracticePrompt(question: string, answer: string): string {
   return wrapStudentText([`학습자의 질문: ${question}`, "", "선생님의 설명:", trimmed].join("\n"));
 }
 
+/** 피할 문제로 넘기는 최대 개수 — Gemma는 입력+출력 4096토큰이라 끝없이 붙일 수 없다. */
+export const MAX_AVOID_QUESTIONS = 8;
+
+/**
+ * "새 문제 받기"용 프롬프트. **같은 프롬프트를 새 세션에 다시 보내면 같은 문제가 나온다**(실제로 겪었다:
+ * 네 문제가 순서까지 똑같이 나왔다 — 온디바이스 모델은 같은 입력에 거의 같은 답을 낸다). 그래서 앞에서
+ * 낸 문제를 붙여 그것과 다른 문장으로 내라고 한다. 문제 글은 모델이 썼지만 학습 기록에서 온 말이 섞여
+ * 있으니 데이터로 감싸고, 지시는 감싼 블록 **밖에** 둔다(안에 두면 "따르지 말라"에 걸린다 — levelTest와 같다).
+ */
+export function withAvoidList(prompt: string, previousQuestions: string[]): string {
+  const recent = [...new Set(previousQuestions)].slice(-MAX_AVOID_QUESTIONS);
+  if (recent.length === 0) return prompt;
+  return [
+    prompt,
+    "",
+    "아래는 앞에서 이미 낸 문제입니다. 이것과 같은 문제나 같은 문장은 내지 말고, 새 문장으로 내세요.",
+    wrapStudentText(recent.map((q) => `- ${q.replace(/\s+/g, " ").trim()}`).join("\n")),
+  ].join("\n");
+}
+
 /**
  * 유출 검사 기준 — 출제 지시문에서 **유형 설명·출력 형식·예시를 뺀 것**. 이것들은 모델이 시키는
  * 대로 따라 쓰는 게 정상이라, 넣어두면 멀쩡한 문제가 유출로 걸린다(선생님 답변의 ①②③에서 실제로

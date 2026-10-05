@@ -22,6 +22,7 @@ import {
   parseJudgement,
   parsePracticeProblems,
   prepareProblem,
+  withAvoidList,
   type KanjiReadings,
   type PracticeProblem,
   type PracticeTarget,
@@ -184,6 +185,12 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
     };
   }, []);
 
+  /**
+   * 이 시트에서 이미 낸 문제의 질문들. "새 문제 받기"가 같은 프롬프트를 다시 보내면 같은 문제가 나와서
+   * (withAvoidList 주석) 출제 프롬프트에 붙여 피하게 한다.
+   */
+  const shownQuestionsRef = useRef<string[]>(cached ? cached.problems.map((p) => p.question) : []);
+
   const [generation, setGeneration] = useState(0);
   const startedGenerationRef = useRef<number | null>(null);
   useEffect(() => {
@@ -197,7 +204,9 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
       const collected: PracticeProblem[] = [];
       try {
         for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
-          const raw = await model.prompt(target.prompt);
+          // 재시도에도 이번에 이미 건진 문제를 피하게 한다 — 같은 입력이면 같은 답이 다시 온다.
+          const avoid = [...shownQuestionsRef.current, ...collected.map((c) => c.question)];
+          const raw = await model.prompt(withAvoidList(target.prompt, avoid));
           // 한 번 만든 세션을 계속 쓰면 재시도·"새 문제 받기"에 앞서 낸 문제를 모델이 기억해
           // 같은 걸 또 낸다 — 받을 때마다 새 세션으로 시작한다. 유출이 있었다면 오염된 턴을
           // 버리는 의미도 있다.
@@ -209,12 +218,16 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
           const leaked = looksLikePromptLeak(raw, target.leakReference);
           const parsed = leaked ? [] : parsePracticeProblems(raw);
           for (const p of parsed) {
-            if (collected.length < target.maxProblems && !collected.some((c) => c.question === p.question)) {
+            // 피하라고 했는데도 같은 문제를 다시 쓰면 버린다.
+            const seen = (q: string) =>
+              collected.some((c) => c.question === q) || shownQuestionsRef.current.includes(q);
+            if (collected.length < target.maxProblems && !seen(p.question)) {
               collected.push(p);
             }
           }
           const problems = collected;
           if (problems.length >= MIN_PRACTICE_PROBLEMS) {
+            shownQuestionsRef.current = [...shownQuestionsRef.current, ...problems.map((p) => p.question)];
             saveProblems(target.id, problems);
             setPhase(startSolving(problems));
             return;

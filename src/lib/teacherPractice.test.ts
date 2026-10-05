@@ -12,6 +12,8 @@ import {
   countVerdicts,
   isCorrectAnswer,
   kanjiReadingStems,
+  withAvoidList,
+  MAX_AVOID_QUESTIONS,
   isPracticeWorthy,
   modelAnswer,
   normalizeAnswer,
@@ -455,5 +457,26 @@ describe("시스템 프롬프트", () => {
 
   it("긴 설명은 잘라서 넣는다 — Gemma의 4096토큰 안에 문제 쓸 자리를 남긴다", () => {
     expect(buildPracticePrompt("질문", "가".repeat(5000)).length).toBeLessThan(2000);
+  });
+});
+
+describe("withAvoidList", () => {
+  it("앞에서 낸 문제가 없으면 프롬프트 그대로", () => {
+    expect(withAvoidList("P", [])).toBe("P");
+  });
+
+  it("앞의 문제를 붙이고, 피하라는 지시는 데이터 블록 밖에 둔다", () => {
+    const prompt = withAvoidList("P", ["「물만」 `水＿＿飲みました。`", "「물만」 `水＿＿飲みました。`"]);
+    const open = prompt.indexOf("<<<STUDENT_TEXT:");
+    expect(prompt.indexOf("새 문장으로 내세요")).toBeLessThan(open);
+    expect(prompt.match(/水＿＿飲みました/g)).toHaveLength(1); // 중복은 한 번만
+  });
+
+  it("최근 것만 MAX_AVOID_QUESTIONS개까지", () => {
+    const qs = Array.from({ length: 20 }, (_, i) => `문제${i}`);
+    const prompt = withAvoidList("P", qs);
+    expect(prompt).toContain("문제19");
+    expect(prompt).not.toContain(`문제${19 - MAX_AVOID_QUESTIONS}\n`);
+    expect(prompt).not.toContain("- 문제0\n");
   });
 });
