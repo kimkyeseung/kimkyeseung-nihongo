@@ -88,9 +88,22 @@ function fallbackFeedback(verdicts: PracticeVerdict[]): string {
   return "잘했어요! 틀린 문제의 해설을 한 번 더 보고 다시 풀어봐요.";
 }
 
-/** 풀기 시작 상태. 보기·조각은 풀 때마다 새로 섞는다("다시 풀기"도). */
+/** 풀기 시작 상태. 보기·조각은 풀 때마다 새로 섞는다("같은 문제 다시"도). */
 function startSolving(problems: PracticeProblem[]): Phase {
   return { kind: "solving", problems: problems.map((p) => prepareProblem(p)), index: 0, answers: [], verdicts: [] };
+}
+
+/** 문제 순서를 섞는다. 두 문제 이상이면 처음과 다른 순서가 나올 때까지(작은 배열이라 금방이다). */
+function reorder<T>(items: T[]): T[] {
+  if (items.length < 2) return items;
+  for (;;) {
+    const next = [...items];
+    for (let i = next.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    if (next.some((item, i) => item !== items[i])) return next;
+  }
 }
 
 function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose: () => void }) {
@@ -116,7 +129,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
   const [judging, setJudging] = useState(false);
   const [judgeReason, setJudgeReason] = useState("");
   /**
-   * 늦게 도착한 판정을 버리기 위한 번호. 재확인 중에 시트를 닫거나 "다시 풀기"를 누르면
+   * 늦게 도착한 판정을 버리기 위한 번호. 재확인 중에 시트를 닫거나 "같은 문제 다시"를 누르면
    * 앞 문제의 판정이 다음 문제에 붙을 수 있다.
    */
   const judgeTokenRef = useRef(0);
@@ -185,7 +198,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
       try {
         for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
           const raw = await model.prompt(target.prompt);
-          // 한 번 만든 세션을 계속 쓰면 재시도·"다른 문제 받기"에 앞서 낸 문제를 모델이 기억해
+          // 한 번 만든 세션을 계속 쓰면 재시도·"새 문제 받기"에 앞서 낸 문제를 모델이 기억해
           // 같은 걸 또 낸다 — 받을 때마다 새 세션으로 시작한다. 유출이 있었다면 오염된 턴을
           // 버리는 의미도 있다.
           model.resetSession();
@@ -240,7 +253,9 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
   function retrySame(problems: PracticeProblem[]) {
     resetQuestion();
     setFeedback("");
-    setPhase(startSolving(problems));
+    // 문제 순서도 섞는다 — 같은 순서면 "1번은 그거였지"로 풀게 되고, 학습자에게는 버튼이 아무 일도
+    // 안 한 것처럼 보인다(실제로 "완전히 같은 문제가 나왔다"고 보고받았다). 새 문제는 "새 문제 받기"다.
+    setPhase(startSolving(reorder(problems)));
   }
 
   async function requestFeedback(problems: PracticeProblem[], answers: string[], verdicts: PracticeVerdict[]) {
@@ -392,7 +407,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
 
         {phase.kind === "solving" && (
           // 문제가 바뀌면 통째로 새로 만든다 — 입력창(uncontrolled)과 배열 조각 상태를 비우려면
-          // 리마운트가 가장 확실하다("다시 풀기"로 같은 1번에 돌아와도 비어 있어야 한다).
+          // 리마운트가 가장 확실하다("같은 문제 다시"로 같은 1번에 돌아와도 비어 있어야 한다).
           <PracticeQuestion
             key={`${generation}-${phase.index}-${phase.answers.length}`}
             problem={phase.problems[phase.index]}
@@ -497,7 +512,7 @@ function ResultView({
       </div>
 
       {/* 버튼은 처음부터 그려 둔다 — 피드백이 끝날 때 나타나게 하면 그 순간 한 번 더 튄다.
-          다시 풀기·다른 문제 받기만 피드백을 받는 동안 막는다(세션이 겹친다). 완료는 언제든. */}
+          같은 문제 다시·새 문제 받기만 피드백을 받는 동안 막는다(세션이 겹친다). 완료는 언제든. */}
       <div className="mt-2 flex flex-col gap-2">
         <div className="flex gap-2">
           <button
@@ -505,14 +520,14 @@ function ResultView({
             disabled={feedbackLoading}
             className="flex-1 rounded-2xl border-2 border-gray-100 py-3 font-bold text-gray-500 disabled:text-gray-300"
           >
-            다시 풀기
+            같은 문제 다시
           </button>
           <button
             onClick={onRegenerate}
             disabled={feedbackLoading}
             className="flex-1 rounded-2xl border-2 border-gray-100 py-3 font-bold text-gray-500 disabled:text-gray-300"
           >
-            다른 문제 받기
+            새 문제 받기
           </button>
         </div>
         <button

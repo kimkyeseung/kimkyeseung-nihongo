@@ -124,7 +124,7 @@ describe("planLevelTest", () => {
     expect(planLevelTest({ ...base, currentUnit: unit(1, ["a", "b", "c", "d"]) })?.problemCount).toBe(4);
   });
 
-  it("같은 기록이면 같은 범위 — '다른 문제 받기'가 같은 실력을 다시 잰다", () => {
+  it("같은 기록이면 같은 범위 — '새 문제 받기'가 같은 실력을 다시 잰다", () => {
     const input = { ...base, weakKanji: ["曜"], currentUnit: unit(3, ["〜ても", "〜たら"]) };
     expect(planLevelTest(input)).toEqual(planLevelTest(input));
   });
