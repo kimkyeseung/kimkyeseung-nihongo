@@ -167,6 +167,13 @@ describe("parsePracticeProblems — 배열·고치기", () => {
     expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: 물 / 만 / 마셨다")).toEqual([]);
   });
 
+  it("고치기: 앞에 낱말 백틱이 있어도 문장을 고칠 대상으로 본다", () => {
+    const [p] = parsePracticeProblems(
+      "유형: 고치기\n질문: `だけ`를 바르게 써서 고치세요. `水をだけ飲みました。`\n정답: 水だけ飲みました。"
+    );
+    expect(p?.kind).toBe("fix");
+  });
+
   it("고치기는 문장 안의 쉼표로 정답을 가르지 않는다", () => {
     const [p] = parsePracticeProblems("유형: 고치기\n질문: `明日、雨が降るかもしれないです。`\n정답: 明日、雨が降るかもしれません。") as [
       FixProblem,
@@ -177,6 +184,13 @@ describe("parsePracticeProblems — 배열·고치기", () => {
   it("고친 문장이 원래 문장과 같거나, 틀린 문장이 문제에 없으면 버린다", () => {
     expect(parsePracticeProblems("유형: 고치기\n질문: `水だけ飲みました。`\n정답: 水だけ飲みました。")).toEqual([]);
     expect(parsePracticeProblems("유형: 고치기\n질문: 틀린 곳을 고치세요\n정답: 水だけ飲みました。")).toEqual([]);
+    // 실제로 받은 문제: 낱말 `なぜ`가 먼저 나오고, 보여준 문장이 이미 올바랐다 — 베껴 쓰면 정답이었다.
+    expect(
+      parsePracticeProblems(
+        "유형: 고치기\n질문: \"이 방은 왜 이렇게 어두운가요?\"를 `なぜ`를 사용하여 표현할 때 올바른 문장은? " +
+          "`この部屋はなぜこんなに暗いのですか？`\n정답: この部屋はなぜこんなに暗いのですか"
+      )
+    ).toEqual([]);
   });
 });
 

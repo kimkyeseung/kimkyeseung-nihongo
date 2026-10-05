@@ -421,7 +421,11 @@ function finishOrder(draft: Draft): OrderProblem | null {
 function finishFix(draft: Draft): FixProblem | null {
   if (draft.answer === null) return null;
   // 틀린 문장이 문제 안에 백틱으로 있어야 한다. 없으면 무엇을 고치라는지 알 수 없다.
-  const wrong = [...draft.question.matchAll(INLINE_CODE)].map((m) => m[1]).find((t) => HAS_JAPANESE.test(t));
+  // 문제 문장에는 `なぜ`처럼 **낱말도 백틱으로** 들어온다 — 첫 번째를 집으면 낱말을 "틀린 문장"으로
+  // 알고 아래 비교가 헛돈다(실제로 겪었다: 올바른 문장을 내고 그대로 베껴 쓰면 정답이었다).
+  // 그래서 가장 긴 것을 고칠 문장으로 보고, 같은지 비교는 백틱 안의 일본어 전부와 한다.
+  const quoted = [...draft.question.matchAll(INLINE_CODE)].map((m) => m[1]).filter((t) => HAS_JAPANESE.test(t));
+  const wrong = quoted.reduce<string | undefined>((a, b) => (a && a.length >= b.length ? a : b), undefined);
   // 빈칸이 든 문장은 고칠 문장이 아니라 빈칸 문제다 — "고치기"라 적고 빈칸을 낸 경우.
   if (!wrong || BLANK.test(wrong)) return null;
   // 문장 안의 쉼표(、)는 정답을 가르는 표시가 아니다.
@@ -429,8 +433,9 @@ function finishFix(draft: Draft): FixProblem | null {
     (a) => a.length <= MAX_SENTENCE_LENGTH && JAPANESE_SENTENCE.test(a)
   );
   if (answers.length === 0) return null;
-  // "고친" 문장이 원래 문장과 같으면 틀린 곳이 없는 문제다.
-  if (answers.some((a) => normalizeAnswer(a) === normalizeAnswer(wrong))) return null;
+  // "고친" 문장이 문제에 보여준 문장과 같으면 틀린 곳이 없는 문제다 — 베껴 쓰기만 해도 정답이 된다.
+  const shown = new Set(quoted.map(normalizeAnswer));
+  if (answers.some((a) => shown.has(normalizeAnswer(a)))) return null;
   return { kind: "fix", question: draft.question, answers, explanation: draft.explanation };
 }
 
