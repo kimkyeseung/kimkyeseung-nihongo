@@ -1337,6 +1337,16 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
 스크롤 영역인 `<main>`에는 `flex-1 overflow-y-auto`에 `min-h-0`을 반드시 추가한다.**
 새로 풀스크린 레이아웃(헤더+스크롤 영역+하단바 구조)을 만들 때마다 이 패턴을 그대로 쓸 것.
 
+**모바일 키보드가 올라오면 화면 전체가 스크롤됐다 (실제로 보고받았다).** 모바일 브라우저는 키보드를 화면
+위에 덮고 보이는 영역(visual viewport)만 줄인 뒤 문서를 밀어 올리는데, `h-svh`는 키보드 없는 높이라 그
+차이만큼 문서가 스크롤됐다. 지금은 Layout 뿌리가 `app-shell`(index.css — `position: fixed`, 높이·위치는
+`--app-height`/`--app-top`)이고, `appViewport.ts`(App.tsx에서 시작)가 `visualViewport`로 그 변수를 갱신한다.
+index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Android Chrome이 레이아웃 자체를
+줄인다 — iOS Safari는 이 설정을 몰라서 JS 쪽이 필요하다). 모달 막(`[data-modal]`)과 시트의 `max-h-*`도 같은
+변수를 따른다. 핀치 줌 중에는 변수를 지워 100svh로 돌아간다. **뿌리를 다시 `h-svh` 흐름 레이아웃으로 돌리지 말
+것.** 헤드리스에서 창 높이를 줄여(Android 방식) 헤더·입력창·네비가 보이는 영역에 붙고 문서 스크롤이 0인 것을
+확인했다 — iOS Safari(문서를 밀어 올리는 방식)는 실기기로 확인하지 못했다.
+
 **같은 함정이 한 겹 더 있다 (실제로 겪은 버그):** `AnimatedOutlet`이 페이지를 감싸는
 `motion.div`에 **`h-full`이 없으면** 그 래퍼가 `height: auto`가 되어, 루트에 `h-full`을 주고
 **안쪽에 자기 스크롤 영역**을 두는 페이지(선생님·회화)의 100%가 기댈 곳을 잃는다. 그러면
