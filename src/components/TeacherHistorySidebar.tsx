@@ -1,6 +1,12 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { formatDayLabel, localDateKey } from "../lib/localDate";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
+import { useScrollLock } from "../hooks/useScrollLock";
+
+/** 서랍은 좁은 화면(sm 미만)에서만 그려진다(`sm:hidden`). 넓은 화면에서 open이 남아 있어도 잠그지 않는다. */
+function isNarrowScreen(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 639.98px)").matches;
+}
 
 interface Props {
   /** 좁은 화면에서 서랍이 열려 있는지. 넓은 화면에서는 무시된다(항상 보인다). */
@@ -70,6 +76,8 @@ function DayList({ onPick }: { onPick: () => void }) {
  * 붙박이로 두면 대화 영역이 200px대까지 좁아져서 예문 한 줄이 서너 줄로 접힌다.
  */
 function TeacherHistorySidebar({ open, onClose }: Props) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(open && isNarrowScreen());
   return (
     <>
       {/* 넓은 화면: 붙박이 */}
@@ -82,6 +90,7 @@ function TeacherHistorySidebar({ open, onClose }: Props) {
       <AnimatePresence>
         {open && (
           <motion.div
+            data-modal
             className="fixed inset-0 z-30 flex sm:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

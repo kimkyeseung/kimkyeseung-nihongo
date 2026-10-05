@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 /**
  * 회화/작문/단어 예문 등 LLM 호출이 런타임에 실패했을 때(예: NotSupportedError) 띄우는 다이얼로그.
@@ -14,10 +15,13 @@ function PromptApiTroubleshootDialog({
   error: string | null;
   onClose: () => void;
 }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(error !== null);
   return (
     <AnimatePresence>
       {error && (
         <motion.div
+          data-modal
           className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

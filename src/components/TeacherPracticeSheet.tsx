@@ -31,6 +31,7 @@ import {
 import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useTeacherPractice } from "../stores/pageStateStore";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 /**
  * 문제 풀기 시트. 선생님 답변 끝의 "연습해보기"와 `/test`가 쓴다. 3~5문제(빈칸·객관식·배열·
@@ -108,6 +109,8 @@ function reorder<T>(items: T[]): T[] {
 }
 
 function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose: () => void }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(true);
   // 지시문은 마운트 동안 바뀌지 않는다(target이 바뀌면 key로 새로 마운트된다).
   const generator = useAiModel(target.systemPrompt);
   const reviewer = useAiModel(PRACTICE_FEEDBACK_SYSTEM_PROMPT);
@@ -367,6 +370,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
 
   return (
     <motion.div
+      data-modal
       className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

@@ -10,9 +10,12 @@ import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { useWordbookStore } from "../stores/wordbookStore";
 import type { WordEntry } from "../types/dictionary";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 /** 클릭 가능한 문장(ClickableSentence)에서 단어를 탭했을 때 뜻을 보여주는 공용 다이얼로그. */
 function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose: () => void }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(word !== null);
   const wordLink = useWordLink();
   const inWordbook = useWordbookStore((s) => (word ? Boolean(s.entries[word.id]) : false));
   const toggleWord = useWordbookStore((s) => s.toggleWord);
@@ -45,6 +48,7 @@ function WordMeaningDialog({ word, onClose }: { word: WordEntry | null; onClose:
     <AnimatePresence>
       {word && (
         <motion.div
+          data-modal
           className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

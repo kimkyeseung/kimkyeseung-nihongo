@@ -127,3 +127,22 @@ body {
 .btn-press:disabled:active {
   transform: none;
 }
+
+/*
+ * 모달이 떠 있는 동안 뒤쪽 본문을 멈춘다(useScrollLock). 이 앱은 body가 아니라 <main>과 안쪽 목록이
+ * 스크롤되므로 그 스크롤 영역들을 잠근다. 모달 안(`data-modal`)의 스크롤 영역은 그대로 둔다.
+ * `overflow: hidden`은 scrollTop을 지우지 않는다 — 닫으면 보던 자리다.
+ */
+html[data-scroll-locked],
+html[data-scroll-locked] body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html[data-scroll-locked] :is(main, .overflow-y-auto, .overflow-auto):not([data-modal], [data-modal] *) {
+  overflow: hidden !important;
+}
+/* 모달 안의 스크롤이 끝에 닿아도 바깥으로 넘기지 않는다. */
+[data-modal] :is(.overflow-y-auto, .overflow-auto),
+:is(.overflow-y-auto, .overflow-auto)[data-modal] {
+  overscroll-behavior: contain;
+}

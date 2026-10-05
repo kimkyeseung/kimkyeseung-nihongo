@@ -320,6 +320,18 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   자리가 빠듯한 UI라 여백·글자 크기가 한 곳에 있어야 한다. 항목이 넘칠 수 있으면 `scrollable`,
   칸을 n등분하려면 `fill`, 라벨 옆 숫자는 `hint`.
 
+## 다이얼로그·바텀시트 (`useScrollLock`)
+- **모달이 떠 있는 동안 뒤쪽 본문은 스크롤되지 않아야 한다**(사용자 요청). 모달을 새로 만들면 **열려 있을 때
+  `useScrollLock(열림)`을 부르고, 바깥 막(`fixed inset-0`)에 `data-modal`을 붙일 것.** 둘 중 하나만 하면
+  안 된다 — 훅은 `<html data-scroll-locked>`를 켜고, `index.css`가 그동안 `data-modal` **밖의**
+  `main`·`overflow-y-auto`를 전부 `overflow: hidden`으로 바꾼다(`data-modal`이 없으면 시트 안 스크롤까지 잠긴다).
+- body만 잠그면 소용없다 — 이 앱은 body가 아니라 `<main>`과 선생님·회화의 메시지 목록이 스크롤된다
+  ("헤더/하단 네비게이션 레이아웃" 절). `overflow: hidden`은 scrollTop을 지우지 않아 닫으면 보던 자리다.
+- 겹쳐 열리는 경우(단어 뜻 → 한자 상세)가 있어서 훅은 개수를 센다. 선생님 대화 기록 서랍은 좁은 화면에서만
+  잠근다(넓은 화면에선 붙박이라 `open`이 남아 있어도 그려지지 않는다).
+- 헤드리스 Chromium에서는 **고치기 전에도** 뒤쪽이 움직이는 걸 재현하지 못했다(터치·휠 둘 다). 잠금이 켜지고
+  위치가 유지되고 풀리는 것만 확인했다 — 실기기(Android Chrome)에서 볼 것.
+
 ## 학습 데이터 백업 (`/about`의 `BackupCard` / `backup.ts`) 구현 노트
 - 서버가 없어서 단어장·스트릭(localStorage)과 기록·기억·선생님 대화(IndexedDB)가 **이
   브라우저에만** 있다. 브라우저 데이터를 지우거나 기기를 바꾸면 끝이고, Safari는 한동안 안

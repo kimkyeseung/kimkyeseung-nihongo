@@ -17,6 +17,7 @@ import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import type { KanjiEntry } from "../types/kanji";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 const PRIMARY_SHADOW = { ["--btn-shadow" as string]: "#3d9401" };
 
@@ -42,6 +43,8 @@ function buildQuestions(targets: ReviewTargets): ReviewQuestion[] {
  * 약한 어휘)과 이 목록 자체가 그대로 갱신된다: 맞힌 것은 다음부터 목록에서 빠진다.
  */
 function WeakReviewSheet({ targets, onClose }: { targets: ReviewTargets; onClose: () => void }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(true);
   const [questions] = useState(() => buildQuestions(targets));
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -91,6 +94,7 @@ function WeakReviewSheet({ targets, onClose }: { targets: ReviewTargets; onClose
     // body로 포털한다 — AnimatedOutlet의 transform 때문에 `fixed`가 뷰포트 기준이 아니게 된다
     // (ActionMenu·연습해보기 시트와 같은 이유).
     <motion.div
+      data-modal
       className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

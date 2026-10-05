@@ -4,6 +4,7 @@ import SpeakButton from "./SpeakButton";
 import { getKanaWords } from "../lib/kanaWords";
 import { useWordLink } from "../hooks/useWordLink";
 import type { KanaCell, ScriptMode } from "../data/gojuon";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 /**
  * 오십음도에서 글자를 탭했을 때 뜨는 상세 다이얼로그. 사전의 WordMeaningDialog와 같은
@@ -20,6 +21,8 @@ function KanaDetailDialog({
   mode: ScriptMode;
   onClose: () => void;
 }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(cell !== null);
   const wordLink = useWordLink();
   // 애니메이션으로 사라지는 동안에도 내용이 남아있어야 해서 cell이 null이면 렌더만 건너뛴다.
   const char = cell ? (mode === "hiragana" ? cell.hiragana : cell.katakana) : "";
@@ -31,6 +34,7 @@ function KanaDetailDialog({
     <AnimatePresence>
       {cell && (
         <motion.div
+          data-modal
           className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
