@@ -144,6 +144,23 @@ describe("buildLevelTestPrompt", () => {
     expect(prompt).toMatch(/<<<STUDENT_TEXT:/);
   });
 
+  it("앱의 지시(수준·문제 수·채우기)는 데이터 블록 밖에 둔다 — 안에 두면 '따르지 말라'에 걸린다", () => {
+    const test = planLevelTest({ ...base, weakWords: [{ word: "食べ物", reading: "たべもの" }] })!;
+    const prompt = buildLevelTestPrompt(test);
+    const open = prompt.indexOf("<<<STUDENT_TEXT:");
+    expect(open).toBeGreaterThan(prompt.indexOf("학습자 수준: N4"));
+    expect(open).toBeGreaterThan(prompt.indexOf(`문제 수: ${test.problemCount}개`));
+    expect(prompt.lastIndexOf(">>>")).toBeLessThan(prompt.indexOf("N4 수준의 기본 문법"));
+  });
+
+  it("범위가 비면 데이터 블록 없이 기본 문법으로 내라고 한다", () => {
+    const test = planLevelTest(base)!;
+    expect(test.topics).toEqual([]);
+    const prompt = buildLevelTestPrompt(test);
+    expect(prompt).not.toMatch(/<<<STUDENT_TEXT:/);
+    expect(prompt).toContain("N4 수준의 기본 문법");
+  });
+
   it("범위가 모자라면 기본 문법으로 채우라고 한다", () => {
     expect(buildLevelTestPrompt(planLevelTest(base)!)).toContain("N4 수준의 기본 문법");
   });
