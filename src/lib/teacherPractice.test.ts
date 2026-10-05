@@ -11,6 +11,7 @@ import {
   canAskJudge,
   countVerdicts,
   isCorrectAnswer,
+  kanjiReadingStems,
   isPracticeWorthy,
   modelAnswer,
   normalizeAnswer,
@@ -24,6 +25,13 @@ import {
   type PracticeProblem,
 } from "./teacherPractice";
 import { REFUSE_PROMPT_DISCLOSURE, looksLikePromptLeak } from "./promptSafety";
+import { getKanjiEntry } from "./kanji";
+
+/** 시트가 넘기는 것과 같은 읽기 조회 — 실제 KANJIDIC 데이터로. */
+const readings = (kanji: string) => {
+  const entry = getKanjiEntry(kanji);
+  return entry ? kanjiReadingStems(entry) : undefined;
+};
 
 const DAKE_ANSWER = `조사 \`だけ\`는 어떤 대상이나 수량을 한정하여 "~만", "~뿐"이라는 의미를 나타내는 아주 유용한 표현입니다.
 
@@ -265,6 +273,40 @@ describe("isCorrectAnswer", () => {
     expect(isCorrectAnswer(furi, "降り")).toBe(true);
     expect(isCorrectAnswer(furi, "ふり")).toBe(false);
     expect(canAskJudge(furi, "ふり")).toBe(true);
+  });
+
+  it("한자 정답을 히라가나로 쳐도 맞다 — 읽기는 KANJIDIC에서 (실제로 보고받았다: 並んで ← ならんで)", () => {
+    const narande: BlankProblem = { ...KAMO, question: "`人々が＿＿並びます。`", answers: ["並んで"] };
+    for (const typed of ["ならんで", "並んで", "narande", "ナランデ"]) {
+      expect(isCorrectAnswer(narande, typed, readings)).toBe(true);
+    }
+    for (const typed of ["ならべて", "なんで", "ならん"]) {
+      expect(isCorrectAnswer(narande, typed, readings)).toBe(false);
+    }
+    const furi: BlankProblem = { ...KAMO, question: "`雨が＿＿そうだ。`", answers: ["降り"] };
+    expect(isCorrectAnswer(furi, "ふり", readings)).toBe(true);
+    // 빈칸을 채운 문장 통째로, 가나·한자를 섞어서
+    expect(isCorrectAnswer(furi, "あめがふりそうだ", readings)).toBe(true);
+    expect(isCorrectAnswer(furi, "雨がふりそうだ", readings)).toBe(true);
+  });
+
+  it("고치기: 문장의 한자를 가나로 써도 맞다 — 々·연탁·촉음화까지", () => {
+    const fix = (answer: string): PracticeProblem => ({ kind: "fix", question: "`x`", answers: [answer], explanation: "" });
+    expect(isCorrectAnswer(fix("人々が並んでいます。"), "ひとびとがならんでいます", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("学校に行きます。"), "がっこうにいきます", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("この部屋は暗いです。"), "このへやはくらいです", readings)).toBe(true); // 部(べ→へ)+屋(や)
+    expect(isCorrectAnswer(fix("今日は暑いです。"), "きょうはあついです", readings)).toBe(false); // 숙자훈 — AI 재확인 몫
+    expect(isCorrectAnswer(fix("食べました。"), "たべました", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("行って"), "いって", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("買わない"), "かわない", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("この部屋は暗いです。"), "この部屋はくらいです", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("この部屋は暗いです。"), "この部屋はあかるいです", readings)).toBe(false);
+  });
+
+  it("읽기 조회가 없으면(데이터를 아직 못 받음) 예전과 같다", () => {
+    const narande: BlankProblem = { ...KAMO, question: "`人々が＿＿並びます。`", answers: ["並んで"] };
+    expect(isCorrectAnswer(narande, "ならんで")).toBe(false);
+    expect(isCorrectAnswer(narande, "並んで")).toBe(true);
   });
 
   it("객관식: 고른 보기 글자로 판정한다", () => {

@@ -15,9 +15,10 @@
 // 파싱·채점은 조용히 틀리는 종류의 코드다: 한 글자만 잘못 정규화해도 화면은 멀쩡하고, 제대로
 // 쓴 학습자만 "틀렸어요"를 듣는다. 그래서 teacherPractice.test.ts로 고정해뒀다.
 
-import { toHiragana } from "wanakana";
+import { toHiragana, toRomaji } from "wanakana";
 import { REFUSE_PROMPT_DISCLOSURE, wrapStudentText } from "./promptSafety";
 import { XP_REWARDS } from "./xpRewards";
+import type { KanjiEntry } from "../types/kanji";
 
 export type PracticeKind = "blank" | "choice" | "order" | "fix";
 
@@ -652,25 +653,136 @@ function blankSentence(question: string): string | null {
  * - 객관식: 고른 보기가 정답 보기다.
  * - 배열: 이어 붙인 문장이 정답 순서의 문장과 같다(같은 조각이 두 번 나와도 글자로 비교하니 괜찮다).
  */
-export function isCorrectAnswer(problem: PracticeProblem, response: string): boolean {
+export function isCorrectAnswer(
+  problem: PracticeProblem,
+  response: string,
+  kanjiReadings?: KanjiReadings
+): boolean {
   const given = normalizeAnswer(response);
   if (!given) return false;
+  const same = (expected: string) => matchesWithReadings(normalizeAnswer(expected), given, kanjiReadings);
   switch (problem.kind) {
     case "choice":
       return response === problem.choices[problem.answerIndex];
     case "order":
       return given === normalizeAnswer(problem.pieces.join(""));
     case "fix":
-      return problem.answers.some((a) => normalizeAnswer(a) === given);
+      return problem.answers.some(same);
     case "blank": {
       const sentence = blankSentence(problem.question);
-      return problem.answers.some(
-        (a) =>
-          normalizeAnswer(a) === given ||
-          (sentence !== null && normalizeAnswer(sentence.replace(BLANK, a)) === given)
-      );
+      return problem.answers.some((a) => same(a) || (sentence !== null && same(sentence.replace(BLANK, a))));
     }
   }
+}
+
+/**
+ * 한자 한 글자의 읽기(히라가나). 없으면 undefined. 채점이 한자를 가나로 받아줄 때 쓴다 —
+ * **KANJIDIC 데이터에서만** 온다(읽기는 사전 정보라 모델에게 받지 않는다). kanji.json이 무거워서
+ * 이 모듈은 import하지 않고 부르는 쪽(시트)이 동적 import로 만들어 넘긴다.
+ */
+export type KanjiReadings = (kanji: string) => readonly KanjiReading[] | undefined;
+
+/** 한자 자리에 들어갈 가나와, 훈독이면 그 뒤에 붙는 오쿠리가나(`なら.ぶ` → `なら` + `ぶ`). */
+export interface KanjiReading {
+  kana: string;
+  okurigana: string;
+}
+
+/**
+ * KANJIDIC 읽기를 "한자 자리에 들어갈 가나"로 바꾼다. 훈독은 오쿠리가나 앞까지 — 오쿠리가나는
+ * 모범 답에 이미 가나로 적혀 있다. 접두·접미 표시(`-`)는 뗀다. 오쿠리가나는 따로 들고 있다가
+ * `okuriganaFits`로 모범 답의 다음 글자와 맞는지 본다.
+ */
+export function kanjiReadingStems(entry: Pick<KanjiEntry, "onyomi" | "kunyomi">): KanjiReading[] {
+  const all: KanjiReading[] = [
+    ...entry.onyomi.map((o) => ({ kana: toHiragana(o.replace(/-/g, "")), okurigana: "" })),
+    ...entry.kunyomi.map((k) => {
+      const [kana, okurigana = ""] = k.replace(/-/g, "").split(".");
+      return { kana, okurigana };
+    }),
+  ];
+  const seen = new Set<string>();
+  return all.filter((r) => {
+    const key = `${r.kana}.${r.okurigana}`;
+    if (!r.kana || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function consonant(kana: string): string {
+  return toRomaji(kana).replace(/[aiueo]+$/, "");
+}
+
+/**
+ * 훈독은 **그 오쿠리가나가 올 자리에서만** 쓴다. 안 그러면 並의 `な.み`가 `な` 하나로 남아
+ * `並んで`에 `なんで`까지 맞다고 한다. 오쿠리가나가 그대로 이어지거나, 동사 어미(う단 한 글자)가
+ * 활용으로 바뀐 모양(ぶ → ば·び·べ·ぼ, 음편 ん·っ·い, う → わ)이면 맞는 자리로 본다.
+ */
+function okuriganaFits(okurigana: string, next: string | undefined): boolean {
+  if (!okurigana) return true;
+  if (!next) return false;
+  if (next === okurigana[0]) return true;
+  if (okurigana.length !== 1 || !/u$/.test(toRomaji(okurigana))) return false;
+  if ("んっい".includes(next)) return true;
+  if (okurigana === "う") return next === "わ" || next === "え" || next === "お";
+  return consonant(next) === consonant(okurigana) && /^[ぁ-ゖ]$/.test(next);
+}
+
+/** 탁음·반탁음을 뗀 글자(が → か). 연탁(人々 ひと**び**と)을 받아주려고. */
+function baseKana(ch: string): string {
+  return ch.normalize("NFD")[0];
+}
+
+/** 읽기가 연탁·촉음화(学校 が**っ**こう)로 바뀐 모양까지 받아준다. */
+function readingFits(reading: string, actual: string): boolean {
+  if (reading.length !== actual.length) return false;
+  for (let i = 0; i < reading.length; i++) {
+    if (reading[i] === actual[i]) continue;
+    if (i === 0 && baseKana(reading[i]) === baseKana(actual[i])) continue;
+    if (i === reading.length - 1 && i > 0 && actual[i] === "っ") continue;
+    return false;
+  }
+  return true;
+}
+
+const IS_KANJI = /^[㐀-䶿一-鿿]$/;
+
+/**
+ * 모범 답과 학습자 답이 같은가 — 모범 답의 한자 자리에는 **그 글자 자체나 그 글자의 읽기** 중
+ * 무엇이 와도 된다. 그래서 `並んで`에 `ならんで`도, 섞어 쓴 `並んで`·`なら んで`도 맞다. 학습자가
+ * 일본어 모드(로마자→히라가나)로 치면 한자를 쓸 방법이 없어서, 이게 없으면 제대로 쓴 답이 전부
+ * "틀림"이 된다(실제로 보고받았다). 숙자훈(今日 きょう)처럼 글자별로 안 갈리는 읽기는 못 받는다 —
+ * 그건 AI 재확인으로 넘어간다.
+ *
+ * **한계:** 글자의 읽기 중 아무거나 받으므로 문맥에 안 맞는 읽기(人 = にん/じん)도 통과한다.
+ */
+export function matchesWithReadings(expected: string, given: string, readings?: KanjiReadings): boolean {
+  if (expected === given) return true;
+  if (!readings) return false;
+  // 々는 앞 글자를 한 번 더 쓴 것이다(人々 = 人人).
+  const chars = [...expected].map((ch, i, all) => (ch === "々" && i > 0 ? all[i - 1] : ch));
+  const memo = new Map<string, boolean>();
+  const walk = (i: number, j: number): boolean => {
+    if (i === chars.length) return j === given.length;
+    const key = `${i}:${j}`;
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+    const ch = chars[i];
+    let ok = given[j] === ch && walk(i + 1, j + 1);
+    if (!ok && IS_KANJI.test(ch)) {
+      for (const { kana, okurigana } of readings(ch) ?? []) {
+        if (!okuriganaFits(okurigana, chars[i + 1])) continue;
+        if (readingFits(kana, given.slice(j, j + kana.length)) && walk(i + 1, j + kana.length)) {
+          ok = true;
+          break;
+        }
+      }
+    }
+    memo.set(key, ok);
+    return ok;
+  };
+  return walk(0, 0);
 }
 
 /** 일본어로만 된 답 — AI 재확인에 넘겨도 되는 모양이다. */

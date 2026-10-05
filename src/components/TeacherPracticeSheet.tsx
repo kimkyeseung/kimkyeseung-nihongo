@@ -17,10 +17,12 @@ import {
   canAskJudge,
   countVerdicts,
   isCorrectAnswer,
+  kanjiReadingStems,
   modelAnswer,
   parseJudgement,
   parsePracticeProblems,
   prepareProblem,
+  type KanjiReadings,
   type PracticeProblem,
   type PracticeTarget,
   type PracticeVerdict,
@@ -134,6 +136,29 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
     reviewerRef.current = reviewer;
     judgeRef.current = judge;
   });
+
+  // 한자 읽기 — 모범 답이 한자여도 히라가나로 친 답을 맞게 본다(matchesWithReadings). kanji.json이
+  // 무거워서(391KB) 시트를 열 때 따로 받는다. 받기 전에 낸 답은 예전처럼 AI 재확인으로 넘어간다.
+  const kanjiReadingsRef = useRef<KanjiReadings | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void import("../lib/kanji")
+      .then(({ getKanjiEntry }) => {
+        if (!alive) return;
+        const cache = new Map<string, ReturnType<typeof kanjiReadingStems> | undefined>();
+        kanjiReadingsRef.current = (kanji) => {
+          if (!cache.has(kanji)) {
+            const entry = getKanjiEntry(kanji);
+            cache.set(kanji, entry ? kanjiReadingStems(entry) : undefined);
+          }
+          return cache.get(kanji);
+        };
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // StrictMode에서 effect가 마운트→언마운트→마운트로 두 번 돈다. 요청을 두 번 보내지 않으려고
   // "시작했는가"는 ref로 막고, 결과를 반영할지는 "지금 붙어 있는가"로 따로 본다 — cleanup에서
@@ -279,7 +304,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
     if (phase.kind !== "solving" || submitted !== null) return;
     const problem = phase.problems[phase.index];
     setSubmitted(response);
-    if (isCorrectAnswer(problem, response)) {
+    if (isCorrectAnswer(problem, response, kanjiReadingsRef.current)) {
       setVerdict("correct");
       celebrate();
       return;
