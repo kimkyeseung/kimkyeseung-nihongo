@@ -105,7 +105,7 @@ export const PRACTICE_FORMAT = [
   "",
   "유형:",
   "- 빈칸: 한국어 뜻과 빈칸 ＿＿ 이 하나 있는 일본어 문장. 정답은 빈칸에 들어갈 짧은 말. 여럿이면 / 로 나눠 모두.",
-  "- 객관식: 보기 4개. 네 보기는 전부 서로 다른 말이어야 합니다.",
+  "- 객관식: 보기 4개. 네 보기는 전부 서로 다른 말이어야 합니다. 정답 보기의 말을 질문에 그대로 쓰지 마세요.",
   "- 배열: 한국어 뜻과, 정답 문장을 정답 순서대로 / 로 나눈 조각 3~6개. 조각을 다 이으면 한국어 뜻의 문장 전체가 되어야 합니다(문장 끝 말까지 조각에 넣으세요).",
   "- 고치기: 문법이 한 군데 틀린 일본어 문장과 한국어 뜻. 정답은 고친 문장.",
   "",
@@ -357,6 +357,24 @@ function newDraft(question: string): Draft {
   };
 }
 
+/**
+ * 정답 보기가 질문에 그대로 적혀 있는가 — 그러면 질문의 글자를 고르기만 하면 맞는다(실제로 받았다:
+ * 「한자 `子`가 들어간 단어 중 '아이'를 뜻하는 것은?」에 보기 子·洗う·戻る·西, 정답 子).
+ * 백틱으로 감싼 말이 정답과 같으면 확실히 그렇다. 백틱 밖이라도 두 글자 이상인 정답이 질문에 들어
+ * 있고 다른 보기는 하나도 안 들어 있으면 그렇게 본다 — 한 글자 조사(は·が)는 평범한 문장에도 흔해서
+ * 백틱 밖에서는 따지지 않는다.
+ */
+function givesAwayChoice(question: string, correct: string, choices: string[]): boolean {
+  const answer = normalizeAnswer(correct);
+  if (!answer || !HAS_JAPANESE.test(answer)) return false;
+  const quoted = [...question.matchAll(INLINE_CODE)].map((m) => normalizeAnswer(m[1]));
+  if (quoted.includes(answer)) return true;
+  if (answer.length < 2) return false;
+  const text = normalizeAnswer(question);
+  const others = choices.filter((c) => c !== correct).map(normalizeAnswer);
+  return text.includes(answer) && !others.some((o) => o && text.includes(o));
+}
+
 function finishChoice(draft: Draft): ChoiceProblem | null {
   const ordered: string[] = [];
   // 번호가 1부터 빈틈없이 이어져야 한다 — 2번이 빠진 채로 모으면 "정답: 3"이 가리키는
@@ -383,6 +401,7 @@ function finishChoice(draft: Draft): ChoiceProblem | null {
   const correct = ordered[answerNumber - 1];
   const unique = [...new Set(ordered)];
   if (unique.length < MIN_CHOICES) return null;
+  if (givesAwayChoice(draft.question, correct, unique)) return null;
   return {
     kind: "choice",
     question: draft.question,

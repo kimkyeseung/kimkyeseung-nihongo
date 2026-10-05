@@ -164,6 +164,26 @@ describe("parsePracticeProblems — 객관식", () => {
   });
 });
 
+describe("parsePracticeProblems — 정답이 질문에 적힌 객관식", () => {
+  const choice = (question: string, choices: string[], answer: number) =>
+    parsePracticeProblems(
+      ["유형: 객관식", `질문: ${question}`, ...choices.map((c, i) => `${i + 1}. ${c}`), `정답: ${answer}`].join("\n")
+    );
+
+  it("정답 보기가 질문에 그대로 있으면 버린다 (실제로 받은 문제)", () => {
+    expect(choice("한자 `子`가 들어간 단어 중, '아이'나 '어린아이'를 의미하는 것은?", ["子", "洗う", "戻る", "西"], 1)).toEqual([]);
+    expect(choice("「한 개만 주세요」를 一つだけください라고 할 때 맞는 것은?", ["一つからください", "一つだけください", "一つまでください"], 2)).toEqual([]);
+  });
+
+  it("평범한 객관식은 살린다", () => {
+    expect(choice("「한 개만 주세요」는?", ["一つからください", "一つだけください", "一つまでください"], 2)).toHaveLength(1);
+    // 한 글자 조사가 질문 문장 속에 있는 건 흔하다 — 백틱 밖이면 따지지 않는다.
+    expect(choice("`今日は雨＿＿降っています。` 빈칸에 알맞은 것은?", ["は", "が", "を"], 2)).toHaveLength(1);
+    // 질문에 보기가 여럿 나오면 정답만 드러난 게 아니다.
+    expect(choice("食べる와 飲む 중 「먹다」는?", ["食べる", "飲む", "見る"], 1)).toHaveLength(1);
+  });
+});
+
 describe("parsePracticeProblems — 배열·고치기", () => {
   it("조각을 / 없이 띄어 써도 가른다", () => {
     const [p] = parsePracticeProblems("유형: 배열\n질문: 「물만」\n조각: 水 だけ 飲みました") as [OrderProblem];
