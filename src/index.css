@@ -171,3 +171,8 @@ html[data-scroll-locked] :is(main, .overflow-y-auto, .overflow-auto):not([data-m
 [data-modal] > [class*="max-h-"] {
   max-height: calc(var(--app-height, 100svh) * 0.85);
 }
+
+/* 화면 키보드가 떠 있는 동안 하단 네비를 숨긴다(appViewport.ts의 isKeyboardOpen). */
+html[data-keyboard] .app-nav {
+  display: none;
+}

@@ -257,7 +257,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
                      conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
                      sentenceReview.test.ts · kanjiWriting.test.ts · studyCalendar.test.ts ·
-                     teacherCommands.test.ts · levelTest.test.ts
+                     teacherCommands.test.ts · levelTest.test.ts · appViewport.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -1343,7 +1343,7 @@ flexbox의 잘 알려진 함정으로, flex 아이템은 기본적으로 `min-he
 `--app-height`/`--app-top`)이고, `appViewport.ts`(App.tsx에서 시작)가 `visualViewport`로 그 변수를 갱신한다.
 index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Android Chrome이 레이아웃 자체를
 줄인다 — iOS Safari는 이 설정을 몰라서 JS 쪽이 필요하다). 모달 막(`[data-modal]`)과 시트의 `max-h-*`도 같은
-변수를 따른다. 핀치 줌 중에는 변수를 지워 100svh로 돌아간다. **뿌리를 다시 `h-svh` 흐름 레이아웃으로 돌리지 말
+변수를 따른다. 핀치 줌 중에는 변수를 지워 100svh로 돌아간다. **키보드가 떠 있는 동안은 하단 네비를 숨긴다**(사용자 요청 — `<html data-keyboard>` + `.app-nav`). 판정은 `isKeyboardOpen`(입력창 포커스 **그리고** 보이는 높이가 150px 넘게 줄었을 때 — 포커스만 보면 Android 뒤로 가기로 키보드만 내렸을 때 네비가 안 돌아오고, 높이만 보면 주소창 접힘을 키보드로 안다)이고 `appViewport.test.ts`가 고정한다. **뿌리를 다시 `h-svh` 흐름 레이아웃으로 돌리지 말
 것.** 헤드리스에서 창 높이를 줄여(Android 방식) 헤더·입력창·네비가 보이는 영역에 붙고 문서 스크롤이 0인 것을
 확인했다 — iOS Safari(문서를 밀어 올리는 방식)는 실기기로 확인하지 못했다.
 
