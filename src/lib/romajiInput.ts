@@ -51,3 +51,18 @@ export function convertTypedRomaji(
     cursor: start + converted.length,
   };
 }
+
+/**
+ * 조합(IME composition) 중인 입력도 변환할 것인가.
+ *
+ * **Android 키보드(Gboard 등)는 영문 자판으로 칠 때도 단어 단위로 "조합 중"으로 보낸다** — 스페이스를
+ * 치기 전까지 모든 input 이벤트가 `isComposing`이다. 예전엔 조합 중이면 무조건 건너뛰어서 **폰에서는
+ * 일본어 모드가 아예 동작하지 않았다**(로마자가 그대로 남았다 — 실제로 보고받았다). 데스크톱 키보드는
+ * 조합이 없어 멀쩡해 보였다.
+ *
+ * 그래서 조합 중인 글자가 **영문(ASCII)뿐이면** 변환한다(wanakana `bind()`도 같은 기준이다). 한글
+ * 조합(ㅎ→하→한)이나 일본어 IME의 조합은 건드리면 글자가 깨지므로 그대로 둔다.
+ */
+export function shouldConvertWhileComposing(data: string | null | undefined): boolean {
+  return /^[\x20-\x7E]*$/.test(data ?? "");
+}

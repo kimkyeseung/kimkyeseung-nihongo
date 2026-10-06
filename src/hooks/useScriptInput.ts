@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { convertTypedRomaji } from "../lib/romajiInput";
+import { convertTypedRomaji, shouldConvertWhileComposing } from "../lib/romajiInput";
 
 /**
  * 입력창이 지금 어떤 문자를 받는 중인지.
@@ -56,7 +56,12 @@ export function useScriptInput<T extends HTMLInputElement | HTMLTextAreaElement>
   // React가 value를 관리하지 않으므로 이걸 안 하면 보낸 뒤에도 입력창에 글이 남는다.
   useEffect(() => {
     valueRef.current = value;
-    if (el && el.value !== value) el.value = value;
+    if (el && el.value !== value) {
+      el.value = value;
+      // 보낸 뒤 비우기처럼 바깥에서 짧아졌으면 "변환하지 않을 앞부분"도 같이 줄인다. 안 그러면 다음
+      // 질문의 첫 글자들이 옛 바닥 안에 들어가 변환되지 않는다(`ka` → `kあ`).
+      committedRef.current = Math.min(committedRef.current, value.length);
+    }
   }, [el, value]);
 
   useEffect(() => {
@@ -87,9 +92,10 @@ export function useScriptInput<T extends HTMLInputElement | HTMLTextAreaElement>
     }
 
     const handleInput = (event: Event) => {
-      // 조합(IME) 중에는 건드리지 않는다 — 한글을 조합하는 중간 상태를 로마자로 오인해 변환하면
-      // 글자가 깨진다.
-      if (japanese && !(event as InputEvent).isComposing) {
+      // 조합(IME) 중이라도 **영문 조합이면 변환한다** — Android 키보드는 영문도 단어 단위로 조합해서
+      // 보낸다(shouldConvertWhileComposing 주석). 한글·일본어 IME 조합은 건드리면 글자가 깨지므로 둔다.
+      const e = event as InputEvent;
+      if (japanese && (!e.isComposing || shouldConvertWhileComposing(e.data))) {
         // 지우다가 바닥보다 짧아졌으면 바닥도 같이 내려온다.
         committedRef.current = Math.min(committedRef.current, el.value.length);
         const converted = convertTypedRomaji(
@@ -106,6 +112,8 @@ export function useScriptInput<T extends HTMLInputElement | HTMLTextAreaElement>
       onValueChangeRef.current(el.value);
     };
     el.addEventListener("input", handleInput);
+    // 조합이 끝날 때도 한 번 더 — 확정 직전의 input 이벤트는 아직 isComposing이라 위에서 놓칠 수 있다.
+    el.addEventListener("compositionend", handleInput);
 
     /**
      * Tab으로 모드 전환.
@@ -127,6 +135,7 @@ export function useScriptInput<T extends HTMLInputElement | HTMLTextAreaElement>
 
     return () => {
       el.removeEventListener("input", handleInput);
+      el.removeEventListener("compositionend", handleInput);
       el.removeEventListener("keydown", handleKeyDown);
     };
   }, [el, script]);
