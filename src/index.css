@@ -127,3 +127,52 @@ body {
 .btn-press:disabled:active {
   transform: none;
 }
+
+/*
+ * 모달이 떠 있는 동안 뒤쪽 본문을 멈춘다(useScrollLock). 이 앱은 body가 아니라 <main>과 안쪽 목록이
+ * 스크롤되므로 그 스크롤 영역들을 잠근다. 모달 안(`data-modal`)의 스크롤 영역은 그대로 둔다.
+ * `overflow: hidden`은 scrollTop을 지우지 않는다 — 닫으면 보던 자리다.
+ */
+html[data-scroll-locked],
+html[data-scroll-locked] body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html[data-scroll-locked] :is(main, .overflow-y-auto, .overflow-auto):not([data-modal], [data-modal] *) {
+  overflow: hidden !important;
+}
+/* 모달 안의 스크롤이 끝에 닿아도 바깥으로 넘기지 않는다. */
+[data-modal] :is(.overflow-y-auto, .overflow-auto),
+:is(.overflow-y-auto, .overflow-auto)[data-modal] {
+  overscroll-behavior: contain;
+}
+
+/*
+ * 앱(Layout)의 뿌리. 모바일 키보드가 올라와도 **보이는 영역(visual viewport)에 붙어 있게** 한다 —
+ * 높이·위치는 appViewport.ts가 visualViewport로 갱신한다. 흐름 밖(fixed)이라 body는 스크롤할 것이
+ * 없고, 그래서 키보드가 문서를 밀어 올려도 화면 전체가 움직이지 않는다. 대문(`/`)은 Layout 밖이라
+ * 예전처럼 body가 스크롤한다.
+ */
+.app-shell {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--app-top, 0px);
+  height: var(--app-height, 100svh);
+}
+
+/* 모달 막도 보이는 영역에 맞춘다 — `inset-0`이면 키보드 뒤로 시트 아랫부분(입력창·버튼)이 숨는다. */
+[data-modal] {
+  top: var(--app-top, 0px) !important;
+  bottom: auto !important;
+  height: var(--app-height, 100svh);
+}
+/* 시트의 최대 높이(`max-h-[85vh]`)도 보이는 영역 기준으로 — 키보드가 올라오면 위가 잘리지 않게 줄어든다. */
+[data-modal] > [class*="max-h-"] {
+  max-height: calc(var(--app-height, 100svh) * 0.85);
+}
+
+/* 화면 키보드가 떠 있는 동안 하단 네비를 숨긴다(appViewport.ts의 isKeyboardOpen). */
+html[data-keyboard] .app-nav {
+  display: none;
+}

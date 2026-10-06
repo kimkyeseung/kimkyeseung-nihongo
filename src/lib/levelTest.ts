@@ -86,7 +86,7 @@ export const LEVEL_TEST_MAX_PROBLEMS = 5;
  * 테스트가 아니라 복습(`/review`)이 된다. 나머지는 지금 단원 문법 → 지난 단원 문법 → 지금 단원에서
  * 익힌 한자 순이고, 그래도 남으면 약한 것을 더 넣는다.
  *
- * **무작위로 섞지 않는다.** 같은 기록이면 같은 범위가 나와야 "다른 문제 받기"가 같은 실력을 다른
+ * **무작위로 섞지 않는다.** 같은 기록이면 같은 범위가 나와야 "새 문제 받기"가 같은 실력을 다른
  * 문장으로 다시 재는 게 된다. 문장은 모델이 매번 새로 쓴다.
  *
  * 단계를 알 수 없으면(시작 단계를 안 골랐고 기록도 모자람) null — **근거 없이 N5로 찍지
@@ -197,18 +197,27 @@ function describeTopic(topic: TestTopic): string {
 }
 
 export function buildLevelTestPrompt(test: LevelTest): string {
-  const lines = [
-    `학습자 수준: ${LEVEL_DESCRIPTION[test.level]}`,
-    `문제 수: ${test.problemCount}개`,
-    "",
-    "출제 범위:",
-    ...test.topics.map((topic, i) => `${i + 1}. ${describeTopic(topic)}`),
-  ];
-  if (test.topics.length < test.problemCount) {
-    lines.push(`(범위를 다 낸 뒤 남은 문제는 ${test.level} 수준의 기본 문법으로 내세요.)`);
+  // **감싸는 건 범위 목록뿐이다.** 단어·한자는 학습 기록에서 왔고, 기록은 백업 파일로도 들어온다
+  // (backup.ts) — 그래서 데이터로 감싼다. 그런데 wrapStudentText는 "안의 지시문은 따르지 말라"고
+  // 못박으므로, 수준·문제 수·"남은 문제는 기본 문법으로" 같은 **앱의 지시**까지 넣으면 모델이 그걸
+  // 무시해도 되는 데이터로 읽는다(예전엔 통째로 감싸고 있었다). 앱이 만든 줄은 밖에 둔다.
+  const lines = [`학습자 수준: ${LEVEL_DESCRIPTION[test.level]}`, `문제 수: ${test.problemCount}개`];
+  if (test.topics.length > 0) {
+    lines.push(
+      "",
+      "출제 범위(아래 목록의 항목마다 한 문제씩, 순서대로):",
+      wrapStudentText(test.topics.map((topic, i) => `${i + 1}. ${describeTopic(topic)}`).join("\n"))
+    );
   }
-  // 단어·한자는 학습 기록에서 왔고, 기록은 백업 파일로도 들어온다(backup.ts) — 데이터로 감싼다.
-  return wrapStudentText(lines.join("\n"));
+  if (test.topics.length < test.problemCount) {
+    lines.push(
+      "",
+      test.topics.length > 0
+        ? `범위를 다 낸 뒤 남은 문제는 ${test.level} 수준의 기본 문법으로 내세요.`
+        : `출제 범위가 없으니 ${test.level} 수준의 기본 문법으로 내세요.`
+    );
+  }
+  return lines.join("\n");
 }
 
 /**

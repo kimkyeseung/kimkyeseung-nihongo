@@ -5,6 +5,7 @@ import ChromeLink from "./ChromeLink";
 import { GEMMA_MODEL, formatBytes } from "../lib/gemmaModel";
 import { MOBILE_DOWNLOAD_WARNING, builtinUnavailableReason } from "../lib/aiCapability";
 import { useAiCapability } from "../hooks/useAiCapability";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 const STORAGE_KEY = "promptApiNoticeDismissed";
 
@@ -35,6 +36,8 @@ function PromptApiOnboardingDialog() {
   // 한 번 번쩍이고 사라지는 것을 막기 위해서다.
   const capability = useAiCapability();
   const show = !dismissed && capability !== null && capability.path !== "builtin-ready";
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(show);
   const canUseGemma = capability?.path === "gemma-required";
 
   function handleClose() {
@@ -50,6 +53,7 @@ function PromptApiOnboardingDialog() {
     <AnimatePresence>
       {show && (
         <motion.div
+          data-modal
           className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

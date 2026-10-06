@@ -14,8 +14,11 @@ import { useConfettiStore } from "../stores/confettiStore";
 import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import type { KanjiEntry } from "../types/kanji";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClose: () => void }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(entry !== null);
   // 획순 보기 ↔ 따라 쓰기. 열려 있던 시트 상태는 저장하지 않는다는 규칙대로 로컬 state다.
   const [view, setView] = useState<"order" | "write">("order");
   const wordLink = useWordLink();
@@ -40,6 +43,7 @@ function KanjiDetailSheet({ entry, onClose }: { entry: KanjiEntry | null; onClos
     <AnimatePresence>
       {entry && (
         <motion.div
+          data-modal
           className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 sm:items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

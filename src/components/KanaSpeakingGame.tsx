@@ -8,6 +8,7 @@ import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent, useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 import type { KanaCell, ScriptMode } from "../data/gojuon";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 /**
  * 오십음도 "2초 발음 게임". 글자가 뜨면 2초 안에 소리 내 읽는다 — 마이크로 듣고
@@ -94,6 +95,8 @@ function GameContent({
   onClose: () => void;
   onRestart: () => void;
 }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(true);
   const [rounds] = useState(() => pickRounds(cells));
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>({ kind: "intro" });
@@ -335,6 +338,7 @@ function GameContent({
 
   return (
     <motion.div
+      data-modal
       className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

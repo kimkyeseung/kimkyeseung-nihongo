@@ -17,10 +17,13 @@ import {
   canAskJudge,
   countVerdicts,
   isCorrectAnswer,
+  kanjiReadingStems,
   modelAnswer,
   parseJudgement,
   parsePracticeProblems,
   prepareProblem,
+  withAvoidList,
+  type KanjiReadings,
   type PracticeProblem,
   type PracticeTarget,
   type PracticeVerdict,
@@ -28,6 +31,7 @@ import {
 import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useTeacherPractice } from "../stores/pageStateStore";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 /**
  * 문제 풀기 시트. 선생님 답변 끝의 "연습해보기"와 `/test`가 쓴다. 3~5문제(빈칸·객관식·배열·
@@ -86,12 +90,27 @@ function fallbackFeedback(verdicts: PracticeVerdict[]): string {
   return "잘했어요! 틀린 문제의 해설을 한 번 더 보고 다시 풀어봐요.";
 }
 
-/** 풀기 시작 상태. 보기·조각은 풀 때마다 새로 섞는다("다시 풀기"도). */
+/** 풀기 시작 상태. 보기·조각은 풀 때마다 새로 섞는다("같은 문제 다시"도). */
 function startSolving(problems: PracticeProblem[]): Phase {
   return { kind: "solving", problems: problems.map((p) => prepareProblem(p)), index: 0, answers: [], verdicts: [] };
 }
 
+/** 문제 순서를 섞는다. 두 문제 이상이면 처음과 다른 순서가 나올 때까지(작은 배열이라 금방이다). */
+function reorder<T>(items: T[]): T[] {
+  if (items.length < 2) return items;
+  for (;;) {
+    const next = [...items];
+    for (let i = next.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    if (next.some((item, i) => item !== items[i])) return next;
+  }
+}
+
 function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose: () => void }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(true);
   // 지시문은 마운트 동안 바뀌지 않는다(target이 바뀌면 key로 새로 마운트된다).
   const generator = useAiModel(target.systemPrompt);
   const reviewer = useAiModel(PRACTICE_FEEDBACK_SYSTEM_PROMPT);
@@ -114,7 +133,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
   const [judging, setJudging] = useState(false);
   const [judgeReason, setJudgeReason] = useState("");
   /**
-   * 늦게 도착한 판정을 버리기 위한 번호. 재확인 중에 시트를 닫거나 "다시 풀기"를 누르면
+   * 늦게 도착한 판정을 버리기 위한 번호. 재확인 중에 시트를 닫거나 "같은 문제 다시"를 누르면
    * 앞 문제의 판정이 다음 문제에 붙을 수 있다.
    */
   const judgeTokenRef = useRef(0);
@@ -135,6 +154,29 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
     judgeRef.current = judge;
   });
 
+  // 한자 읽기 — 모범 답이 한자여도 히라가나로 친 답을 맞게 본다(matchesWithReadings). kanji.json이
+  // 무거워서(391KB) 시트를 열 때 따로 받는다. 받기 전에 낸 답은 예전처럼 AI 재확인으로 넘어간다.
+  const kanjiReadingsRef = useRef<KanjiReadings | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void import("../lib/kanji")
+      .then(({ getKanjiEntry }) => {
+        if (!alive) return;
+        const cache = new Map<string, ReturnType<typeof kanjiReadingStems> | undefined>();
+        kanjiReadingsRef.current = (kanji) => {
+          if (!cache.has(kanji)) {
+            const entry = getKanjiEntry(kanji);
+            cache.set(kanji, entry ? kanjiReadingStems(entry) : undefined);
+          }
+          return cache.get(kanji);
+        };
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // StrictMode에서 effect가 마운트→언마운트→마운트로 두 번 돈다. 요청을 두 번 보내지 않으려고
   // "시작했는가"는 ref로 막고, 결과를 반영할지는 "지금 붙어 있는가"로 따로 본다 — cleanup에서
   // 취소 플래그를 세우면 두 번째 마운트는 시작하지 않으니 결과가 영영 반영되지 않는다.
@@ -145,6 +187,12 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
       mountedRef.current = false;
     };
   }, []);
+
+  /**
+   * 이 시트에서 이미 낸 문제의 질문들. "새 문제 받기"가 같은 프롬프트를 다시 보내면 같은 문제가 나와서
+   * (withAvoidList 주석) 출제 프롬프트에 붙여 피하게 한다.
+   */
+  const shownQuestionsRef = useRef<string[]>(cached ? cached.problems.map((p) => p.question) : []);
 
   const [generation, setGeneration] = useState(0);
   const startedGenerationRef = useRef<number | null>(null);
@@ -159,8 +207,10 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
       const collected: PracticeProblem[] = [];
       try {
         for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
-          const raw = await model.prompt(target.prompt);
-          // 한 번 만든 세션을 계속 쓰면 재시도·"다른 문제 받기"에 앞서 낸 문제를 모델이 기억해
+          // 재시도에도 이번에 이미 건진 문제를 피하게 한다 — 같은 입력이면 같은 답이 다시 온다.
+          const avoid = [...shownQuestionsRef.current, ...collected.map((c) => c.question)];
+          const raw = await model.prompt(withAvoidList(target.prompt, avoid));
+          // 한 번 만든 세션을 계속 쓰면 재시도·"새 문제 받기"에 앞서 낸 문제를 모델이 기억해
           // 같은 걸 또 낸다 — 받을 때마다 새 세션으로 시작한다. 유출이 있었다면 오염된 턴을
           // 버리는 의미도 있다.
           model.resetSession();
@@ -171,12 +221,16 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
           const leaked = looksLikePromptLeak(raw, target.leakReference);
           const parsed = leaked ? [] : parsePracticeProblems(raw);
           for (const p of parsed) {
-            if (collected.length < target.maxProblems && !collected.some((c) => c.question === p.question)) {
+            // 피하라고 했는데도 같은 문제를 다시 쓰면 버린다.
+            const seen = (q: string) =>
+              collected.some((c) => c.question === q) || shownQuestionsRef.current.includes(q);
+            if (collected.length < target.maxProblems && !seen(p.question)) {
               collected.push(p);
             }
           }
           const problems = collected;
           if (problems.length >= MIN_PRACTICE_PROBLEMS) {
+            shownQuestionsRef.current = [...shownQuestionsRef.current, ...problems.map((p) => p.question)];
             saveProblems(target.id, problems);
             setPhase(startSolving(problems));
             return;
@@ -215,7 +269,9 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
   function retrySame(problems: PracticeProblem[]) {
     resetQuestion();
     setFeedback("");
-    setPhase(startSolving(problems));
+    // 문제 순서도 섞는다 — 같은 순서면 "1번은 그거였지"로 풀게 되고, 학습자에게는 버튼이 아무 일도
+    // 안 한 것처럼 보인다(실제로 "완전히 같은 문제가 나왔다"고 보고받았다). 새 문제는 "새 문제 받기"다.
+    setPhase(startSolving(reorder(problems)));
   }
 
   async function requestFeedback(problems: PracticeProblem[], answers: string[], verdicts: PracticeVerdict[]) {
@@ -279,7 +335,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
     if (phase.kind !== "solving" || submitted !== null) return;
     const problem = phase.problems[phase.index];
     setSubmitted(response);
-    if (isCorrectAnswer(problem, response)) {
+    if (isCorrectAnswer(problem, response, kanjiReadingsRef.current)) {
       setVerdict("correct");
       celebrate();
       return;
@@ -314,6 +370,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
 
   return (
     <motion.div
+      data-modal
       className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -367,7 +424,7 @@ function PracticeContent({ target, onClose }: { target: PracticeTarget; onClose:
 
         {phase.kind === "solving" && (
           // 문제가 바뀌면 통째로 새로 만든다 — 입력창(uncontrolled)과 배열 조각 상태를 비우려면
-          // 리마운트가 가장 확실하다("다시 풀기"로 같은 1번에 돌아와도 비어 있어야 한다).
+          // 리마운트가 가장 확실하다("같은 문제 다시"로 같은 1번에 돌아와도 비어 있어야 한다).
           <PracticeQuestion
             key={`${generation}-${phase.index}-${phase.answers.length}`}
             problem={phase.problems[phase.index]}
@@ -472,7 +529,7 @@ function ResultView({
       </div>
 
       {/* 버튼은 처음부터 그려 둔다 — 피드백이 끝날 때 나타나게 하면 그 순간 한 번 더 튄다.
-          다시 풀기·다른 문제 받기만 피드백을 받는 동안 막는다(세션이 겹친다). 완료는 언제든. */}
+          같은 문제 다시·새 문제 받기만 피드백을 받는 동안 막는다(세션이 겹친다). 완료는 언제든. */}
       <div className="mt-2 flex flex-col gap-2">
         <div className="flex gap-2">
           <button
@@ -480,14 +537,14 @@ function ResultView({
             disabled={feedbackLoading}
             className="flex-1 rounded-2xl border-2 border-gray-100 py-3 font-bold text-gray-500 disabled:text-gray-300"
           >
-            다시 풀기
+            같은 문제 다시
           </button>
           <button
             onClick={onRegenerate}
             disabled={feedbackLoading}
             className="flex-1 rounded-2xl border-2 border-gray-100 py-3 font-bold text-gray-500 disabled:text-gray-300"
           >
-            다른 문제 받기
+            새 문제 받기
           </button>
         </div>
         <button

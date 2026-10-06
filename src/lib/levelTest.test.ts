@@ -124,7 +124,7 @@ describe("planLevelTest", () => {
     expect(planLevelTest({ ...base, currentUnit: unit(1, ["a", "b", "c", "d"]) })?.problemCount).toBe(4);
   });
 
-  it("같은 기록이면 같은 범위 — '다른 문제 받기'가 같은 실력을 다시 잰다", () => {
+  it("같은 기록이면 같은 범위 — '새 문제 받기'가 같은 실력을 다시 잰다", () => {
     const input = { ...base, weakKanji: ["曜"], currentUnit: unit(3, ["〜ても", "〜たら"]) };
     expect(planLevelTest(input)).toEqual(planLevelTest(input));
   });
@@ -142,6 +142,23 @@ describe("buildLevelTestPrompt", () => {
     expect(prompt).toContain("1. 단어 `食べ物`(たべもの)");
     expect(prompt).toContain("2. 문법 〜ても");
     expect(prompt).toMatch(/<<<STUDENT_TEXT:/);
+  });
+
+  it("앱의 지시(수준·문제 수·채우기)는 데이터 블록 밖에 둔다 — 안에 두면 '따르지 말라'에 걸린다", () => {
+    const test = planLevelTest({ ...base, weakWords: [{ word: "食べ物", reading: "たべもの" }] })!;
+    const prompt = buildLevelTestPrompt(test);
+    const open = prompt.indexOf("<<<STUDENT_TEXT:");
+    expect(open).toBeGreaterThan(prompt.indexOf("학습자 수준: N4"));
+    expect(open).toBeGreaterThan(prompt.indexOf(`문제 수: ${test.problemCount}개`));
+    expect(prompt.lastIndexOf(">>>")).toBeLessThan(prompt.indexOf("N4 수준의 기본 문법"));
+  });
+
+  it("범위가 비면 데이터 블록 없이 기본 문법으로 내라고 한다", () => {
+    const test = planLevelTest(base)!;
+    expect(test.topics).toEqual([]);
+    const prompt = buildLevelTestPrompt(test);
+    expect(prompt).not.toMatch(/<<<STUDENT_TEXT:/);
+    expect(prompt).toContain("N4 수준의 기본 문법");
   });
 
   it("범위가 모자라면 기본 문법으로 채우라고 한다", () => {

@@ -11,6 +11,9 @@ import {
   canAskJudge,
   countVerdicts,
   isCorrectAnswer,
+  kanjiReadingStems,
+  withAvoidList,
+  MAX_AVOID_QUESTIONS,
   isPracticeWorthy,
   modelAnswer,
   normalizeAnswer,
@@ -24,6 +27,13 @@ import {
   type PracticeProblem,
 } from "./teacherPractice";
 import { REFUSE_PROMPT_DISCLOSURE, looksLikePromptLeak } from "./promptSafety";
+import { getKanjiEntry } from "./kanji";
+
+/** 시트가 넘기는 것과 같은 읽기 조회 — 실제 KANJIDIC 데이터로. */
+const readings = (kanji: string) => {
+  const entry = getKanjiEntry(kanji);
+  return entry ? kanjiReadingStems(entry) : undefined;
+};
 
 const DAKE_ANSWER = `조사 \`だけ\`는 어떤 대상이나 수량을 한정하여 "~만", "~뿐"이라는 의미를 나타내는 아주 유용한 표현입니다.
 
@@ -156,6 +166,26 @@ describe("parsePracticeProblems — 객관식", () => {
   });
 });
 
+describe("parsePracticeProblems — 정답이 질문에 적힌 객관식", () => {
+  const choice = (question: string, choices: string[], answer: number) =>
+    parsePracticeProblems(
+      ["유형: 객관식", `질문: ${question}`, ...choices.map((c, i) => `${i + 1}. ${c}`), `정답: ${answer}`].join("\n")
+    );
+
+  it("정답 보기가 질문에 그대로 있으면 버린다 (실제로 받은 문제)", () => {
+    expect(choice("한자 `子`가 들어간 단어 중, '아이'나 '어린아이'를 의미하는 것은?", ["子", "洗う", "戻る", "西"], 1)).toEqual([]);
+    expect(choice("「한 개만 주세요」를 一つだけください라고 할 때 맞는 것은?", ["一つからください", "一つだけください", "一つまでください"], 2)).toEqual([]);
+  });
+
+  it("평범한 객관식은 살린다", () => {
+    expect(choice("「한 개만 주세요」는?", ["一つからください", "一つだけください", "一つまでください"], 2)).toHaveLength(1);
+    // 한 글자 조사가 질문 문장 속에 있는 건 흔하다 — 백틱 밖이면 따지지 않는다.
+    expect(choice("`今日は雨＿＿降っています。` 빈칸에 알맞은 것은?", ["は", "が", "を"], 2)).toHaveLength(1);
+    // 질문에 보기가 여럿 나오면 정답만 드러난 게 아니다.
+    expect(choice("食べる와 飲む 중 「먹다」는?", ["食べる", "飲む", "見る"], 1)).toHaveLength(1);
+  });
+});
+
 describe("parsePracticeProblems — 배열·고치기", () => {
   it("조각을 / 없이 띄어 써도 가른다", () => {
     const [p] = parsePracticeProblems("유형: 배열\n질문: 「물만」\n조각: 水 だけ 飲みました") as [OrderProblem];
@@ -165,6 +195,19 @@ describe("parsePracticeProblems — 배열·고치기", () => {
   it("조각이 모자라거나 일본어가 아니면 버린다", () => {
     expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: 水 / だけ")).toEqual([]);
     expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: 물 / 만 / 마셨다")).toEqual([]);
+    // 실제로 받은 문제: 「그 아이의 이름은 지수입니다」인데 조각이 문장 앞부분뿐이었다.
+    expect(parsePracticeProblems("유형: 배열\n질문: 「그 아이의 이름은 지수입니다」\n조각: 子 / の / 名前 / は")).toEqual([]);
+    expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: を / 水 / 飲みました")).toEqual([]);
+    // の·か로 끝나는 문장은 살린다.
+    expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: どこ / に / 行く / の")).toHaveLength(1);
+    expect(parsePracticeProblems("유형: 배열\n질문: A\n조각: 何 / を / 食べます / か")).toHaveLength(1);
+  });
+
+  it("고치기: 앞에 낱말 백틱이 있어도 문장을 고칠 대상으로 본다", () => {
+    const [p] = parsePracticeProblems(
+      "유형: 고치기\n질문: `だけ`를 바르게 써서 고치세요. `水をだけ飲みました。`\n정답: 水だけ飲みました。"
+    );
+    expect(p?.kind).toBe("fix");
   });
 
   it("고치기는 문장 안의 쉼표로 정답을 가르지 않는다", () => {
@@ -177,6 +220,13 @@ describe("parsePracticeProblems — 배열·고치기", () => {
   it("고친 문장이 원래 문장과 같거나, 틀린 문장이 문제에 없으면 버린다", () => {
     expect(parsePracticeProblems("유형: 고치기\n질문: `水だけ飲みました。`\n정답: 水だけ飲みました。")).toEqual([]);
     expect(parsePracticeProblems("유형: 고치기\n질문: 틀린 곳을 고치세요\n정답: 水だけ飲みました。")).toEqual([]);
+    // 실제로 받은 문제: 낱말 `なぜ`가 먼저 나오고, 보여준 문장이 이미 올바랐다 — 베껴 쓰면 정답이었다.
+    expect(
+      parsePracticeProblems(
+        "유형: 고치기\n질문: \"이 방은 왜 이렇게 어두운가요?\"를 `なぜ`를 사용하여 표현할 때 올바른 문장은? " +
+          "`この部屋はなぜこんなに暗いのですか？`\n정답: この部屋はなぜこんなに暗いのですか"
+      )
+    ).toEqual([]);
   });
 });
 
@@ -251,6 +301,40 @@ describe("isCorrectAnswer", () => {
     expect(isCorrectAnswer(furi, "降り")).toBe(true);
     expect(isCorrectAnswer(furi, "ふり")).toBe(false);
     expect(canAskJudge(furi, "ふり")).toBe(true);
+  });
+
+  it("한자 정답을 히라가나로 쳐도 맞다 — 읽기는 KANJIDIC에서 (실제로 보고받았다: 並んで ← ならんで)", () => {
+    const narande: BlankProblem = { ...KAMO, question: "`人々が＿＿並びます。`", answers: ["並んで"] };
+    for (const typed of ["ならんで", "並んで", "narande", "ナランデ"]) {
+      expect(isCorrectAnswer(narande, typed, readings)).toBe(true);
+    }
+    for (const typed of ["ならべて", "なんで", "ならん"]) {
+      expect(isCorrectAnswer(narande, typed, readings)).toBe(false);
+    }
+    const furi: BlankProblem = { ...KAMO, question: "`雨が＿＿そうだ。`", answers: ["降り"] };
+    expect(isCorrectAnswer(furi, "ふり", readings)).toBe(true);
+    // 빈칸을 채운 문장 통째로, 가나·한자를 섞어서
+    expect(isCorrectAnswer(furi, "あめがふりそうだ", readings)).toBe(true);
+    expect(isCorrectAnswer(furi, "雨がふりそうだ", readings)).toBe(true);
+  });
+
+  it("고치기: 문장의 한자를 가나로 써도 맞다 — 々·연탁·촉음화까지", () => {
+    const fix = (answer: string): PracticeProblem => ({ kind: "fix", question: "`x`", answers: [answer], explanation: "" });
+    expect(isCorrectAnswer(fix("人々が並んでいます。"), "ひとびとがならんでいます", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("学校に行きます。"), "がっこうにいきます", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("この部屋は暗いです。"), "このへやはくらいです", readings)).toBe(true); // 部(べ→へ)+屋(や)
+    expect(isCorrectAnswer(fix("今日は暑いです。"), "きょうはあついです", readings)).toBe(false); // 숙자훈 — AI 재확인 몫
+    expect(isCorrectAnswer(fix("食べました。"), "たべました", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("行って"), "いって", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("買わない"), "かわない", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("この部屋は暗いです。"), "この部屋はくらいです", readings)).toBe(true);
+    expect(isCorrectAnswer(fix("この部屋は暗いです。"), "この部屋はあかるいです", readings)).toBe(false);
+  });
+
+  it("읽기 조회가 없으면(데이터를 아직 못 받음) 예전과 같다", () => {
+    const narande: BlankProblem = { ...KAMO, question: "`人々が＿＿並びます。`", answers: ["並んで"] };
+    expect(isCorrectAnswer(narande, "ならんで")).toBe(false);
+    expect(isCorrectAnswer(narande, "並んで")).toBe(true);
   });
 
   it("객관식: 고른 보기 글자로 판정한다", () => {
@@ -373,5 +457,26 @@ describe("시스템 프롬프트", () => {
 
   it("긴 설명은 잘라서 넣는다 — Gemma의 4096토큰 안에 문제 쓸 자리를 남긴다", () => {
     expect(buildPracticePrompt("질문", "가".repeat(5000)).length).toBeLessThan(2000);
+  });
+});
+
+describe("withAvoidList", () => {
+  it("앞에서 낸 문제가 없으면 프롬프트 그대로", () => {
+    expect(withAvoidList("P", [])).toBe("P");
+  });
+
+  it("앞의 문제를 붙이고, 피하라는 지시는 데이터 블록 밖에 둔다", () => {
+    const prompt = withAvoidList("P", ["「물만」 `水＿＿飲みました。`", "「물만」 `水＿＿飲みました。`"]);
+    const open = prompt.indexOf("<<<STUDENT_TEXT:");
+    expect(prompt.indexOf("새 문장으로 내세요")).toBeLessThan(open);
+    expect(prompt.match(/水＿＿飲みました/g)).toHaveLength(1); // 중복은 한 번만
+  });
+
+  it("최근 것만 MAX_AVOID_QUESTIONS개까지", () => {
+    const qs = Array.from({ length: 20 }, (_, i) => `문제${i}`);
+    const prompt = withAvoidList("P", qs);
+    expect(prompt).toContain("문제19");
+    expect(prompt).not.toContain(`문제${19 - MAX_AVOID_QUESTIONS}\n`);
+    expect(prompt).not.toContain("- 문제0\n");
   });
 });

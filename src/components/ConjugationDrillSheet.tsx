@@ -10,6 +10,7 @@ import { XP_REWARDS } from "../lib/xpRewards";
 import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import type { WordEntry } from "../types/dictionary";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 const PRIMARY_SHADOW = { ["--btn-shadow" as string]: "#3d9401" };
 
@@ -31,6 +32,8 @@ function ConjugationDrillSheet({ pool, onClose }: { pool: WordEntry[] | null; on
 type Result = { question: DrillQuestion; typed: string; correct: boolean };
 
 function DrillContent({ pool, onClose }: { pool: WordEntry[]; onClose: () => void }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(true);
   const [round, setRound] = useState(0);
   const [questions, setQuestions] = useState(() => buildConjugationDrill(pool));
   const [index, setIndex] = useState(0);
@@ -72,6 +75,7 @@ function DrillContent({ pool, onClose }: { pool: WordEntry[]; onClose: () => voi
 
   return (
     <motion.div
+      data-modal
       className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

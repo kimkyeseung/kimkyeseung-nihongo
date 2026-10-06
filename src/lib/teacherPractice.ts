@@ -15,9 +15,10 @@
 // 파싱·채점은 조용히 틀리는 종류의 코드다: 한 글자만 잘못 정규화해도 화면은 멀쩡하고, 제대로
 // 쓴 학습자만 "틀렸어요"를 듣는다. 그래서 teacherPractice.test.ts로 고정해뒀다.
 
-import { toHiragana } from "wanakana";
+import { toHiragana, toRomaji } from "wanakana";
 import { REFUSE_PROMPT_DISCLOSURE, wrapStudentText } from "./promptSafety";
 import { XP_REWARDS } from "./xpRewards";
+import type { KanjiEntry } from "../types/kanji";
 
 export type PracticeKind = "blank" | "choice" | "order" | "fix";
 
@@ -104,8 +105,8 @@ export const PRACTICE_FORMAT = [
   "",
   "유형:",
   "- 빈칸: 한국어 뜻과 빈칸 ＿＿ 이 하나 있는 일본어 문장. 정답은 빈칸에 들어갈 짧은 말. 여럿이면 / 로 나눠 모두.",
-  "- 객관식: 보기 4개. 네 보기는 전부 서로 다른 말이어야 합니다.",
-  "- 배열: 한국어 뜻과, 정답 문장을 정답 순서대로 / 로 나눈 조각 3~6개.",
+  "- 객관식: 보기 4개. 네 보기는 전부 서로 다른 말이어야 합니다. 정답 보기의 말을 질문에 그대로 쓰지 마세요.",
+  "- 배열: 한국어 뜻과, 정답 문장을 정답 순서대로 / 로 나눈 조각 3~6개. 조각을 다 이으면 한국어 뜻의 문장 전체가 되어야 합니다(문장 끝 말까지 조각에 넣으세요).",
   "- 고치기: 문법이 한 군데 틀린 일본어 문장과 한국어 뜻. 정답은 고친 문장.",
   "",
   "출력 형식 (다른 말은 붙이지 말고 이 형식만 반복하세요):",
@@ -171,6 +172,26 @@ export function buildPracticePrompt(question: string, answer: string): string {
   // 선생님 답변은 모델이 쓴 것이지만 결국 학습자 질문에 이어진 내용이라(기억 추출과 같은
   // 방침) 둘 다 데이터로 감싼다.
   return wrapStudentText([`학습자의 질문: ${question}`, "", "선생님의 설명:", trimmed].join("\n"));
+}
+
+/** 피할 문제로 넘기는 최대 개수 — Gemma는 입력+출력 4096토큰이라 끝없이 붙일 수 없다. */
+export const MAX_AVOID_QUESTIONS = 8;
+
+/**
+ * "새 문제 받기"용 프롬프트. **같은 프롬프트를 새 세션에 다시 보내면 같은 문제가 나온다**(실제로 겪었다:
+ * 네 문제가 순서까지 똑같이 나왔다 — 온디바이스 모델은 같은 입력에 거의 같은 답을 낸다). 그래서 앞에서
+ * 낸 문제를 붙여 그것과 다른 문장으로 내라고 한다. 문제 글은 모델이 썼지만 학습 기록에서 온 말이 섞여
+ * 있으니 데이터로 감싸고, 지시는 감싼 블록 **밖에** 둔다(안에 두면 "따르지 말라"에 걸린다 — levelTest와 같다).
+ */
+export function withAvoidList(prompt: string, previousQuestions: string[]): string {
+  const recent = [...new Set(previousQuestions)].slice(-MAX_AVOID_QUESTIONS);
+  if (recent.length === 0) return prompt;
+  return [
+    prompt,
+    "",
+    "아래는 앞에서 이미 낸 문제입니다. 이것과 같은 문제나 같은 문장은 내지 말고, 새 문장으로 내세요.",
+    wrapStudentText(recent.map((q) => `- ${q.replace(/\s+/g, " ").trim()}`).join("\n")),
+  ].join("\n");
 }
 
 /**
@@ -356,6 +377,24 @@ function newDraft(question: string): Draft {
   };
 }
 
+/**
+ * 정답 보기가 질문에 그대로 적혀 있는가 — 그러면 질문의 글자를 고르기만 하면 맞는다(실제로 받았다:
+ * 「한자 `子`가 들어간 단어 중 '아이'를 뜻하는 것은?」에 보기 子·洗う·戻る·西, 정답 子).
+ * 백틱으로 감싼 말이 정답과 같으면 확실히 그렇다. 백틱 밖이라도 두 글자 이상인 정답이 질문에 들어
+ * 있고 다른 보기는 하나도 안 들어 있으면 그렇게 본다 — 한 글자 조사(は·が)는 평범한 문장에도 흔해서
+ * 백틱 밖에서는 따지지 않는다.
+ */
+function givesAwayChoice(question: string, correct: string, choices: string[]): boolean {
+  const answer = normalizeAnswer(correct);
+  if (!answer || !HAS_JAPANESE.test(answer)) return false;
+  const quoted = [...question.matchAll(INLINE_CODE)].map((m) => normalizeAnswer(m[1]));
+  if (quoted.includes(answer)) return true;
+  if (answer.length < 2) return false;
+  const text = normalizeAnswer(question);
+  const others = choices.filter((c) => c !== correct).map(normalizeAnswer);
+  return text.includes(answer) && !others.some((o) => o && text.includes(o));
+}
+
 function finishChoice(draft: Draft): ChoiceProblem | null {
   const ordered: string[] = [];
   // 번호가 1부터 빈틈없이 이어져야 한다 — 2번이 빠진 채로 모으면 "정답: 3"이 가리키는
@@ -382,6 +421,7 @@ function finishChoice(draft: Draft): ChoiceProblem | null {
   const correct = ordered[answerNumber - 1];
   const unique = [...new Set(ordered)];
   if (unique.length < MIN_CHOICES) return null;
+  if (givesAwayChoice(draft.question, correct, unique)) return null;
   return {
     kind: "choice",
     question: draft.question,
@@ -403,12 +443,24 @@ function finishBlank(draft: Draft): BlankProblem | null {
   return { kind: "blank", question: draft.question, answers, explanation: draft.explanation };
 }
 
+/**
+ * 배열 정답의 마지막 조각이 이것뿐이면 문장이 덜 끝났다. の·か·ね·よ는 뺐다 — 문장 끝에 올 수 있다
+ * (「行くの」「行きますか」).
+ */
+const TRAILING_PARTICLE = /^(?:は|が|を|に|へ|と|で|も|や|から|まで|より)$/;
+/** 첫 조각이 조사면 앞이 잘린 문장이다. */
+const LEADING_PARTICLE = /^(?:は|が|を|に|へ|と|で|も|の|や|から|まで|より)$/;
+
 function finishOrder(draft: Draft): OrderProblem | null {
   const pieces = draft.pieces;
   if (!pieces || pieces.length < MIN_PIECES || pieces.length > MAX_PIECES) return null;
   if (!pieces.every((p) => p.length <= MAX_BLANK_ANSWER_LENGTH && JAPANESE_WORD.test(p))) return null;
   // 조각이 전부 같으면 섞어도 문제가 안 된다.
   if (new Set(pieces).size < 2) return null;
+  // 조각이 문장의 일부만 담은 문제는 버린다(실제로 받았다: 「그 아이의 이름은 지수입니다」에 조각이
+  // 子 / の / 名前 / は 뿐이라, 「子の名前は」를 맞히면 정답이었다). 뜻과 맞는지는 코드가 알 수 없지만,
+  // 조사로 끝나거나 조사로 시작하는 "문장"은 확실히 덜 끝났다.
+  if (TRAILING_PARTICLE.test(pieces[pieces.length - 1]) || LEADING_PARTICLE.test(pieces[0])) return null;
   return {
     kind: "order",
     question: draft.question,
@@ -421,7 +473,11 @@ function finishOrder(draft: Draft): OrderProblem | null {
 function finishFix(draft: Draft): FixProblem | null {
   if (draft.answer === null) return null;
   // 틀린 문장이 문제 안에 백틱으로 있어야 한다. 없으면 무엇을 고치라는지 알 수 없다.
-  const wrong = [...draft.question.matchAll(INLINE_CODE)].map((m) => m[1]).find((t) => HAS_JAPANESE.test(t));
+  // 문제 문장에는 `なぜ`처럼 **낱말도 백틱으로** 들어온다 — 첫 번째를 집으면 낱말을 "틀린 문장"으로
+  // 알고 아래 비교가 헛돈다(실제로 겪었다: 올바른 문장을 내고 그대로 베껴 쓰면 정답이었다).
+  // 그래서 가장 긴 것을 고칠 문장으로 보고, 같은지 비교는 백틱 안의 일본어 전부와 한다.
+  const quoted = [...draft.question.matchAll(INLINE_CODE)].map((m) => m[1]).filter((t) => HAS_JAPANESE.test(t));
+  const wrong = quoted.reduce<string | undefined>((a, b) => (a && a.length >= b.length ? a : b), undefined);
   // 빈칸이 든 문장은 고칠 문장이 아니라 빈칸 문제다 — "고치기"라 적고 빈칸을 낸 경우.
   if (!wrong || BLANK.test(wrong)) return null;
   // 문장 안의 쉼표(、)는 정답을 가르는 표시가 아니다.
@@ -429,8 +485,9 @@ function finishFix(draft: Draft): FixProblem | null {
     (a) => a.length <= MAX_SENTENCE_LENGTH && JAPANESE_SENTENCE.test(a)
   );
   if (answers.length === 0) return null;
-  // "고친" 문장이 원래 문장과 같으면 틀린 곳이 없는 문제다.
-  if (answers.some((a) => normalizeAnswer(a) === normalizeAnswer(wrong))) return null;
+  // "고친" 문장이 문제에 보여준 문장과 같으면 틀린 곳이 없는 문제다 — 베껴 쓰기만 해도 정답이 된다.
+  const shown = new Set(quoted.map(normalizeAnswer));
+  if (answers.some((a) => shown.has(normalizeAnswer(a)))) return null;
   return { kind: "fix", question: draft.question, answers, explanation: draft.explanation };
 }
 
@@ -647,25 +704,136 @@ function blankSentence(question: string): string | null {
  * - 객관식: 고른 보기가 정답 보기다.
  * - 배열: 이어 붙인 문장이 정답 순서의 문장과 같다(같은 조각이 두 번 나와도 글자로 비교하니 괜찮다).
  */
-export function isCorrectAnswer(problem: PracticeProblem, response: string): boolean {
+export function isCorrectAnswer(
+  problem: PracticeProblem,
+  response: string,
+  kanjiReadings?: KanjiReadings
+): boolean {
   const given = normalizeAnswer(response);
   if (!given) return false;
+  const same = (expected: string) => matchesWithReadings(normalizeAnswer(expected), given, kanjiReadings);
   switch (problem.kind) {
     case "choice":
       return response === problem.choices[problem.answerIndex];
     case "order":
       return given === normalizeAnswer(problem.pieces.join(""));
     case "fix":
-      return problem.answers.some((a) => normalizeAnswer(a) === given);
+      return problem.answers.some(same);
     case "blank": {
       const sentence = blankSentence(problem.question);
-      return problem.answers.some(
-        (a) =>
-          normalizeAnswer(a) === given ||
-          (sentence !== null && normalizeAnswer(sentence.replace(BLANK, a)) === given)
-      );
+      return problem.answers.some((a) => same(a) || (sentence !== null && same(sentence.replace(BLANK, a))));
     }
   }
+}
+
+/**
+ * 한자 한 글자의 읽기(히라가나). 없으면 undefined. 채점이 한자를 가나로 받아줄 때 쓴다 —
+ * **KANJIDIC 데이터에서만** 온다(읽기는 사전 정보라 모델에게 받지 않는다). kanji.json이 무거워서
+ * 이 모듈은 import하지 않고 부르는 쪽(시트)이 동적 import로 만들어 넘긴다.
+ */
+export type KanjiReadings = (kanji: string) => readonly KanjiReading[] | undefined;
+
+/** 한자 자리에 들어갈 가나와, 훈독이면 그 뒤에 붙는 오쿠리가나(`なら.ぶ` → `なら` + `ぶ`). */
+export interface KanjiReading {
+  kana: string;
+  okurigana: string;
+}
+
+/**
+ * KANJIDIC 읽기를 "한자 자리에 들어갈 가나"로 바꾼다. 훈독은 오쿠리가나 앞까지 — 오쿠리가나는
+ * 모범 답에 이미 가나로 적혀 있다. 접두·접미 표시(`-`)는 뗀다. 오쿠리가나는 따로 들고 있다가
+ * `okuriganaFits`로 모범 답의 다음 글자와 맞는지 본다.
+ */
+export function kanjiReadingStems(entry: Pick<KanjiEntry, "onyomi" | "kunyomi">): KanjiReading[] {
+  const all: KanjiReading[] = [
+    ...entry.onyomi.map((o) => ({ kana: toHiragana(o.replace(/-/g, "")), okurigana: "" })),
+    ...entry.kunyomi.map((k) => {
+      const [kana, okurigana = ""] = k.replace(/-/g, "").split(".");
+      return { kana, okurigana };
+    }),
+  ];
+  const seen = new Set<string>();
+  return all.filter((r) => {
+    const key = `${r.kana}.${r.okurigana}`;
+    if (!r.kana || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function consonant(kana: string): string {
+  return toRomaji(kana).replace(/[aiueo]+$/, "");
+}
+
+/**
+ * 훈독은 **그 오쿠리가나가 올 자리에서만** 쓴다. 안 그러면 並의 `な.み`가 `な` 하나로 남아
+ * `並んで`에 `なんで`까지 맞다고 한다. 오쿠리가나가 그대로 이어지거나, 동사 어미(う단 한 글자)가
+ * 활용으로 바뀐 모양(ぶ → ば·び·べ·ぼ, 음편 ん·っ·い, う → わ)이면 맞는 자리로 본다.
+ */
+function okuriganaFits(okurigana: string, next: string | undefined): boolean {
+  if (!okurigana) return true;
+  if (!next) return false;
+  if (next === okurigana[0]) return true;
+  if (okurigana.length !== 1 || !/u$/.test(toRomaji(okurigana))) return false;
+  if ("んっい".includes(next)) return true;
+  if (okurigana === "う") return next === "わ" || next === "え" || next === "お";
+  return consonant(next) === consonant(okurigana) && /^[ぁ-ゖ]$/.test(next);
+}
+
+/** 탁음·반탁음을 뗀 글자(が → か). 연탁(人々 ひと**び**と)을 받아주려고. */
+function baseKana(ch: string): string {
+  return ch.normalize("NFD")[0];
+}
+
+/** 읽기가 연탁·촉음화(学校 が**っ**こう)로 바뀐 모양까지 받아준다. */
+function readingFits(reading: string, actual: string): boolean {
+  if (reading.length !== actual.length) return false;
+  for (let i = 0; i < reading.length; i++) {
+    if (reading[i] === actual[i]) continue;
+    if (i === 0 && baseKana(reading[i]) === baseKana(actual[i])) continue;
+    if (i === reading.length - 1 && i > 0 && actual[i] === "っ") continue;
+    return false;
+  }
+  return true;
+}
+
+const IS_KANJI = /^[㐀-䶿一-鿿]$/;
+
+/**
+ * 모범 답과 학습자 답이 같은가 — 모범 답의 한자 자리에는 **그 글자 자체나 그 글자의 읽기** 중
+ * 무엇이 와도 된다. 그래서 `並んで`에 `ならんで`도, 섞어 쓴 `並んで`·`なら んで`도 맞다. 학습자가
+ * 일본어 모드(로마자→히라가나)로 치면 한자를 쓸 방법이 없어서, 이게 없으면 제대로 쓴 답이 전부
+ * "틀림"이 된다(실제로 보고받았다). 숙자훈(今日 きょう)처럼 글자별로 안 갈리는 읽기는 못 받는다 —
+ * 그건 AI 재확인으로 넘어간다.
+ *
+ * **한계:** 글자의 읽기 중 아무거나 받으므로 문맥에 안 맞는 읽기(人 = にん/じん)도 통과한다.
+ */
+export function matchesWithReadings(expected: string, given: string, readings?: KanjiReadings): boolean {
+  if (expected === given) return true;
+  if (!readings) return false;
+  // 々는 앞 글자를 한 번 더 쓴 것이다(人々 = 人人).
+  const chars = [...expected].map((ch, i, all) => (ch === "々" && i > 0 ? all[i - 1] : ch));
+  const memo = new Map<string, boolean>();
+  const walk = (i: number, j: number): boolean => {
+    if (i === chars.length) return j === given.length;
+    const key = `${i}:${j}`;
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+    const ch = chars[i];
+    let ok = given[j] === ch && walk(i + 1, j + 1);
+    if (!ok && IS_KANJI.test(ch)) {
+      for (const { kana, okurigana } of readings(ch) ?? []) {
+        if (!okuriganaFits(okurigana, chars[i + 1])) continue;
+        if (readingFits(kana, given.slice(j, j + kana.length)) && walk(i + 1, j + kana.length)) {
+          ok = true;
+          break;
+        }
+      }
+    }
+    memo.set(key, ok);
+    return ok;
+  };
+  return walk(0, 0);
 }
 
 /** 일본어로만 된 답 — AI 재확인에 넘겨도 되는 모양이다. */

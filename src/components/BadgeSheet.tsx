@@ -4,8 +4,11 @@ import { BADGES, type BadgeContext } from "../lib/badges";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useWordbookStore } from "../stores/wordbookStore";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 function BadgeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(open);
   const xp = useGamificationStore((s) => s.xp);
   const streak = useGamificationStore((s) => s.streak);
   const wordbookCount = useWordbookStore((s) => Object.keys(s.entries).length);
@@ -17,6 +20,7 @@ function BadgeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
     <AnimatePresence>
       {open && (
         <motion.div
+          data-modal
           className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

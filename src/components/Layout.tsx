@@ -95,7 +95,7 @@ function BottomNav() {
        주면 넘쳐서 마지막 항목이 잘리므로, flex-1 + min-w-0으로 화면을 n등분하고 라벨은
        줄바꿈 없이(whitespace-nowrap) 작은 글씨로 넣는다. 항목을 더 늘릴 거라면 이 계산을
        다시 할 것(라벨을 줄이거나 아이콘만 남기는 식). */
-    <nav className="flex gap-0.5 border-t-4 border-primary/20 bg-white px-1 py-2 sm:gap-1 sm:px-2">
+    <nav className="app-nav flex gap-0.5 border-t-4 border-primary/20 bg-white px-1 py-2 sm:gap-1 sm:px-2">
       {NAV_ITEMS.map((item) => {
         const isActive = isNavActive(pathname, item);
         const isDictionary = item.to === "/dictionary";
@@ -151,7 +151,9 @@ function Layout() {
   useDictionaryTabMemory(useLocation());
 
   return (
-    <div className="flex h-svh flex-col">
+    // 뿌리는 **보이는 영역에 고정**한다(`app-shell` — index.css). h-svh로 흐름 안에 두면 모바일 키보드가
+    // 올라올 때 브라우저가 문서를 밀어 올려 화면 전체가 스크롤됐다(appViewport.ts).
+    <div className="app-shell flex flex-col">
       <header className="flex items-center justify-between gap-2 border-b-4 border-primary/20 bg-white px-4 py-3 sm:px-6 sm:py-4">
         {/* 대문(`/`)은 하단 네비게이션에 넣지 않고 헤더 로고를 눌러 돌아가게 한다
             (스펙에 없는 페이지는 헤더 아이콘/링크로만 노출하는 프로젝트 규칙). */}

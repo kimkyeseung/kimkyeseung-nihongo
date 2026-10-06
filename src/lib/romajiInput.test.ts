@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { convertTypedRomaji } from "./romajiInput";
+import { convertTypedRomaji, shouldConvertWhileComposing } from "./romajiInput";
 
 /**
  * 입력 변환은 "조용히 틀리는" 코드다 — 범위를 한 글자만 잘못 잡아도 콘솔에는 아무것도 안 찍히고
@@ -53,5 +53,19 @@ describe("convertTypedRomaji", () => {
   it("바뀔 게 없으면 null을 준다 — 호출부가 DOM을 건드리지 않도록", () => {
     expect(convertTypedRomaji("すし", 2, 0)).toBeNull();
     expect(convertTypedRomaji("", 0, 0)).toBeNull();
+  });
+});
+
+describe("shouldConvertWhileComposing", () => {
+  it("Android 키보드의 영문 단어 조합은 변환한다 — 안 하면 폰에서 일본어 모드가 통째로 안 된다", () => {
+    for (const data of ["k", "ka", "konnichiha", "", null, undefined]) {
+      expect(shouldConvertWhileComposing(data)).toBe(true);
+    }
+  });
+
+  it("한글·일본어 IME 조합은 건드리지 않는다", () => {
+    for (const data of ["ㅎ", "하", "한", "か", "かn", "漢"]) {
+      expect(shouldConvertWhileComposing(data)).toBe(false);
+    }
   });
 });

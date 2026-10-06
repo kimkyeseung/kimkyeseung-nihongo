@@ -7,6 +7,7 @@ import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
 import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import type { KanjiEntry } from "../types/kanji";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 // pool(학습 미완료 한자 목록)이 같아도 "테스트" 버튼을 누를 때마다 새로 섞인 문제를
 // 원하므로, KanjiPage에서 열 때마다 바뀌는 key로 이 컴포넌트 자체를 리마운트시켜
@@ -16,6 +17,8 @@ function KanjiQuizSheet({ pool, onClose }: { pool: KanjiEntry[] | null; onClose:
 }
 
 function QuizContent({ pool, onClose }: { pool: KanjiEntry[]; onClose: () => void }) {
+  // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
+  useScrollLock(true);
   const [questions] = useState(() => buildKanjiQuiz(pool));
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -71,6 +74,7 @@ function QuizContent({ pool, onClose }: { pool: KanjiEntry[]; onClose: () => voi
 
   return (
     <motion.div
+      data-modal
       className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
