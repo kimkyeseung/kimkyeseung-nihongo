@@ -1,6 +1,6 @@
 // 오십음도의 글자마다 "대표 단어"를 골라 src/data/kana-words.json을 만든다.
 // 단어/읽기/뜻은 사전적 사실이라 LLM으로 짓지 않고 JMDict 가공본(dictionary.json)에서만 고른다.
-// 오십음도 페이지가 2.9MB짜리 dictionary.json 청크를 통째로 끌어오지 않도록, 필요한 글자분만
+// 오십음도 페이지가 7.7MB짜리 dictionary.json 청크를 통째로 끌어오지 않도록, 필요한 글자분만
 // 미리 뽑아 작은 JSON으로 떨궈두는 것이 이 스크립트의 목적이다.
 //
 // 입력:
@@ -71,7 +71,7 @@ const HOMOPHONE_LIMIT = 60;
 /**
  * 발음 게임용 동음어 표. 음성 인식기는 "か" 한 글자를 蚊·課·可처럼 **한자로** 돌려주는 일이
  * 흔해서(て → 手, に → 二), 그 표기의 읽기를 알아야 맞게 읽었는지 판단할 수 있다. 읽기는 사전
- * 정보라 여기서 dictionary.json으로 미리 뽑는다 — 오십음도가 2.9MB 사전을 불러오지 않도록.
+ * 정보라 여기서 dictionary.json으로 미리 뽑는다 — 오십음도가 7.7MB 사전을 불러오지 않도록.
  * 표기가 가나뿐인 항목은 뺀다(가나는 채점 쪽에서 읽기 그대로 비교한다).
  */
 function buildHomophones(dictionary, cells) {
@@ -128,7 +128,11 @@ function toEntry(word) {
 }
 
 function main() {
-  const dictionary = JSON.parse(fs.readFileSync(path.join(OUT_DIR, "dictionary.json"), "utf-8"));
+  // 급수 단어만 쓴다. 사전에는 급수 없는 흔한 단어(jlptLevel: null)도 들어 있는데, 대표 단어는
+  // "초급 학습자가 먼저 만날 단어"라 급수 단어로 충분하고, 고르는 규칙도 급수 단어로 맞춘 것이다.
+  const dictionary = JSON.parse(
+    fs.readFileSync(path.join(OUT_DIR, "dictionary.json"), "utf-8")
+  ).filter((entry) => entry.jlptLevel);
   const byId = new Map(dictionary.map((entry) => [entry.id, entry]));
   const usable = dictionary.filter((entry) => entry.meaning);
 

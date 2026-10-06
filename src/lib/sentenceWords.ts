@@ -61,8 +61,11 @@ const NOT_A_STANDALONE_READING = new Set(["まし", "まれ"]);
  * 실제로 깨지는 건 **한자로는 거의 안 쓰는 인사말** 둘뿐이라 그것만 막는다. 둘 다 `uk`라
  * 읽기 색인에는 그대로 들어가므로, **こんにちは라고 가나로 쓰면 여전히 인사말로 잡힌다**
  * (실제로 그렇게 쓰는 말이다). 새 오탐을 발견하면 여기에 한 줄 더할 것.
+ *
+ * `ねた`(이야깃거리)는 사전을 흔한 단어까지 넓히며 들어왔는데, 가나로만 쓴 「ねたほうがいい」의
+ * 寝た(잤다)를 가로챘다(커리큘럼 예문 전수 비교에서 나온 유일한 새 오탐).
  */
-const NOT_A_STANDALONE_SPELLING = new Set(["今日は", "今晩は"]);
+const NOT_A_STANDALONE_SPELLING = new Set(["今日は", "今晩は", "ねた"]);
 
 function addTo(index: Map<string, WordEntry[]>, key: string, entry: WordEntry) {
   const list = index.get(key);
@@ -80,8 +83,11 @@ function buildIndexes() {
     }
     // 한 글자짜리 읽기는 넣지 않는다 — 활용 어미와 부딪히기만 한다. 為(す) 하나 때문에
     // 「です」·「ます」의 끝 글자가 전부 단어로 잡혔다.
+    // 급수 없는 단어(사전을 흔한 단어까지 넓히며 들어온 것)는 읽기로 찾지 않는다 — 넣었더니
+    // 「あります」의 あり가 蟻(개미, uk·common)로 잡혔다. 읽기 색인은 급수 단어로 맞춰 둔 것이다.
     if (
       entry.usuallyKana &&
+      entry.jlptLevel &&
       entry.reading.length >= 2 &&
       entry.reading !== entry.word &&
       !NOT_A_STANDALONE_READING.has(entry.reading)

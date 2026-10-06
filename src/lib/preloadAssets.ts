@@ -17,7 +17,7 @@ export interface AssetStep {
    * 진행률 가중치. `src/data/*.json`의 실제 파일 크기(바이트)를 쓴다.
    * 실제 전송량은 gzip/청크 오버헤드 때문에 다르지만, 항목 간 "얼마나 오래 걸리는지"의
    * 비율은 원본 크기에 거의 비례해서 바가 고르게 차오른다 (항목 수로 1/n씩 나누면
-   * 2.9MB짜리 사전에서 바가 한참 멈춘 것처럼 보인다).
+   * 7.7MB짜리 사전에서 바가 한참 멈춘 것처럼 보인다).
    */
   bytes: number;
   load: () => Promise<unknown>;
@@ -34,8 +34,8 @@ export const ASSET_STEPS: AssetStep[] = [
   },
   {
     id: "dictionary",
-    label: "사전 데이터 (단어 8,400여 개)",
-    bytes: 2_943_049,
+    label: "사전 데이터 (단어 2만 3천여 개)",
+    bytes: 7_719_500,
     load: () => import("./dictionary"),
   },
   {

@@ -1,4 +1,5 @@
-// JMDict_Extended(사전+JLPT급수+후리가나)에서 JLPT 태그가 붙은 항목(+예외적으로 조사)만 추출해
+// JMDict_Extended(사전+JLPT급수+후리가나)에서 JLPT 태그가 붙은 항목 + 흔한 단어(common) + 조사 +
+// EXTRA_WORDS만 추출해
 // src/data/dictionary.json (경량 서브셋) 과 src/data/pos-tags.json (품사 코드 설명)을 만든다.
 //
 // 입력: scripts/data/.cache/jmdictExtended.json (download.sh로 준비)
@@ -12,6 +13,15 @@ const CACHE_DIR = path.join(__dirname, ".cache");
 const OUT_DIR = path.join(__dirname, "..", "..", "src", "data");
 
 const JLPT_LABELS = { 1: "N1", 2: "N2", 3: "N3", 4: "N4", 5: "N5" };
+
+/**
+ * 급수도 없고 JMDict의 common 표시도 없지만 사전에 있어야 하는 단어(표기 또는 읽기).
+ *
+ * 처음엔 JLPT 태그가 붙은 단어만 실었는데(8,405개) しょっぱい 같은 일상어가 빠진다는
+ * 보고를 받았다. common(뉴스·ichi 빈도 표시)을 더해 대부분은 채웠지만, しょっぱい처럼
+ * **누구나 쓰는데 빈도 표시가 없는 단어**가 여전히 있다. 빠졌다는 보고가 오면 여기에 더할 것.
+ */
+const EXTRA_WORDS = new Set(["しょっぱい"]);
 
 function readJson(file) {
   let raw = fs.readFileSync(file, "utf-8");
@@ -100,7 +110,11 @@ function main() {
     // 138개) level만으로 거르면 예문/회화 문장에서 조사를 전혀 조회할 수 없다. 품사(prt)로
     // 예외적으로 포함시키고, 실제로 가장 기초 문법이므로 N5로 간주한다.
     const isParticle = (w.sense ?? []).some((s) => s.partOfSpeech?.includes("prt"));
-    if (!level && !isParticle) continue; // 그 외 JLPT 급수 태그 없는 항목은 제외 (용량 절감)
+    // 급수가 없어도 흔한 단어(common, 약 1만 5천 개)는 싣는다 — 급수 목록만으로는 일상어가
+    // 숭숭 빠진다. 그 밖의 항목(약 20만 개)은 용량 때문에 뺀다(EXTRA_WORDS 참고).
+    const isCommon = [...kanjiForms, ...kanaForms].some((f) => f.common);
+    const isExtra = [...kanjiForms, ...kanaForms].some((f) => EXTRA_WORDS.has(f.text));
+    if (!level && !isParticle && !isCommon && !isExtra) continue;
 
     const primaryKanji = pickPrimary(kanjiForms);
     const primaryKana = pickPrimary(kanaForms);
@@ -145,7 +159,9 @@ function main() {
       id: w.id,
       word,
       reading,
-      jlptLevel: level ? JLPT_LABELS[level] : "N5",
+      // 조사는 급수 태그가 거의 없지만 가장 기초 문법이라 N5로 본다. 그 밖의 급수 없는 단어는
+      // null — **급수를 지어내지 않는다**(사전적 사실이라 화면·진도 계산이 그대로 믿는다).
+      jlptLevel: level ? JLPT_LABELS[level] : isParticle ? "N5" : null,
       common: Boolean(primaryKanji?.common || primaryKana?.common),
       furigana: word === primaryKanji?.text ? (primaryKanji?.furigana ?? null) : null,
       pos: senses[0].pos,
@@ -157,9 +173,12 @@ function main() {
     });
   }
 
+  // 급수 있는 단어가 앞, 급수 없는 단어가 뒤다. 같은 점수끼리는 이 순서가 그대로 남는 곳이 있어서
+  // (한자 상세의 "활용 단어") 급수 단어가 먼저 보인다.
   entries.sort(
     (a, b) =>
-      a.jlptLevel.localeCompare(b.jlptLevel) || a.word.localeCompare(b.word, "ja")
+      (a.jlptLevel ?? "N9").localeCompare(b.jlptLevel ?? "N9") ||
+      a.word.localeCompare(b.word, "ja")
   );
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -175,11 +194,12 @@ function main() {
   );
 
   const byLevel = {};
-  for (const e of entries) byLevel[e.jlptLevel] = (byLevel[e.jlptLevel] ?? 0) + 1;
+  for (const e of entries) byLevel[e.jlptLevel ?? "급수 외"] = (byLevel[e.jlptLevel ?? "급수 외"] ?? 0) + 1;
 
   const koCount = entries.filter((e) => e.koreanMeaning).length;
   const koByLevel = {};
-  for (const e of entries) if (e.koreanMeaning) koByLevel[e.jlptLevel] = (koByLevel[e.jlptLevel] ?? 0) + 1;
+  for (const e of entries)
+    if (e.koreanMeaning) koByLevel[e.jlptLevel ?? "급수 외"] = (koByLevel[e.jlptLevel ?? "급수 외"] ?? 0) + 1;
 
   console.log(`dictionary.json: 총 ${entries.length}개 단어`);
   console.log(byLevel);

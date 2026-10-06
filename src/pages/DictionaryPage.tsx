@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { bind, unbind } from "wanakana";
-import { searchDictionary, displayMeaning } from "../lib/dictionary";
+import { searchDictionary, displayMeaning, levelLabel } from "../lib/dictionary";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useRecentSearchesStore } from "../stores/recentSearchesStore";
 import { useDictionaryView } from "../stores/pageStateStore";
 import { useWordLink } from "../hooks/useWordLink";
 import JapaneseSuggestionList from "../components/JapaneseSuggestionList";
+import KanjiChips from "../components/KanjiChips";
+import { kanjiInText } from "../lib/kanji";
 import AdSlot from "../components/AdSlot";
 import { AD_SLOTS } from "../lib/ads";
 import type { WordEntry } from "../types/dictionary";
@@ -21,7 +23,7 @@ function ResultRow({ entry, onClick }: { entry: WordEntry; onClick: () => void }
       className="flex w-full items-center gap-2 rounded-2xl border-2 border-gray-100 bg-white px-4 py-3 text-left shadow-sm"
     >
       <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-        {entry.jlptLevel}
+        {levelLabel(entry.jlptLevel)}
       </span>
       <span className="shrink-0 whitespace-nowrap font-ja text-lg">{entry.word}</span>
       <span className="min-w-0 truncate font-ja text-sm text-gray-400">{entry.reading}</span>
@@ -198,6 +200,14 @@ function DictionaryPage() {
           <p className="mb-2 text-sm text-gray-400">
             "{committedQuery}" 검색 결과 {results.length}건
           </p>
+          {/* 검색어에 한자가 있으면 한자 페이지와 같은 상세 시트로 바로 갈 수 있게 한다
+              (水 하나만 쳐도 단어 목록만 나오고 그 한자 자체는 볼 길이 없었다). */}
+          {kanjiInText(committedQuery).length > 0 && (
+            <div className="mb-4">
+              <p className="mb-1 text-xs text-gray-400">한자</p>
+              <KanjiChips text={committedQuery} />
+            </div>
+          )}
           {results.length === 0 ? (
             <p className="text-gray-300">검색 결과가 없습니다.</p>
           ) : (

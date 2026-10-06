@@ -42,7 +42,7 @@ export default defineConfig({
         // 앱 셸(작은/중간 청크)만 설치 시 미리 받는다. dictionary/kanjivg/kanji 세 청크는
         // 프로젝트가 이미 갖고 있는 "큰 정적 데이터는 실제로 그 페이지를 열 때만 받는다"
         // 원칙을 지키려고 제외한다(CLAUDE.md "번들 최적화" 절과 같은 이유) — 대신 아래
-        // runtimeCaching이 그 페이지를 처음 열 때 캐시에 넣는다. dictionary 청크(~3MB)는
+        // runtimeCaching이 그 페이지를 처음 열 때 캐시에 넣는다. dictionary 청크(~7.7MB)는
         // 빼지 않으면 Workbox의 기본 프리캐시 용량 제한(2MB)에 걸려 빌드가 실패한다.
         globIgnores: ['**/dictionary-*.js', '**/kanjivg-*.js', '**/kanji-*.js'],
         // 오프라인 상태에서 /kanji 같은 경로로 직접 들어와도 캐시된 셸을 돌려주고

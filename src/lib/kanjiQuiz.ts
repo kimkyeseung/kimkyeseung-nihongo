@@ -38,12 +38,14 @@ const wordsByKanjiCache = new Map<string, WordEntry[]>();
 function wordsContaining(kanji: string): WordEntry[] {
   let cached = wordsByKanjiCache.get(kanji);
   if (!cached) {
+    // 급수 없는 단어(사전을 흔한 단어까지 넓히며 들어온 것)는 빼고 고른다 — 위의 정렬 규칙은
+    // 급수 단어 2,135자 전수 검사로 맞춘 것이라, 새 단어가 끼면 검증한 정답이 조용히 바뀐다.
     cached = dictionary
-      .filter((w) => w.furigana?.some((f) => f.ruby === kanji))
+      .filter((w) => w.jlptLevel && w.furigana?.some((f) => f.ruby === kanji))
       .sort(
         (a, b) =>
           Number(b.common) - Number(a.common) ||
-          (JLPT_ORDER[a.jlptLevel] ?? 99) - (JLPT_ORDER[b.jlptLevel] ?? 99) ||
+          JLPT_ORDER[a.jlptLevel!] - JLPT_ORDER[b.jlptLevel!] ||
           Number(!isPureForm(a.word, kanji)) - Number(!isPureForm(b.word, kanji))
       );
     wordsByKanjiCache.set(kanji, cached);

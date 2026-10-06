@@ -2,7 +2,7 @@
 // 단어는 "이 단어의 뜻은?" 4지선다를 여기서 만든다. **보기는 전부 사전 데이터에서** 뽑는다 —
 // 뜻풀이를 LLM이 지어내면 안 된다는 규칙 그대로다.
 //
-// 사전(2.9MB)을 끌어오는 모듈이라 풀기 시트(WeakReviewSheet)에서만, 그것도 lazy로 쓴다.
+// 사전(7.7MB)을 끌어오는 모듈이라 풀기 시트(WeakReviewSheet)에서만, 그것도 lazy로 쓴다.
 
 import type { KanjiQuizQuestion } from "./kanjiQuiz";
 import type { WordEntry } from "../types/dictionary";

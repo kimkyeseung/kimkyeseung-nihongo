@@ -12,7 +12,8 @@ import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import type { WordEntry } from "../types/dictionary";
-import { findWordById } from "../lib/dictionary";
+import { findWordById, levelLabel } from "../lib/dictionary";
+import KanjiChips from "../components/KanjiChips";
 import { backLabel, originFromState } from "../lib/wordLink";
 import { getKoreanReadingForWord } from "../lib/kanji";
 import {
@@ -320,7 +321,7 @@ function WordDetailPage() {
     if (!inWordbook) {
       recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
       // 급수를 같이 남긴다 — 어휘 수준 추정의 주된 근거다(learnerProfile.ts).
-      recordStudyEvent({ type: "word-added", subject: entry.word, level: entry.jlptLevel });
+      recordStudyEvent({ type: "word-added", subject: entry.word, level: entry.jlptLevel ?? undefined });
     }
     toggleWord(entry.id);
   }
@@ -345,7 +346,7 @@ function WordDetailPage() {
       <div className="mt-3 flex items-center justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
-            {entry.jlptLevel}
+            {levelLabel(entry.jlptLevel)}
           </span>
           {adjectiveType && (
             <span className="rounded-full bg-accent/10 px-3 py-1 text-sm text-accent">
@@ -385,6 +386,9 @@ function WordDetailPage() {
           {entry.furigana.map((f) => (f.rt ? `${f.ruby}(${f.rt})` : f.ruby)).join(" ")}
         </p>
       )}
+
+      {/* 이 단어의 한자 — 누르면 한자 페이지와 같은 상세 시트(획순·따라 쓰기·학습 완료). */}
+      <KanjiChips text={entry.word} className="mt-3" />
 
       {/* 한국어 뜻이 있으면 먼저 보여준다. 없는 단어가 절반쯤 되므로(빌드 스크립트 주석 참고)
           영어 뜻 목록은 지우지 않고 그대로 아래에 남긴다 — 지우면 정보가 줄어든다. */}
