@@ -88,6 +88,13 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   - 디버그 모드 질의·대화 내보내기(`debugMode`의 `parseDebugQuery`/`buildTeacherChatExport`) — 빈 값(`?debug=`)이
     끄기로 읽히면 모드가 조용히 꺼지고, 내보내기 행이 한 글자라도 바뀌면 되돌려 넣을 수 없는 파일이 된다.
 
+  - 레벨 진단 문제 은행(`levelTestBank.test.ts`) — 손으로 만든 데이터라 빈칸이 둘이거나 정답 인덱스가
+    어긋나도 콘솔은 조용하고, 정답을 고른 학습자만 "틀렸어요"를 듣는다. 커리큘럼 패턴 문자열이 한 글자만
+    달라도 그 단원의 점검 문제가 빈다.
+
+  - 레벨 진단 적응형 출제·종합 판정(`levelTest/adaptive`·`levelTest/result`) — 계단이 한 칸 어긋나도
+    문제는 멀쩡히 나오고 결과에는 그럴듯한 급수가 뜬다. 그 급수가 곧 커리큘럼 시작 단계가 된다.
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
