@@ -1,4 +1,5 @@
 import type { Conversation, Engine, Message } from "@litert-lm/core";
+import type { ChatTurn } from "./chatHistory";
 import { getCachedModelFile } from "./gemmaModel";
 
 /**
@@ -17,6 +18,8 @@ export interface GemmaSession {
   destroy(): Promise<void>;
   /** 이 세션이 올라간 엔진이 그 뒤로 버려졌는지(GPU 디바이스 유실 등). true면 새로 만들 것. */
   isStale(): boolean;
+  /** 지금까지 대화가 차지한 토큰 수. 못 읽으면 null. */
+  tokenCount(): Promise<number | null>;
 }
 
 /**
@@ -31,6 +34,17 @@ export interface GemmaSession {
  * 합쳐 107MB)을 public/ 아래로 복사하고 여기에 그 경로("/litert-wasm/")를 넣으면 된다.
  */
 const LITERT_WASM_PATH: string | null = null;
+
+/**
+ * 대화 하나가 담을 수 있는 토큰(입력 + 출력 + 지금까지의 대화). 넘으면 세션을 다시 만든다
+ * (`useGemmaSession`의 `ensureSession`).
+ *
+ * 예전엔 4096이었다. 선생님 시스템 프롬프트(기억 블록 포함)만으로 2천 토큰 가까이 되고 답변 몫도
+ * 남겨야 해서, 앞선 대화는 사실상 한 턴도 못 실었다. 8192는 LiteRT-LM README의 예시 값이다.
+ * Gemma 4 E2B 자체는 훨씬 긴 문맥을 받지만, 이 값만큼 KV 캐시를 GPU에 잡으므로 무작정 올리면
+ * 폰에서 GPU 메모리가 모자랄 수 있다 — 올리려면 실기기(특히 모바일)에서 확인할 것.
+ */
+export const GEMMA_MAX_TOKENS = 8192;
 
 // 모델 2GB를 GPU에 올리는 건 엔진 1개당 한 번뿐이어야 한다. 엔진은 앱 전체에서 하나만 두고,
 // 시나리오별 세션은 그 엔진에서 파생되는 Conversation으로 만든다(만들고 지우는 비용이 싸다).
@@ -73,7 +87,7 @@ export function loadGemmaEngine(): Promise<Engine> {
     if (LITERT_WASM_PATH) await loadLiteRtLm(LITERT_WASM_PATH);
     const engine = await Engine.create({
       model: file,
-      mainExecutorSettings: { maxNumTokens: 4096 },
+      mainExecutorSettings: { maxNumTokens: GEMMA_MAX_TOKENS },
     });
 
     // 엔진이 쓰는 GPU 디바이스가 죽으면(모바일 백그라운드 등) 사용자가 다음 메시지를
@@ -152,14 +166,22 @@ function messageText(message: Message): string {
     .join("");
 }
 
-/** systemPrompt를 가진 대화 세션을 만든다. 다 쓰면 반드시 destroy할 것. */
-export async function createGemmaSession(systemPrompt: string): Promise<GemmaSession> {
+/**
+ * systemPrompt를 가진 대화 세션을 만든다. 다 쓰면 반드시 destroy할 것.
+ * `history`는 세션에 미리 채워 둘 앞선 대화다(chatHistory.ts 참고).
+ */
+export async function createGemmaSession(
+  systemPrompt: string,
+  history: readonly ChatTurn[] = []
+): Promise<GemmaSession> {
   const engine = await loadGemmaEngine();
   const generation = engineGeneration;
+  const messages: Message[] = [
+    ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
+    ...history.map((turn) => ({ role: turn.role, content: turn.content })),
+  ];
   const conversation: Conversation = await engine.createConversation(
-    systemPrompt
-      ? { preface: { messages: [{ role: "system", content: systemPrompt }] } }
-      : undefined
+    messages.length > 0 ? { preface: { messages } } : undefined
   );
 
   return {
@@ -191,6 +213,14 @@ export async function createGemmaSession(systemPrompt: string): Promise<GemmaSes
 
     isStale() {
       return generation !== engineGeneration;
+    },
+
+    async tokenCount() {
+      try {
+        return await conversation.getTokenCount();
+      } catch {
+        return null;
+      }
     },
   };
 }

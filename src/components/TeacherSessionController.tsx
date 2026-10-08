@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import {
@@ -7,11 +7,14 @@ import {
   parseExtractedFacts,
 } from "../lib/memoryExtraction";
 import { looksLikePromptLeak } from "../lib/promptSafety";
+import { localDateKey } from "../lib/localDate";
 import {
+  TEACHER_ERROR_ANSWER,
   TEACHER_LEAK_REFERENCE,
   TEACHER_REFUSAL_ANSWER,
   buildTeacherSystemPrompt,
   buildTeacherUserPrompt,
+  teacherHistoryTurns,
 } from "../lib/teacherPrompts";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useGamificationStore } from "../stores/gamificationStore";
@@ -74,7 +77,28 @@ function TeacherSessionController() {
   if (!isAnswering && committedMemory !== promptMemory) setCommittedMemory(promptMemory);
   const systemPrompt = useMemo(() => buildTeacherSystemPrompt(committedMemory), [committedMemory]);
 
-  const model = useAiModel(systemPrompt);
+  /**
+   * 세션을 새로 만들 때 다시 채울 오늘 대화. **화면의 대화와 모델이 아는 대화를 맞추려는 것이다**
+   * — 예전엔 세션이 새로 만들어지면(새로고침, 기억 스냅샷 갱신, 모바일 GPU 유실, 유출 가드) 화면에는
+   * 앞 대화가 그대로 보이는데 모델은 처음부터라, 「부정형 문장으로 바꾸면?」 같은 이어지는 질문에
+   * 엉뚱하게 답했다(실제로 겪었다). 지금 답할 질문(빈 답변과 짝)은 teacherHistoryTurns가 뺀다.
+   */
+  const getHistory = useCallback(() => {
+    const chat = useTeacherChatStore.getState();
+    const date = chat.answeringDate ?? localDateKey();
+    return teacherHistoryTurns(chat.messagesByDate[date] ?? []);
+  }, []);
+  const model = useAiModel(systemPrompt, { history: getHistory });
+  const { resetSession } = model;
+
+  // 오늘 대화를 지우면 모델 쪽 맥락도 버린다 — 화면은 비었는데 선생님이 지운 대화를 기억하면 안 된다.
+  const todayEmpty = useTeacherChatStore((s) => (s.messagesByDate[localDateKey()] ?? []).length === 0);
+  useEffect(() => {
+    if (todayEmpty) resetSession();
+  }, [todayEmpty, resetSession]);
+
+  /** 세션이 어느 날의 대화를 들고 있는지. 자정을 넘기면 어제 대화를 버리고 새로 시작한다. */
+  const sessionDateRef = useRef<string | null>(null);
   // 기억 추출은 수업 맥락을 오염시키면 안 되므로 세션을 따로 둔다 — 회화의 문법 교정·번역과
   // 같은 이유다.
   const extractor = useAiModel(MEMORY_EXTRACTION_SYSTEM_PROMPT);
@@ -91,6 +115,11 @@ function TeacherSessionController() {
   const answer = useCallback(
     async (question: string) => {
       const chat = useTeacherChatStore.getState();
+      const today = localDateKey();
+      if (sessionDateRef.current !== today) {
+        sessionDateRef.current = today;
+        model.resetSession();
+      }
       const { assistantId } = chat.ask(question);
       recordProgress(XP_REWARDS.teacherQuestion);
       recordStudyEvent({ type: "teacher-question", subject: question });
@@ -123,7 +152,7 @@ function TeacherSessionController() {
         }
       } catch (err) {
         failed = true;
-        chat.appendAnswer(assistantId, "(답변을 만드는 중 오류가 발생했습니다)");
+        chat.appendAnswer(assistantId, TEACHER_ERROR_ANSWER);
         reportError(err);
       } finally {
         // 여기서 답변이 IndexedDB에 한 번 저장된다(스트리밍 중에는 저장하지 않는다).

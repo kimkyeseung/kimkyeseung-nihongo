@@ -182,6 +182,20 @@ describe("looksLikePromptLeak", () => {
     expect(looksLikePromptLeak(answer, TEACHER_LEAK_REFERENCE)).toBe(false);
   });
 
+  it("앞 대화를 이어받는 질문에 앞 문장을 짚어 답해도 걸리지 않는다", () => {
+    // "앞 대화를 이어받으면 바로 앞 대화에 나온 일본어 문장을 대상으로 답하라"를 넣은 뒤,
+    // 그 지시대로 한 정상 답변.
+    const answer = [
+      "바로 앞 대화에 나온 일본어 문장 `わたしは食べ物にまじめだ`를 부정형으로 바꾸면 이렇습니다.",
+      "",
+      "- `わたしは食べ物にまじめではない。`",
+      "*(나는 음식에 진지하지 않다.)*",
+      "",
+      "な형용사의 부정형은 `〜ではない`(회화체로는 `〜じゃない`)예요.",
+    ].join("\n");
+    expect(looksLikePromptLeak(answer, TEACHER_LEAK_REFERENCE)).toBe(false);
+  });
+
   it("연습 문제를 앱이 따로 낸다는 말을 학습자에게 옮겨도 걸리지 않는다", () => {
     const answer = "`〜そうだ`는 겉보기 추측이에요. 연습 문제는 앱이 따로 냅니다. `雨が降りそうです。`";
     expect(looksLikePromptLeak(answer, TEACHER_LEAK_REFERENCE)).toBe(false);
