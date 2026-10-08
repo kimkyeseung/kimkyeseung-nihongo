@@ -4,7 +4,8 @@ import { RouterProvider } from "react-router-dom";
 import { router } from "./router";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import { useLearnerMemoryStore } from "./stores/learnerMemoryStore";
-import { useAppearance } from "./stores/pageStateStore";
+import { useAppearance, useDebugMode } from "./stores/pageStateStore";
+import { parseDebugQuery, stripDebugQuery } from "./lib/debugMode";
 import { followSystemTheme } from "./lib/theme";
 import { trackAppViewport } from "./lib/appViewport";
 
@@ -23,6 +24,18 @@ function App() {
   // "시스템"일 때 OS 설정이 바뀌는 것을 따라간다. 대문도 덮어야 해서 역시 Layout이 아니라 여기다.
   const theme = useAppearance((s) => s.theme);
   useEffect(() => followSystemTheme(theme), [theme]);
+
+  // 디버그 모드: `?debug=1` / `?debug=0`. 읽은 뒤에는 주소에서 지운다 — 안 지우면 새로고침·
+  // 공유 링크로 계속 따라다니고, 다른 파라미터(`?review=weak`)와 섞인 주소가 지저분해진다.
+  // 대문(`/`)에서도 되도록 Layout이 아니라 여기서 한다.
+  const setDebugMode = useDebugMode((s) => s.setEnabled);
+  useEffect(() => {
+    const wanted = parseDebugQuery(window.location.search);
+    if (wanted === null) return;
+    setDebugMode(wanted);
+    const { pathname, search, hash } = window.location;
+    window.history.replaceState(window.history.state, "", `${pathname}${stripDebugQuery(search)}${hash}`);
+  }, [setDebugMode]);
 
   // 모바일 키보드가 올라오면 앱 높이를 보이는 영역에 맞춘다(appViewport.ts). 모달은 대문에서도 뜨므로
   // Layout이 아니라 여기다.

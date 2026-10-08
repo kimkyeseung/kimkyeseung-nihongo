@@ -7,6 +7,7 @@ import type { WordExample } from "../lib/wordExamples";
 import type { PracticeProblem } from "../lib/teacherPractice";
 import { localDateKey } from "../lib/localDate";
 import { THEME_STORAGE_KEY, type ThemePreference } from "../lib/theme";
+import { DEBUG_STORAGE_KEY } from "../lib/debugMode";
 
 /**
  * 페이지를 떠났다 돌아와도 화면이 그대로이도록, 라우트 전환 때 사라지는 페이지 로컬 state를
@@ -369,5 +370,24 @@ export const useAppearance = create<{
       setTheme: (theme) => set({ theme }),
     }),
     { name: THEME_STORAGE_KEY }
+  )
+);
+
+/**
+ * 디버그 모드. 주소에 `?debug=1`을 붙여 켜고 `?debug=0`으로 끈다(App.tsx가 읽는다).
+ * 켜져 있는 동안 선생님 페이지에서 날짜별 대화를 JSON으로 내려받을 수 있다.
+ *
+ * **백업에는 담지 않는다** — 기기마다 다르다(`appearance`·`ai-engine`과 같은 판단).
+ */
+export const useDebugMode = create<{
+  enabled: boolean;
+  setEnabled: (enabled: boolean) => void;
+}>()(
+  persist(
+    (set) => ({
+      enabled: false,
+      setEnabled: (enabled) => set({ enabled }),
+    }),
+    { name: DEBUG_STORAGE_KEY }
   )
 );

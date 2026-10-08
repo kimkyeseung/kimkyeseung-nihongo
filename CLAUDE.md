@@ -81,6 +81,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   - 선생님 `/` 명령어(`teacherCommands`)·`/test` 출제 범위(`levelTest`의 `planLevelTest`) — 범위를 잘못
     잡으면 평범한 질문이 명령어로 먹혀 사라지거나, 테스트가 약한 것만(=복습) 또는 엉뚱한 급수로 나온다.
 
+  - 디버그 모드 질의·대화 내보내기(`debugMode`의 `parseDebugQuery`/`buildTeacherChatExport`) — 빈 값(`?debug=`)이
+    끄기로 읽히면 모드가 조용히 꺼지고, 내보내기 행이 한 글자라도 바뀌면 되돌려 넣을 수 없는 파일이 된다.
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
@@ -293,6 +296,16 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 페이지" 절 참고).
 남은 건 다듬기와 QA — 특히 **Chrome에서의 Gemma 추론 검증**(Safari에서는 확인됨)과
 브라우저별 안내 화면 실물 확인.
+
+## 디버그 모드 (`?debug=1`) 구현 노트
+- 주소에 `?debug=1`을 붙이면 켜지고 `?debug=0`이면 꺼진다. `App.tsx`가 읽은 뒤 **주소에서 파라미터를 지운다**
+  (새로고침·공유 링크에 따라다니지 않게). 상태는 `useDebugMode`(persist 키 `debug-mode`)이고 **백업에는 담지
+  않는다** — 기기마다 다르다. 대문(`/`)에서도 켜지도록 Layout이 아니라 App에서 읽는다.
+- 지금 켜면 생기는 것은 하나다: 선생님 페이지 헤더의 **🐞 JSON** — 보고 있는 날짜의 대화를 내려받는다.
+  파일은 `{ format, version, exportedAt, date, messages }`이고 **`messages`는 IndexedDB 행(`StoredMessage`)
+  그대로**다(백업 파일의 `memory.messages`와 같은 모양). IndexedDB에서 읽으므로 답변을 받는 중인 오늘은
+  그 턴이 저장되기 전이라 버튼을 잠근다.
+- 디버그 전용 기능을 더할 때는 `useDebugMode`로 게이트하고, 일반 사용자 화면에는 아무 표시도 남기지 말 것.
 
 ## 정보/출처 페이지 (`/about`) 구현 노트
 - 스펙의 "정보 페이지 및 README에 데이터 출처/라이선스 명시" 요구사항을 [AboutPage.tsx](src/pages/AboutPage.tsx)와

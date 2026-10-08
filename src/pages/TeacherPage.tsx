@@ -16,7 +16,13 @@ import { useWordSuggestions } from "../hooks/useWordSuggestions";
 import { TEACHER_SAMPLE_QUESTIONS } from "../lib/teacherPrompts";
 import { buildTeacherGreeting } from "../lib/dailyPlan";
 import { levelLabel } from "../lib/curriculum";
-import { useInputScriptPrefs, useTeacherGreeting } from "../stores/pageStateStore";
+import { useDebugMode, useInputScriptPrefs, useTeacherGreeting } from "../stores/pageStateStore";
+import { loadMessagesForDate } from "../lib/learnerMemoryDb";
+import {
+  buildTeacherChatExport,
+  downloadJson,
+  teacherChatExportFileName,
+} from "../lib/debugMode";
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
@@ -92,6 +98,22 @@ function TeacherPage() {
   const pendingQuestion = useTeacherChatStore((s) => s.pendingQuestion);
   const consumePendingQuestion = useTeacherChatStore((s) => s.consumePendingQuestion);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const debugMode = useDebugMode((s) => s.enabled);
+  const [exporting, setExporting] = useState(false);
+
+  /** 디버그 모드: 지금 보는 날짜의 대화를 IndexedDB 행 그대로(`StoredMessage`) 내려받는다. */
+  async function exportActiveDate() {
+    setExporting(true);
+    try {
+      const rows = await loadMessagesForDate(activeDate);
+      downloadJson(
+        teacherChatExportFileName(activeDate),
+        buildTeacherChatExport(activeDate, rows, new Date())
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
   const [practiceTarget, setPracticeTarget] = useState<PracticeTarget | null>(null);
   // 진도는 인사말·`/test`가 같이 쓴다. 동적 import라 첫 렌더에는 null이다.
   const curriculum = useCurriculumPlan();
@@ -339,6 +361,17 @@ function TeacherPage() {
                   대화 지우기
                 </button>
               )
+            )}
+            {/* 저장된 행만 내려받는다 — 답변을 받는 중인 오늘은 그 턴이 아직 저장 전이라 기다린다. */}
+            {debugMode && messages.length > 0 && (
+              <button
+                onClick={() => void exportActiveDate()}
+                disabled={exporting || (viewingToday && isAnswering)}
+                title="이 날짜의 대화를 JSON으로 내려받기 (디버그 모드)"
+                className="text-xs text-gray-400 disabled:opacity-40"
+              >
+                🐞 JSON
+              </button>
             )}
             <Link to="/memory" className="text-xs text-gray-400" title="선생님이 기억하고 있는 것">
               🧠 기억
