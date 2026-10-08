@@ -95,6 +95,10 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   - 레벨 진단 적응형 출제·종합 판정(`levelTest/adaptive`·`levelTest/result`) — 계단이 한 칸 어긋나도
     문제는 멀쩡히 나오고 결과에는 그럴듯한 급수가 뜬다. 그 급수가 곧 커리큘럼 시작 단계가 된다.
 
+  - 레벨 진단 문제 만들기(`levelTest/questions`) — 보기가 겹치거나 정답만 한국어면 뜻을 몰라도 맞혀서
+    진단이 조용히 높게 나온다. 실제 사전·한자 데이터로 급수마다 300번씩 돌린다. 원본 뜻풀이의
+    「어간의 하나」 같은 문법 설명 줄도 여기서 거른다(`NOT_A_MEANING`).
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
@@ -1645,7 +1649,7 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
   그냥 정답으로 썼는데, 食의 첫 훈독이 KANJIDIC2 편집 순서상 "く.う"라서 훨씬 더 잘 알려진
   "た.べる"(食べる)가 보기에서 통째로 빠져 사용자가 "정답이 이상하다"고 보고했다 —
   **KANJIDIC2의 onyomi/kunyomi 배열 순서는 사전 편집 순서일 뿐 "가장 흔한 읽기" 순이 아니다.**
-  `kanjiQuiz.ts`의 `primaryReading`은 `dictionary.json`의 `furigana`(JMDict_Extended가 실제
+  `kanjiReading.ts`의 `primaryReading`은 `dictionary.json`의 `furigana`(JMDict_Extended가 실제
   단어에서 이 한자가 정확히 어떤 음으로 읽히는지 이미 분리해둔 필드, 예: "食べる" ->
   `[{ruby:"食", rt:"た"}, ...]`)를 근거로, 그 한자가 실제로 쓰인 단어들 중 하나에서 정답을
   고른다. `wordsContaining`의 단어 정렬 우선순위가 중요한데, **반드시 `common`(실제 흔히
@@ -1659,7 +1663,9 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
   정도의 흔한 음운 변화까지 허용해 매칭 실패를 줄인다. 이래도 못 찾으면(2,135자 중 3자만
   해당 — 疾/閑/斑처럼 KANJIDIC2 목록에 아예 없는 희귀한 이독) `kunyomi[0]` 등으로 폴백한다.
   새로 "이 한자의 대표 읽기"가 필요한 기능을 또 만들 때도 KANJIDIC2 배열 순서를 그대로
-  신뢰하지 말고 이 방식(`kanjiQuiz.ts`의 `primaryReading`/`wordsContaining` 재사용)을 쓸 것.
+  신뢰하지 말고 이 방식(`kanjiReading.ts`의 `primaryReading`/`wordsContainingKanji` 재사용)을 쓸 것.
+  이 둘은 사전을 **인자로** 받는다 — 원래 `kanjiQuiz.ts` 안에 있었는데, 사전을 동적 import로 받는 레벨
+  진단도 같은 규칙을 써야 해서 옮겼다(옮기기 전후로 2,135자의 대표 읽기가 전부 같은 것을 확인했다).
 
 ## 단어 상세 페이지 — 동사 활용 / 형용사 유형 구현 노트
 - `src/lib/verbConjugation.ts`가 스펙의 "동사 て형 등 활용은 LLM이 아니라 규칙 기반 변환 함수로 계산"
