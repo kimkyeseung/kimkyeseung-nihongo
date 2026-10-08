@@ -116,7 +116,7 @@ describe("영역 결과 요약", () => {
     expect(staircaseResult(s)).toEqual({ estimate: "N4", correct: 4, total: 6, confident: true });
   });
 
-  it("독해·청해는 항상 확실한 것으로 둔다(문항이 적어 경계를 따지지 않는다)", () => {
+  it("독해·청해는 하나라도 통과했으면 확실한 것으로 둔다", () => {
     let s = startShortSection("reading", "N4");
     s = answerShortSection(s, true);
     s = answerShortSection(s, false);

@@ -20,6 +20,7 @@ const WritingPage = lazy(() => import("./pages/WritingPage"));
 const TeacherPage = lazy(() => import("./pages/TeacherPage"));
 const MemoryPage = lazy(() => import("./pages/MemoryPage"));
 const CurriculumPage = lazy(() => import("./pages/CurriculumPage"));
+const LevelTestPage = lazy(() => import("./pages/LevelTestPage"));
 const AboutPage = lazy(() => import("./pages/AboutPage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const PromptApiDiagnosticsPage = lazy(() => import("./pages/PromptApiDiagnosticsPage"));
@@ -54,6 +55,8 @@ export const router = createBrowserRouter([
       { path: "teacher", element: <TeacherPage /> },
       { path: "memory", element: <MemoryPage /> },
       { path: "curriculum", element: <CurriculumPage /> },
+      // 레벨 진단. `/diagnostics`(Prompt API 자가진단)와 이름이 겹치지 않게 일부러 `/level`로 했다.
+      { path: "level", element: <LevelTestPage /> },
       { path: "about", element: <AboutPage /> },
       // 헤더 아이콘 자리는 이미 둘이라(ⓘ·🧠) /about 안에서 링크로 간다.
       { path: "privacy", element: <PrivacyPage /> },

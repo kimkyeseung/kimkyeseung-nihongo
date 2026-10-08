@@ -186,10 +186,36 @@ export function answerShortSection(state: AdaptiveState, correct: boolean): Adap
   return { ...state, answers, level: shift(state.level, correct ? 1 : -1), done };
 }
 
+const passesShort = (t: { correct: number; total: number }) => t.total >= 1 && t.correct * 2 >= t.total;
+
+/** 풀어 본 가장 낮은 급수 */
+function lowestAsked(state: AdaptiveState): JlptLevel | null {
+  let low: JlptLevel | null = null;
+  for (const a of state.answers) if (low === null || indexOf(a.level) < indexOf(low)) low = a.level;
+  return low;
+}
+
 /**
  * 독해·청해의 추정 급수 — 문항이 적으니 기준을 "그 급수에서 푼 문항의 절반 이상"으로 낮춘다.
- * 상한이 2~3문항이라 계단식처럼 경계를 찾았는지 따지지 않는다(항상 "limit"로 끝난다).
+ *
+ * **통과한 급수가 없으면 Pre-N5가 아니라 "풀어 본 가장 낮은 급수의 한 칸 아래"다 (실제로 겪었다).**
+ * 어휘·문법을 다 맞혀 N1 지문부터 시작한 학습자가 N1·N2 지문을 놓치자 독해가 "N5 전"으로 나오고, 그
+ * 탓에 종합이 한 단계 내려갔다. 아는 것은 "N1·N2 지문은 아직"뿐이다 — 그 아래는 묻지도 않았다.
+ * N5까지 내려가서도 못 풀었으면 그때 Pre-N5다.
  */
 export function estimateShortSection(state: AdaptiveState): EstimatedLevel {
-  return highestPassing(state, (t) => t.total >= 1 && t.correct * 2 >= t.total);
+  const passed = highestPassing(state, passesShort);
+  if (passed !== "Pre-N5") return passed;
+  const low = lowestAsked(state);
+  return low === null || low === "N5" ? "Pre-N5" : JLPT_LEVELS[indexOf(low) - 1];
+}
+
+/**
+ * 독해·청해의 추정이 믿을 만한가 — 통과한 급수 없이 "한 칸 아래"로 짐작했으면 아니다(아래는 묻지 않았다).
+ * 결과에 "조금 더 풀어봐야 정확해요"가 붙는다.
+ */
+export function isShortSectionConfident(state: AdaptiveState): boolean {
+  if (highestPassing(state, passesShort) !== "Pre-N5") return true;
+  const low = lowestAsked(state);
+  return low === null || low === "N5";
 }

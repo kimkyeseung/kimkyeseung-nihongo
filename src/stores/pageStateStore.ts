@@ -8,6 +8,8 @@ import type { PracticeProblem } from "../lib/teacherPractice";
 import { localDateKey } from "../lib/localDate";
 import { THEME_STORAGE_KEY, type ThemePreference } from "../lib/theme";
 import { DEBUG_STORAGE_KEY } from "../lib/debugMode";
+import type { LevelTestRun } from "../lib/levelTest/run";
+import type { LevelTestProfile } from "../lib/levelTest/profile";
 
 /**
  * 페이지를 떠났다 돌아와도 화면이 그대로이도록, 라우트 전환 때 사라지는 페이지 로컬 state를
@@ -391,3 +393,22 @@ export const useDebugMode = create<{
     { name: DEBUG_STORAGE_KEY }
   )
 );
+
+/**
+ * 레벨 진단(`/level`) 진행 상태. **메모리 전용** — 탭을 옮겼다 와도 이어서 풀리고, 새로고침하면
+ * 처음부터다(15분짜리를 persist까지 하지는 않는다). 진행 중에 나가는 것은 막지 않고, 돌아왔을 때
+ * 페이지가 "이어서 풀기 / 처음부터"를 묻는다.
+ */
+export const useLevelTestSession = create<{
+  run: LevelTestRun | null;
+  profile: LevelTestProfile;
+  setRun: (run: LevelTestRun | null) => void;
+  setProfile: (profile: LevelTestProfile) => void;
+  reset: () => void;
+}>((set) => ({
+  run: null,
+  profile: { purpose: null, exam: null },
+  setRun: (run) => set({ run }),
+  setProfile: (profile) => set({ profile }),
+  reset: () => set({ run: null, profile: { purpose: null, exam: null } }),
+}));

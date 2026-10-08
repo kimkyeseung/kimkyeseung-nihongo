@@ -5,7 +5,7 @@ import type {
   LevelTestSection,
   SectionResult,
 } from "../../types/levelTest";
-import { estimateShortSection, estimateStaircase, isStaircaseConfident } from "./adaptive";
+import { estimateShortSection, estimateStaircase, isShortSectionConfident, isStaircaseConfident } from "./adaptive";
 
 // 레벨 진단의 종합 판정. 결과가 곧 커리큘럼 시작 단계가 되므로 조용히 틀리면 학습자가 엉뚱한
 // 단계에서 시작한다(화면에는 그럴듯한 급수가 뜬다). `result.test.ts`가 고정한다.
@@ -34,7 +34,7 @@ export function shortSectionResult(state: AdaptiveState): SectionResult {
     estimate: estimateShortSection(state),
     correct: correctCount(state),
     total: state.answers.length,
-    confident: true,
+    confident: isShortSectionConfident(state),
   };
 }
 

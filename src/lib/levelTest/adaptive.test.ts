@@ -3,6 +3,7 @@ import {
   answerShortSection,
   answerStaircase,
   estimateShortSection,
+  isShortSectionConfident,
   estimateStaircase,
   isStaircaseConfident,
   needsKanaSection,
@@ -293,7 +294,25 @@ describe("독해·청해 — 두세 문항 규칙", () => {
     expect(estimateShortSection(runShort("ox", "N4"))).toBe("N4"); // N4 ✓, N3 ✗
     expect(estimateShortSection(runShort("oo", "N4"))).toBe("N3");
     expect(estimateShortSection(runShort("xo", "N4"))).toBe("N5"); // N4 ✗, N5 ✓
-    expect(estimateShortSection(runShort("xx", "N4"))).toBe("Pre-N5");
+    expect(estimateShortSection(runShort("xx", "N4"))).toBe("Pre-N5"); // N4 → N5까지 내려가 못 풂
+  });
+
+  it("통과한 급수가 없으면 풀어 본 가장 낮은 급수의 한 칸 아래다 — 그 아래는 묻지 않았다", () => {
+    // N1 지문부터 시작해 N1·N2를 놓친 학습자를 "N5 전"으로 보면 종합까지 끌어내린다(실제로 겪었다).
+    const s = runShort("xx", "N1");
+    expect(levelsAsked(s)).toEqual(["N1", "N2"]);
+    expect(estimateShortSection(s)).toBe("N3");
+    expect(isShortSectionConfident(s)).toBe(false);
+  });
+
+  it("N5까지 내려가서도 못 풀었으면 Pre-N5이고, 그건 확실하다", () => {
+    const s = runShort("xx", "N5");
+    expect(estimateShortSection(s)).toBe("Pre-N5");
+    expect(isShortSectionConfident(s)).toBe(true);
+  });
+
+  it("하나라도 통과했으면 확실한 것으로 본다", () => {
+    expect(isShortSectionConfident(runShort("ox", "N4"))).toBe(true);
   });
 
   it("같은 급수를 두 번 풀어 하나만 맞혀도 절반이라 통과다", () => {
