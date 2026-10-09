@@ -2,13 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import SpeakButton from "./SpeakButton";
 import { judgeKana, pickRounds } from "../lib/kanaPronunciation";
-import { getSpeechRecognition, transcriptsOf, type KanaSpeechRecognition } from "../lib/speechRecognition";
+import {
+  describeRecognitionEvent,
+  getSpeechRecognition,
+  transcriptsOf,
+  type KanaSpeechRecognition,
+} from "../lib/speechRecognition";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent, useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 import type { KanaCell, ScriptMode } from "../data/gojuon";
 import { useScrollLock } from "../hooks/useScrollLock";
+import { useDebugMode } from "../stores/pageStateStore";
 
 /**
  * 오십음도 "2초 발음 게임". 글자가 뜨면 2초 안에 소리 내 읽는다 — 마이크로 듣고
@@ -46,9 +52,11 @@ type Phase =
       timeout: boolean;
       /** 탁점·작은 글자만 다르게 들린 "거의 맞음"일 때 들린 글자. 맞은 것으로 친다. */
       nearAs?: string;
+      /** 목소리는 잡혔는데 받아 적은 글자가 없다(빈 결과). 시간 초과와 구분해 안내한다. */
+      unrecognized?: boolean;
     }
-  /** 한 번 틀리게 들려서 같은 글자를 다시 듣는 중(판마다 한 번). */
-  | { kind: "retry"; heard: string }
+  /** 한 번 틀리게(또는 못 알아듣게) 들려서 같은 글자를 다시 듣는 중(판마다 한 번). heard가 null이면 못 알아들음. */
+  | { kind: "retry"; heard: string | null }
   | { kind: "done" }
   | { kind: "fatal"; message: string };
 
@@ -73,10 +81,31 @@ function KanaSpeakingGame({
   /** 다시 하기 — 부모가 key를 바꿔 새 판으로 리마운트한다(KanjiQuizSheet와 같은 방식). */
   onRestart: () => void;
 }) {
+  // **XP는 게임을 연 뒤 첫 완주 한 번만**(동사 활용 연습과 같은 규칙). 아무 말 없이 "다음"만 눌러도
+  // 30초면 완주가 되므로, "다시 하기"마다 주면 반복으로 긁어갈 수 있었다. "다시 하기"는 안쪽만
+  // 리마운트하므로 표시는 여기(바깥)에 두고, 닫으면(cells가 null) 비운다.
+  const xpClaimedRef = useRef(false);
+  useEffect(() => {
+    if (cells === null) xpClaimedRef.current = false;
+  }, [cells]);
+  const claimXp = () => {
+    if (xpClaimedRef.current) return false;
+    xpClaimedRef.current = true;
+    return true;
+  };
+
   return (
     <AnimatePresence>
       {cells && (
-        <GameContent key={session} cells={cells} mode={mode} label={label} onClose={onClose} onRestart={onRestart} />
+        <GameContent
+          key={session}
+          cells={cells}
+          mode={mode}
+          label={label}
+          onClose={onClose}
+          onRestart={onRestart}
+          claimXp={claimXp}
+        />
       )}
     </AnimatePresence>
   );
@@ -88,12 +117,15 @@ function GameContent({
   label,
   onClose,
   onRestart,
+  claimXp,
 }: {
   cells: KanaCell[];
   mode: ScriptMode;
   label: string;
   onClose: () => void;
   onRestart: () => void;
+  /** 이번에 XP를 줘도 되면 true(게임을 연 뒤 첫 완주). */
+  claimXp: () => boolean;
 }) {
   // 떠 있는 동안 뒤쪽 본문의 스크롤을 멈춘다(useScrollLock).
   useScrollLock(true);
@@ -104,7 +136,17 @@ function GameContent({
   const [combo, setCombo] = useState(0);
   const [bestCombo, setBestCombo] = useState(0);
   const [misses, setMisses] = useState<Miss[]>([]);
+  const [xpEarned, setXpEarned] = useState<number | null>(null);
   const celebrate = useConfettiStore((s) => s.celebrate);
+  // 디버그 모드(`?debug=1`)에서는 인식기가 실제로 보낸 것을 그대로 남긴다 — 실제 마이크에서만 나는
+  // 문제(빈 결과 등)는 가짜 인식기로 재현할 수 없어서, 사용자 기기에서 무슨 일이 있었는지 봐야 한다.
+  const debug = useDebugMode((s) => s.enabled);
+  const [traceLines, setTraceLines] = useState<string[]>([]);
+  const trace = (line: string) => {
+    if (!debug) return;
+    console.info("[발음 게임]", line);
+    setTraceLines((lines) => [...lines.slice(-40), line]);
+  };
   const recordProgress = useGamificationStore((s) => s.recordProgress);
 
   const supported = getSpeechRecognition() !== null;
@@ -173,10 +215,11 @@ function GameContent({
     correct: boolean,
     heard: string | null,
     timeout: boolean,
-    nearAs?: string
+    nearAs?: string,
+    unrecognized?: boolean
   ) {
     const cell = rounds[roundIndex];
-    setPhase({ kind: "result", correct, heard, timeout, nearAs });
+    setPhase({ kind: "result", correct, heard, timeout, nearAs, unrecognized });
     if (correct) {
       setScore((s) => s + 1);
       comboRef.current += 1;
@@ -202,8 +245,11 @@ function GameContent({
     if (roundIndex + 1 >= rounds.length) {
       stopRecognition();
       setPhase({ kind: "done" });
-      // 게임 완주라는 명확한 학습 행동에 한 번만(한자 퀴즈와 같은 규칙). 맞힌 개수와 무관하다.
-      recordProgress(XP_REWARDS.kanaSpeakingCompleted);
+      // 게임 완주라는 명확한 학습 행동에, 연 뒤 첫 완주 한 번만(위 claimXp 주석). 맞힌 개수와 무관하다.
+      if (claimXp()) {
+        recordProgress(XP_REWARDS.kanaSpeakingCompleted);
+        setXpEarned(XP_REWARDS.kanaSpeakingCompleted);
+      }
       return;
     }
     setIndex(roundIndex + 1);
@@ -229,6 +275,7 @@ function GameContent({
     if (stale()) return;
 
     const cell = rounds[roundIndex];
+    trace(`— ${roundIndex + 1}번 「${char(cell)}」 ${attempt ? "다시 듣기" : "시작"}`);
     const rec = new Recognition();
     rec.lang = "ja-JP";
     rec.continuous = false;
@@ -239,15 +286,23 @@ function GameContent({
 
     let speechStarted = false;
     let lastHeard: string | null = null;
+    // 받아 적은 글자 없이 끝난 최종 결과(빈 transcript)가 왔다 — 목소리는 갔는데 인식기가 못 알아들었다.
+    let emptyFinal = false;
     // "거의 맞음"은 바로 끝내지 않고 기억만 해 둔다 — 말하는 도중의 interim이라 곧 정확한 결과가
     // 올 수 있다. 결과가 더 안 오면(최종·시간 끝) 이걸로 맞은 것으로 끝낸다.
     let near: { heard: string; heardAs: string } | null = null;
-    const finishRaw = (correct: boolean, heard: string | null, timeout: boolean, nearAs?: string) => {
+    const finishRaw = (
+      correct: boolean,
+      heard: string | null,
+      timeout: boolean,
+      nearAs?: string,
+      unrecognized?: boolean
+    ) => {
       if (stale()) return;
       tokenRef.current += 1; // 이 판의 나머지 이벤트는 전부 무시
       clearTimers();
       stopRecognition();
-      endRound(roundIndex, correct, heard, timeout, nearAs);
+      endRound(roundIndex, correct, heard, timeout, nearAs, unrecognized);
     };
     const finish = (correct: boolean, heard: string | null, timeout: boolean) => {
       if (stale()) return;
@@ -255,8 +310,10 @@ function GameContent({
         finishRaw(true, near.heard, false, near.heardAs);
         return;
       }
-      // 무언가 들렸는데 틀렸으면 한 번 더 듣는다(시간 초과·무음은 제외 — 그건 다시 들어도 같다).
-      if (!correct && heard !== null && !timeout && attempt === 0) {
+      // 목소리는 잡혔는데 받아 적은 글자가 없다 — 시간 초과가 아니라 "못 알아들음"이다.
+      const unrecognized = !correct && heard === null && (emptyFinal || speechStarted);
+      // 무언가 들렸는데 틀렸거나 못 알아들었으면 한 번 더 듣는다(무음 시간 초과는 제외 — 다시 들어도 같다).
+      if (!correct && attempt === 0 && ((heard !== null && !timeout) || unrecognized)) {
         tokenRef.current += 1;
         clearTimers();
         stopRecognition();
@@ -264,7 +321,7 @@ function GameContent({
         timersRef.current.push(window.setTimeout(() => void startRound(roundIndex, 1), 700));
         return;
       }
-      finishRaw(correct, heard, timeout);
+      finishRaw(correct, heard, timeout, undefined, unrecognized);
     };
     const fail = (message: string) => {
       if (stale()) return;
@@ -276,6 +333,7 @@ function GameContent({
 
     rec.onaudiostart = () => {
       if (stale()) return;
+      trace("audiostart");
       setPhase({ kind: "listening" });
       timersRef.current.push(
         window.setTimeout(() => {
@@ -290,11 +348,19 @@ function GameContent({
       );
     };
     rec.onspeechstart = () => {
+      trace("speechstart");
       speechStarted = true;
     };
     rec.onresult = (event) => {
+      trace(`result ${describeRecognitionEvent(event)}`);
       const { texts, isFinal } = transcriptsOf(event);
-      if (texts.length === 0) return;
+      if (texts.length === 0) {
+        if (isFinal) {
+          emptyFinal = true;
+          finish(false, lastHeard, false);
+        }
+        return;
+      }
       lastHeard = texts[0];
       const judged = judgeKana(texts, cell, homophonesRef.current);
       if (judged.result === "exact") finish(true, texts[0], false);
@@ -304,6 +370,7 @@ function GameContent({
       }
     };
     rec.onerror = (event) => {
+      trace(`error ${event.error}${event.message ? ` (${event.message})` : ""}`);
       switch (event.error) {
         case "not-allowed":
         case "service-not-allowed":
@@ -326,7 +393,10 @@ function GameContent({
           return;
       }
     };
-    rec.onend = () => finish(false, lastHeard, lastHeard === null);
+    rec.onend = () => {
+      trace("end");
+      finish(false, lastHeard, lastHeard === null);
+    };
 
     try {
       rec.start();
@@ -465,7 +535,9 @@ function GameContent({
                 {phase.kind === "retry" && (
                   <>
                     <p className="text-lg text-warning">🔁 한 번 더!</p>
-                    <p className="mt-1 font-mixed text-sm text-gray-500">「{phase.heard}」로 들렸어요</p>
+                    <p className="mt-1 font-mixed text-sm text-gray-500">
+                      {phase.heard === null ? "잘 못 알아들었어요 — 조금 더 크게, 또렷하게" : `「${phase.heard}」로 들렸어요`}
+                    </p>
                   </>
                 )}
                 {phase.kind === "result" && (
@@ -475,9 +547,11 @@ function GameContent({
                         ? phase.nearAs
                           ? "🟡 거의 맞아요!"
                           : "✅ 정확해요!"
-                        : phase.timeout && !phase.heard
-                          ? "⏰ 시간 초과"
-                          : "❌ 아쉬워요"}
+                        : phase.unrecognized
+                          ? "🙉 못 알아들었어요"
+                          : phase.timeout && !phase.heard
+                            ? "⏰ 시간 초과"
+                            : "❌ 아쉬워요"}
                     </p>
                     {phase.nearAs ? (
                       // 탁점·작은 글자만 다르게 들린 경우. 맞은 것으로 치되 무엇으로 들렸는지는 알려준다.
@@ -512,6 +586,7 @@ function GameContent({
               {score} / {total} 정답!
             </p>
             {bestCombo >= 2 && <p className="text-sm text-gray-500">최고 {bestCombo}연속 🔥</p>}
+            {xpEarned !== null && <p className="text-sm text-warning">⭐ +{xpEarned} XP</p>}
 
             {misses.length > 0 && (
               <div className="mt-4 w-full rounded-2xl bg-gray-50 p-4 text-left">
@@ -541,6 +616,12 @@ function GameContent({
               </button>
             </div>
           </div>
+        )}
+
+        {debug && traceLines.length > 0 && (
+          <pre className="mt-4 max-h-40 overflow-auto rounded-xl bg-gray-50 p-2 text-[10px] leading-snug whitespace-pre-wrap text-gray-500">
+            {`🐞 ${navigator.userAgent}\n${traceLines.join("\n")}`}
+          </pre>
         )}
       </motion.div>
     </motion.div>

@@ -301,7 +301,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      wordLink.test.ts ·
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
-                     grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts ·
+                     grammarPatterns.test.ts · kanaPronunciation.test.ts · speechRecognition.test.ts · srs.test.ts ·
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
                      conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
                      sentenceReview.test.ts · kanjiWriting.test.ts · studyCalendar.test.ts ·
@@ -1616,9 +1616,18 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
 - **정답 듣기(TTS)와 마이크가 부딪힌다.** 정답 발음을 틀어 둔 채 다음 판으로 넘어가면 마이크가
   그 소리를 듣고 "맞았다"고 한다 — 판을 시작할 때 `speechSynthesis.cancel()`부터 부른다.
 - 판마다 인식기를 새로 만들고(`continuous: false`), 늦게 도착하는 이벤트는 **토큰**으로 버린다.
-  시트를 닫으면(언마운트) 반드시 `abort()` — 안 하면 탭에 녹음 표시가 남는다.
-- XP는 **완주에 한 번**(`kanaSpeakingCompleted`, 한자 퀴즈와 같은 규칙). 맞힌 글자는
+  시트를 닫으면(언마운트) 반드시 `abort()` — 안 하면 탭에 녹음 표시가 남는다. **닫기를 누른 순간에도
+  멈춘다**(`close()`) — 언마운트는 닫힘 애니메이션이 끝난 뒤라 그사이 인식기·타이머가 돌아, 닫은 게임에
+  완주 XP가 들어갈 수 있었다.
+- XP는 **게임을 연 뒤 첫 완주 한 번**(`kanaSpeakingCompleted`, 동사 활용 연습과 같은 규칙). 아무 말 없이
+  "다음"만 눌러도 완주가 되므로 "다시 하기"마다 주면 긁어갈 수 있었다. "다시 하기"는 안쪽만 리마운트하니
+  표시는 바깥(`KanaSpeakingGame`)이 들고 닫으면 비운다. 맞힌 글자는
   `kana-studied`를 남긴다(처음 한 번만 — Pre-N5 진도가 된다. XP는 따로 안 준다).
+- **인식기는 목소리를 잡고도 빈 글자(`transcript: ""`)의 최종 결과를 보낸다 (실제 마이크로 보고받았다).**
+  예전엔 그걸 "무언가 들렸는데 틀렸다"로 읽어 「」로 들렸어요 → ❌ 아쉬워요가 됐다 — 맞게 말해도 입력이
+  안 된 것처럼 보였다. 지금은 `transcriptsOf`가 빈 글자를 후보에서 빼고, 게임은 "🙉 못 알아들었어요"로
+  구분해 한 번 더 듣는다(목소리가 잡혔으면 — `speechstart` 또는 빈 최종 결과). **왜 빈 결과가 오는지는 아직
+  모른다** — `?debug=1`이면 시트 아래에 UA와 인식 이벤트 원문(대안·confidence 포함)이 남으니 그걸로 볼 것.
 - **실제 마이크로는 아직 확인 못 했다.** 헤드리스 브라우저에서 권한 거부 경로는 진짜 API로,
   나머지(정답·시간 초과·오답·늦게 말하기)는 이벤트 순서를 흉내 낸 가짜 인식기로 확인했다.
   남은 확인거리: **짧은 한 글자를 실제 인식기가 얼마나 잘 받아 적는지**(특히 Android Chrome),
