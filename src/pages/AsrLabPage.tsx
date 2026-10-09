@@ -103,7 +103,7 @@ function AsrLabPage() {
     setModelState("불러오는 중…");
     try {
       await modelRef.current?.release();
-      const m = await loadPhonemeModel(`${MODEL_DIR}/${VARIANTS[variant].file}`, `${MODEL_DIR}/vocab.json`, backend);
+      const m = await loadPhonemeModel(`${MODEL_DIR}/${VARIANTS[variant].file}`, backend);
       // 첫 추론은 준비 비용이 섞이므로 1초짜리 무음으로 한 번 데운다.
       const warm = await m.recognize(new Float32Array(16000));
       modelRef.current = m;

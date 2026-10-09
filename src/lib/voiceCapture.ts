@@ -10,7 +10,7 @@
 export type VoiceClip = {
   /** 16kHz 모노. */
   samples: Float32Array;
-  /** 듣기 시작부터 말이 시작되기까지(ms). 2초 규칙에 쓴다. */
+  /** 소음 측정이 끝나고 "말하세요"가 된 때부터 말이 시작되기까지(ms). 2초 규칙에 쓴다. */
   onsetMs: number;
   /** 잘라낸 길이(ms). */
   durationMs: number;
@@ -19,12 +19,17 @@ export type VoiceClip = {
 export type ListenOptions = {
   /** 말이 끝났다고 볼 조용한 시간. 세 번 이어 읽기는 사이 쉼이 있어 길게 준다. */
   endSilenceMs?: number;
-  /** 말이 시작되지 않으면 포기할 시간. */
+  /** 말이 시작되지 않으면 포기할 시간(소음 측정이 끝난 뒤부터 잰다). */
   noSpeechMs?: number;
   /** 한 발화의 최대 길이. */
   maxMs?: number;
   /** 매 프레임 소리 크기(0~1) — 화면의 레벨 미터용. */
   onLevel?: (rms: number) => void;
+  /**
+   * 소음 측정(처음 300ms)이 끝나 듣기 시작한 순간. 게임은 이때 글자를 보여주고 2초 시계를 돌린다 — 측정 중에
+   * 말하기 시작하면 그 목소리가 "소음"으로 잡혀 문턱이 올라가고 말 시작을 놓친다.
+   */
+  onListening?: () => void;
   signal?: AbortSignal;
 };
 
@@ -59,7 +64,7 @@ export class VoiceCapture {
 
   /** 한 번의 발화를 듣는다. 말이 없으면 null. */
   listen(opts: ListenOptions = {}): Promise<VoiceClip | null> {
-    const { endSilenceMs = 500, noSpeechMs = 5000, maxMs = 4000, onLevel, signal } = opts;
+    const { endSilenceMs = 500, noSpeechMs = 5000, maxMs = 4000, onLevel, onListening, signal } = opts;
     const ctx = this.ctx;
     const rate = ctx.sampleRate;
     const source = ctx.createMediaStreamSource(this.stream);
@@ -115,23 +120,25 @@ export class VoiceCapture {
           noiseSum += level;
           noiseCount += 1;
           threshold = Math.max(0.015, (noiseSum / noiseCount) * 3);
+          if (elapsed + frameMs > CALIBRATE_MS) onListening?.();
           return;
         }
+        const listened = elapsed - CALIBRATE_MS;
 
         if (startIndex < 0) {
           loudRun = level > threshold ? loudRun + 1 : 0;
           // 60ms쯤 이어져야 말로 본다(딸깍 소리 하나에 시작되지 않게).
           if (loudRun * frameMs >= 60) {
             startIndex = frames.length - loudRun;
-            onsetMs = Math.round(elapsed - loudRun * frameMs);
-          } else if (elapsed > noSpeechMs) {
+            onsetMs = Math.max(0, Math.round(listened - loudRun * frameMs));
+          } else if (listened > noSpeechMs) {
             finish(null);
           }
           return;
         }
 
         quietMs = level < threshold * 0.6 ? quietMs + frameMs : 0;
-        const spoken = elapsed - onsetMs;
+        const spoken = listened - onsetMs;
         if (quietMs >= endSilenceMs) finish(frames.length - Math.floor(quietMs / frameMs));
         else if (spoken >= maxMs) finish(frames.length);
       };

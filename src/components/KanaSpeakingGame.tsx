@@ -1,7 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import SpeakButton from "./SpeakButton";
+import { toKatakana } from "wanakana";
+import { GOJUON_SECTIONS } from "../data/gojuon";
+import { formatBytes } from "../lib/gemmaModel";
+import { getCachedKanaModel, KANA_MODEL } from "../lib/kanaModel";
+import {
+  cancelKanaModelDownload,
+  ensureKanaModelChecked,
+  removeKanaModel,
+  startKanaModelDownload,
+} from "../lib/kanaModelController";
+import { judgeByAlignment, speakableKanaPhonemes } from "../lib/kanaPhonemes";
 import { judgeKana, pickRounds } from "../lib/kanaPronunciation";
+import { loadPhonemeModel, type PhonemeModel } from "../lib/phonemeRecognizer";
+import { VoiceCapture } from "../lib/voiceCapture";
+import { useKanaModelStore } from "../stores/kanaModelStore";
 import {
   describeRecognitionEvent,
   getSpeechRecognition,
@@ -18,8 +32,11 @@ import { useScrollLock } from "../hooks/useScrollLock";
 import { useDebugMode } from "../stores/pageStateStore";
 
 /**
- * 오십음도 "2초 발음 게임". 글자가 뜨면 2초 안에 소리 내 읽는다 — 마이크로 듣고
- * 브라우저 음성 인식(Web Speech API)으로 채점한다. 채점 규칙은 `kanaPronunciation.ts`.
+ * 오십음도 "2초 발음 게임". 글자가 뜨면 2초 안에 소리 내 읽는다. 채점은 둘 중 하나다:
+ * - **기기 안 판정(모델을 받았을 때)** — 직접 녹음해(`voiceCapture.ts`) 음소 인식 모델로 판정한다
+ *   (`kanaPhonemes.ts`의 `judgeByAlignment`). 목소리가 기기를 벗어나지 않고 브라우저를 가리지 않는다.
+ * - **브라우저 음성 인식(모델이 없을 때)** — Web Speech API. 채점 규칙은 `kanaPronunciation.ts`.
+ *   가나 한 글자를 잘 못 받아 적는다(Chrome은 결과 없이 끝, 웨일은 빈 결과) — 그래서 모델 받기를 권한다.
  *
  * **2초는 "말하기 시작"까지다.** 인식 결과는 말이 끝나고도 수백 ms 뒤에 오고(Chrome은 서버를
  * 한 번 다녀온다) 그 지연은 학습자 탓이 아니다. 그래서 2초 안에 목소리가 잡혔으면 결과를
@@ -31,6 +48,11 @@ const LIMIT_MS = 2000;
 const GRACE_MS = 2500;
 /** 맞힌 뒤 다음 글자로 넘어가기까지. 틀렸을 때는 정답을 들어볼 수 있게 직접 넘긴다. */
 const ADVANCE_MS = 900;
+
+/** 기기 안 판정의 후보 — 소리로 낼 수 있는 모든 칸. 목표 글자를 이들과 견준다. */
+const CANDIDATES = speakableKanaPhonemes(
+  GOJUON_SECTIONS.flatMap((s) => s.rows.flatMap((r) => r.cells)).filter((c) => c !== null)
+);
 
 // 1.5KB짜리 동음어 표. 게임을 열 때만 받는다(오십음도 청크에 얹지 않으려고).
 let homophonesPromise: Promise<Record<string, string[]>> | null = null;
@@ -155,6 +177,15 @@ function GameContent({
   const recordProgress = useGamificationStore((s) => s.recordProgress);
 
   const supported = getSpeechRecognition() !== null;
+  const modelStatus = useKanaModelStore((s) => s.status);
+  const modelReceived = useKanaModelStore((s) => s.receivedBytes);
+  const modelError = useKanaModelStore((s) => s.error);
+  useEffect(() => ensureKanaModelChecked(), []);
+  // 판을 시작할 때 정한다 — 게임 도중 모델 받기가 끝나도 엔진을 바꾸지 않는다.
+  const engineRef = useRef<"model" | "browser">("browser");
+  const phonemeModelRef = useRef<PhonemeModel | null>(null);
+  const captureRef = useRef<VoiceCapture | null>(null);
+  const listenAbortRef = useRef<AbortController | null>(null);
   const recRef = useRef<KanaSpeechRecognition | null>(null);
   const timersRef = useRef<number[]>([]);
   // 판마다 올린다. 이전 판의 인식기가 늦게 보낸 이벤트(onend·onerror)가 지금 판을 건드리지 못하게.
@@ -188,8 +219,14 @@ function GameContent({
     const timers = timersRef;
     const recognition = recRef;
     const token = tokenRef;
+    const listen = listenAbortRef;
+    const capture = captureRef;
+    const model = phonemeModelRef;
     return () => {
       token.current += 1;
+      listen.current?.abort();
+      capture.current?.close();
+      void model.current?.release();
       timers.current.forEach((t) => window.clearTimeout(t));
       const rec = recognition.current;
       recognition.current = null;
@@ -212,6 +249,7 @@ function GameContent({
     tokenRef.current += 1;
     clearTimers();
     stopRecognition();
+    listenAbortRef.current?.abort();
     onClose();
   }
 
@@ -249,6 +287,7 @@ function GameContent({
     clearTimers();
     if (roundIndex + 1 >= rounds.length) {
       stopRecognition();
+      listenAbortRef.current?.abort();
       setPhase({ kind: "done" });
       // 게임 완주라는 명확한 학습 행동에, 연 뒤 첫 완주 한 번만(위 claimXp 주석). 맞힌 개수와 무관하다.
       if (claimXp()) {
@@ -265,7 +304,96 @@ function GameContent({
    * @param attempt 판 안에서 몇 번째 듣기인지. **틀리게 들리면 한 번 더 듣는다** — 짧은 한 글자는
    *   인식기가 자주 엉뚱하게 받아 적어서, 한 번에 떨어뜨리면 제대로 읽은 학습자까지 떨어진다.
    */
+  /** 첫 판. 모델이 있으면 불러오고 마이크를 연 뒤 시작한다(둘 다 한 번만 — 판마다 열면 느리다). */
+  async function startGame() {
+    if (modelStatus !== "installed") {
+      engineRef.current = "browser";
+      void startRound(0);
+      return;
+    }
+    engineRef.current = "model";
+    const token = ++tokenRef.current;
+    setPhase({ kind: "waiting" });
+    try {
+      if (!phonemeModelRef.current) {
+        const file = await getCachedKanaModel();
+        if (!file) throw new Error("받아 둔 모델을 찾지 못했어요. 모델을 다시 받아주세요.");
+        phonemeModelRef.current = await loadPhonemeModel(new Uint8Array(await file.arrayBuffer()));
+        trace(`모델 ${phonemeModelRef.current.backend} · ${phonemeModelRef.current.loadMs}ms`);
+      }
+      captureRef.current ??= await VoiceCapture.open();
+    } catch (e) {
+      if (token !== tokenRef.current) return;
+      const denied = e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "SecurityError");
+      setPhase({
+        kind: "fatal",
+        message: denied
+          ? "마이크 권한이 필요해요. 주소창 옆 🔒 아이콘에서 마이크를 허용한 뒤 다시 시작해주세요."
+          : e instanceof DOMException && e.name === "NotFoundError"
+            ? "마이크를 찾지 못했어요. 마이크가 연결돼 있는지 확인해주세요."
+            : (e as Error).message || "발음 판정을 준비하지 못했어요.",
+      });
+      return;
+    }
+    if (token !== tokenRef.current) return;
+    void startRound(0);
+  }
+
+  /** 기기 안 판정 한 판. 브라우저 인식과 같은 규칙: 2초 안에 말을 시작해야 하고, 틀리게 들리면 한 번 더 듣는다. */
+  async function startModelRound(roundIndex: number, attempt: number) {
+    const capture = captureRef.current;
+    const model = phonemeModelRef.current;
+    if (!capture || !model) return;
+    clearTimers();
+    listenAbortRef.current?.abort();
+    window.speechSynthesis?.cancel();
+    const token = ++tokenRef.current;
+    const stale = () => token !== tokenRef.current;
+    const cell = rounds[roundIndex];
+    // 화면 글자(가타카나 모드면 가타카나)로 "무엇으로 들렸는지" 보여준다.
+    const shown = (kana: string | null) => (kana && mode === "katakana" ? toKatakana(kana) : kana);
+    setPhase({ kind: "waiting" });
+    trace(`— ${roundIndex + 1}번 「${char(cell)}」 ${attempt ? "다시 듣기" : "시작"} (기기 안 판정)`);
+
+    const ac = new AbortController();
+    listenAbortRef.current = ac;
+    const clip = await capture.listen({
+      noSpeechMs: LIMIT_MS,
+      endSilenceMs: 450,
+      maxMs: 3000,
+      signal: ac.signal,
+      onListening: () => {
+        if (!stale()) setPhase({ kind: "listening" });
+      },
+    });
+    if (stale() || ac.signal.aborted) return;
+    const end = (correct: boolean, heard: string | null, timeout: boolean, nearAs?: string, unrecognized?: boolean) => {
+      tokenRef.current += 1;
+      endRound(roundIndex, correct, heard, timeout, nearAs, unrecognized);
+    };
+    if (!clip) {
+      trace("말 시작 없음");
+      end(false, null, true);
+      return;
+    }
+    setPhase({ kind: "judging" });
+    const out = await model.run(clip.samples);
+    if (stale()) return;
+    const { judgement, heardAs } = judgeByAlignment(out.logits, out.frames, out.classes, model.vocab, cell.hiragana, CANDIDATES);
+    trace(`시작 ${clip.onsetMs}ms · 길이 ${clip.durationMs}ms · 추론 ${out.ms}ms → ${judgement} (1등 ${heardAs ?? "없음"})`);
+    if (judgement === "exact") return end(true, shown(heardAs), false);
+    if (judgement === "near") return end(true, shown(heardAs), false, shown(heardAs) ?? undefined);
+    if (attempt === 0) {
+      tokenRef.current += 1;
+      setPhase({ kind: "retry", heard: shown(heardAs) });
+      timersRef.current.push(window.setTimeout(() => void startModelRound(roundIndex, 1), 700));
+      return;
+    }
+    end(false, shown(heardAs), false, undefined, heardAs === null);
+  }
+
   async function startRound(roundIndex: number, attempt = 0) {
+    if (engineRef.current === "model") return startModelRound(roundIndex, attempt);
     const Recognition = getSpeechRecognition();
     if (!Recognition) return;
     clearTimers();
@@ -456,12 +584,17 @@ function GameContent({
               <li>🎯 {label}에서 {total}문제가 나와요.</li>
               <li>🤫 조용한 곳에서 한 글자만 또렷하게 말하면 잘 알아들어요.</li>
             </ul>
+            {modelStatus !== "unsupported" && modelStatus !== "checking" && (
+              <KanaModelCard status={modelStatus} received={modelReceived} error={modelError} />
+            )}
             <p className="mt-3 text-xs text-gray-400">
-              음성 인식은 브라우저 기능을 써요. Chrome에서는 목소리가 구글 서버로 보내져 인식돼요.
+              {modelStatus === "installed"
+                ? "발음 판정은 이 기기 안에서 해요. 목소리는 어디로도 보내지지 않아요."
+                : "음성 인식은 브라우저 기능을 써요. Chrome에서는 목소리가 구글 서버로 보내져 인식돼요."}
             </p>
-            {supported ? (
+            {supported || modelStatus === "installed" ? (
               <button
-                onClick={() => void startRound(0)}
+                onClick={() => void startGame()}
                 disabled={total === 0}
                 className="btn-press mt-5 w-full rounded-2xl bg-primary py-3 font-bold text-white disabled:opacity-40"
                 style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
@@ -470,7 +603,8 @@ function GameContent({
               </button>
             ) : (
               <p className="mt-5 rounded-xl bg-warning/10 p-3 text-sm text-warning">
-                이 브라우저는 음성 인식을 지원하지 않아요. Chrome이나 Safari에서 해보세요.
+                이 브라우저는 음성 인식을 지원하지 않아요.{" "}
+                {modelStatus === "unsupported" ? "Chrome이나 Safari에서 해보세요." : "위의 발음 판정 모델을 받으면 할 수 있어요."}
               </p>
             )}
           </div>
@@ -481,7 +615,7 @@ function GameContent({
             <span className="text-4xl">🎙️</span>
             <p className="mt-2 text-sm text-gray-700">{phase.message}</p>
             <button
-              onClick={() => void startRound(index)}
+              onClick={() => void (phonemeModelRef.current && captureRef.current ? startRound(index) : index === 0 ? startGame() : startRound(index))}
               className="btn-press mt-5 w-full rounded-2xl bg-primary py-3 font-bold text-white"
               style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
             >
@@ -531,7 +665,11 @@ function GameContent({
                     : "border-transparent"
                 }`}
               >
-                <span className="font-ja text-8xl leading-none">{char(current)}</span>
+                {/* 마이크가 준비되기 전(소음 측정 중)에는 글자를 숨긴다 — 보이면 바로 읽기 시작해 그 목소리가
+                    소음으로 잡히고, 브라우저 인식도 audiostart 전 소리는 못 듣는다. 자리는 그대로 둔다. */}
+                <span className={`font-ja text-8xl leading-none ${phase.kind === "waiting" ? "invisible" : ""}`}>
+                  {char(current)}
+                </span>
                 {phase.kind === "result" && (
                   <span className="mt-2 text-lg text-gray-500">{current.romaji}</span>
                 )}
@@ -634,6 +772,67 @@ function GameContent({
         )}
       </motion.div>
     </motion.div>
+  );
+}
+
+/**
+ * 기기 안 발음 판정 모델 받기. Gemma와 같은 규칙 — 자동으로 받지 않고 버튼이 곧 동의다. 받기는
+ * `kanaModelController`(모듈)가 들고 있어서 시트를 닫아도 계속된다.
+ */
+function KanaModelCard({
+  status,
+  received,
+  error,
+}: {
+  status: "not-installed" | "downloading" | "installed" | "error";
+  received: number;
+  error: string | null;
+}) {
+  if (status === "installed") {
+    return (
+      <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-info/10 p-3 text-sm text-gray-700">
+        <span>🎧 기기 안 발음 판정을 써요</span>
+        <button onClick={removeKanaModel} className="text-xs text-gray-400 underline">
+          모델 지우기
+        </button>
+      </div>
+    );
+  }
+  if (status === "downloading") {
+    const ratio = Math.min(1, received / KANA_MODEL.bytes);
+    return (
+      <div className="mt-3 rounded-2xl bg-info/10 p-3 text-sm text-gray-700">
+        <div className="flex items-center justify-between">
+          <span>🎧 발음 판정 모델 받는 중… {Math.round(ratio * 100)}%</span>
+          <button onClick={cancelKanaModelDownload} className="text-xs text-gray-400 underline">
+            취소
+          </button>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+          <div className="h-full rounded-full bg-info" style={{ width: `${ratio * 100}%` }} />
+        </div>
+        <p className="mt-1 text-xs text-gray-400">
+          {formatBytes(received)} / {formatBytes(KANA_MODEL.bytes)} · 창을 닫아도 계속 받아요
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 rounded-2xl bg-info/10 p-3 text-sm text-gray-700">
+      <p className="font-bold">🎧 더 정확한 기기 안 발음 판정</p>
+      <ul className="mt-1 list-inside list-disc text-xs text-gray-500">
+        <li>가나 한 글자도 잘 알아들어요(브라우저 음성 인식은 한 글자에 약해요)</li>
+        <li>목소리가 기기 밖으로 나가지 않아요</li>
+        <li>한 번 받으면 다시 받지 않아요 · Wi-Fi에서 받기를 권해요</li>
+      </ul>
+      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+      <button
+        onClick={startKanaModelDownload}
+        className="mt-2 w-full rounded-xl bg-info py-2 font-bold text-white"
+      >
+        받기 ({formatBytes(KANA_MODEL.bytes)})
+      </button>
+    </div>
   );
 }
 

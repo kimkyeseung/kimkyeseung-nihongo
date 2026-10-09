@@ -1628,24 +1628,39 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
   안 된 것처럼 보였다. 지금은 `transcriptsOf`가 빈 글자를 후보에서 빼고, 게임은 "🙉 못 알아들었어요"로
   구분해 한 번 더 듣는다(목소리가 잡혔으면 — `speechstart` 또는 빈 최종 결과). **왜 빈 결과가 오는지는 아직
   모른다** — `?debug=1`이면 시트 아래에 UA와 인식 이벤트 원문(대안·confidence 포함)이 남으니 그걸로 볼 것.
+- **모델을 받았으면 판정은 기기 안에서 한다** — "기기 안 발음 판정" 절. 아래 내용은 브라우저 음성 인식 경로다.
 - **실제 마이크로는 아직 확인 못 했다.** 헤드리스 브라우저에서 권한 거부 경로는 진짜 API로,
   나머지(정답·시간 초과·오답·늦게 말하기)는 이벤트 순서를 흉내 낸 가짜 인식기로 확인했다.
   남은 확인거리: **짧은 한 글자를 실제 인식기가 얼마나 잘 받아 적는지**(특히 Android Chrome),
   2.5초 유예가 충분한지, "거의 맞음"이 너무 후한지(탁음을 구분 못 하는 학습자도 통과시킨다).
 
-## 발음 인식 시험 (`/lab/asr` — spike/kana-asr 브랜치, 아직 게임에 안 붙임)
+## 기기 안 발음 판정 (`kanaModel.ts` / `kanaPhonemes.ts` / `voiceCapture.ts`) 구현 노트
 - 브라우저 음성 인식은 가나 한 글자를 못 받아 적는다(Chrome은 결과 없이 `end`, 웨일은 빈 결과 — 발음 게임 절).
-  그래서 **직접 판정**을 시험 중이다: 말 시작·끝은 소리 크기로 직접 자르고(`voiceCapture.ts` — 앞 300ms를
-  남긴다, 첫 자음이 잘리면 か가 は로 들린다), 음소 CTC 모델(prj-beatrice/japanese-hubert-base-phoneme-ctc-v3,
-  Apache-2.0, ONNX로 직접 변환)로 `k a` 같은 음소를 받아 `kanaPhonemes.ts`가 채점한다.
-- 결과(실제 목소리 15글자, 웨일 녹음): 한 번 읽기 정확 10 + 거의 2~3 / 15. fp16(189MB) + WebGPU면 한 글자 **약
-  20~30ms**, 같은 파일 WASM이면 약 390ms(교차 출처 격리가 없어 스레드 1개). int8(122MB)은 WebGPU에서 안 빨라진다.
-  macOS `say`로 만든 합성 음성은 한 글자를 이상하게 읽어서 시험 재료로 못 쓴다(두 모델이 똑같이 틀렸다).
-- 모델 파일은 저장소 밖 `lab-models/`(gitignore)에 두고 **개발 서버만** `/lab-models/*`로 내보낸다(vite.config.ts의
-  `labModels`). onnxruntime-web은 실행 코드까지 jsDelivr에서 받는다 — npm 패키지를 import하면 26.8MB WASM이
-  배포물에 들어가 PWA 프리캐시 한도에 걸려 빌드가 실패했다(패키지는 devDependency, 타입 전용).
-- 남은 일: 더 많은 글자·여러 사람·Chrome 녹음으로 확인, 모델을 올릴 곳(Hugging Face 등) 정하기, 받기 동의·OPFS
-  저장(Gemma와 같은 규칙), "세 번 읽기" 채점(`k k i k i`처럼 자음이 겹쳐 나오는 모양을 아직 못 받는다).
+  그래서 **모델을 받았으면** 발음 게임이 직접 판정한다: 말 시작·끝은 소리 크기로 직접 자르고(`voiceCapture.ts`),
+  음소 CTC 모델(prj-beatrice/japanese-hubert-base-phoneme-ctc-v3, Apache-2.0 — ONNX·fp16으로 직접 변환, 189MB)을
+  onnxruntime-web(WebGPU, 안 되면 WASM)으로 돌린다. 모델이 없으면 예전처럼 브라우저 음성 인식이다.
+- **채점은 확률 비교(`judgeByAlignment`)다 — 가장 그럴듯한 소리 하나만 보지 말 것.** 실제 목소리 54글자(바르게
+  읽었다고 확인받음)에서 그리디 디코딩은 22%를 틀렸다고 했다(모델이 く/ふ에서 망설이면 ふ만 남는다). 지금은 CTC
+  전방 알고리즘으로 목표 글자의 로그 확률을 모든 가나와 견줘 1등과 `ALIGN_MARGIN`(4) 안이면 통과 — 받아들임 89%,
+  다른 글자로 물었을 때 통과 2.1%, 잘못 읽은 글자(ざ)는 걸렀다. 근거 표는 `kanaPhonemes.ts`에 있다. **여유를 올리면
+  아무 말이나 통과한다**(8이면 12.6%). "거의 맞음"은 탁점·반탁점을 붙이거나 뗀 **글자**로 판정한다(자음 표로
+  묶었더니 ぢ를 ち로 말한 것이 ❌였다).
+- **무음 녹음은 판정하지 않는다**(`hasSpeech`) — 모든 후보가 똑같이 낮으면 목표 글자도 여유 안에 들어와 기침 하나가
+  정답이 됐다(테스트로 잡았다).
+- `voiceCapture`는 처음 300ms로 소음을 재고 `onListening`을 부른다. **게임은 그때 글자를 보여주고 2초 시계를
+  돌린다** — 측정 중에 읽기 시작하면 그 목소리가 소음으로 잡힌다. 말 시작 전 300ms를 남긴다(첫 자음이 잘리면 か가
+  は로 들린다). 마이크와 모델은 게임을 열 때 한 번만 열고, 닫으면 놓는다.
+- 받기는 Gemma와 같은 규칙(자동으로 안 받음·저장 공간 확인·지속 저장 요청·`.part` → `move(dir, name)`)이지만
+  **이어받기는 없다**(189MB). 다운로드는 모듈(`kanaModelController`)이 들고 있어 시트를 닫아도 계속된다.
+- **모델 주소(`kanaModel.ts`의 `PUBLISHED_URL`)가 비어 있으면 배포 빌드에서 이 기능이 숨는다.** 개발 서버는 저장소
+  밖 `lab-models/`(gitignore)를 `/lab-models/*`로 내보낸다(vite.config.ts의 `labModels` — 빌드에 안 들어간다).
+  올릴 묶음(모델·어휘·모델 카드·변환 스크립트)은 `lab-models/hf-upload/`. 모델 파일을 바꾸면 `KANA_MODEL.bytes`와
+  `PHONEME_VOCAB`도 같이 바꿀 것.
+- onnxruntime-web은 **실행 코드까지 jsDelivr에서** 받는다 — npm 패키지를 import하면 26.8MB WASM이 배포물에 들어가
+  PWA 프리캐시 한도에 걸려 빌드가 실패했다(패키지는 devDependency, 타입 전용).
+- 시험장 `/lab/asr`(디버그 전용, 링크 없음)에서 녹음·브라우저 안 판정·녹음 파일 내보내기/불러오기를 할 수 있다.
+  macOS `say`의 합성 음성은 한 글자를 이상하게 읽어서 시험 재료로 못 쓴다.
+- 남은 확인거리: 여러 사람·Chrome·모바일 실기기, 모바일 WASM 속도, 이 목소리에서 끝까지 안 되는 く·お·ぽ·ぜ.
 
 ## 발음 재생(TTS) 구현 노트
 - 문장/단어 끝의 🔊 버튼은 전부 `SpeakButton` 하나다(내부에서 `useJapaneseSpeech` 사용).

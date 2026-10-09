@@ -36,6 +36,12 @@ const SOURCES = [
     license: "CC BY-SA 3.0",
     url: "https://github.com/KanjiVG/kanjivg",
   },
+  {
+    name: "prj-beatrice/japanese-hubert-base-phoneme-ctc-v3",
+    desc: "오십음도 발음 게임의 기기 안 발음 판정 모델 (ONNX·fp16으로 변환해 사용)",
+    license: "Apache-2.0",
+    url: "https://huggingface.co/prj-beatrice/japanese-hubert-base-phoneme-ctc-v3",
+  },
 ];
 
 function AboutPage() {
@@ -62,7 +68,7 @@ function AboutPage() {
         서비스 출시용이 아닌 개인 프로젝트입니다. 서버 없이 브라우저에서만 동작하며, 회화 연습과
         작문 첨삭 같은 생성형 기능에는 브라우저 안에서 도는 AI(Chrome 내장 Prompt API 또는 직접
         내려받은 Gemma 4)를 사용합니다. 입력한 문장도 학습 기록도 이 기기를 벗어나지 않습니다(오십음도 발음
-        게임만 예외로, Chrome의 음성 인식이 목소리를 구글 서버로 보냅니다). 다만 이 사이트에는 Google
+        게임만 예외로, 발음 판정 모델을 받지 않았으면 Chrome의 음성 인식이 목소리를 구글 서버로 보냅니다). 다만 이 사이트에는 Google
         광고가 붙어 있어 광고 쿠키가 쓰입니다 — 자세한 건{" "}
         <Link to="/privacy" className="text-info hover:underline">
           개인정보 처리방침

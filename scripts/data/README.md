@@ -157,3 +157,8 @@ migaku). 단어/한자 목표치는 **JLPT가 공식 발표하는 수치가 아�
 아니며 기출·시판 문제집의 문장을 옮기지 않았다**(저작권 — 고칠 때도 남의 문장을 옮기지 말 것). 여기
 스크립트와 무관하다. 모양·커리큘럼 패턴과의 급수 일치·N5/N4 패턴 커버리지는
 `src/lib/levelTestBank.test.ts`가 검사한다.
+
+오십음도 발음 게임의 **기기 안 발음 판정 모델**도 이 파이프라인 밖이다.
+[prj-beatrice/japanese-hubert-base-phoneme-ctc-v3](https://huggingface.co/prj-beatrice/japanese-hubert-base-phoneme-ctc-v3)
+(Apache-2.0)를 ONNX·fp16으로 변환해 Hugging Face에 따로 올려 두고, 사용자가 게임에서 받기 버튼을 누를 때만
+내려받는다(`src/lib/kanaModel.ts`). 저장소에는 넣지 않는다(약 190MB).

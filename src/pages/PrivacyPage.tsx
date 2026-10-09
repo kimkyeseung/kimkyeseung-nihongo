@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 // 이 문서는 **밖으로 나가는 요청을 전부** 적는 자리다. 외부 스크립트·API를 새로 붙이면
 // (index.html의 <script>, fetch 대상 도메인, 새 브라우저 API) 여기와 /about 소개문, README
 // 첫 문단을 같이 고칠 것 — 셋이 어긋나면 "기기를 벗어나지 않는다"가 거짓말이 된다.
-const EFFECTIVE_DATE = "2026년 9월 30일";
+const EFFECTIVE_DATE = "2026년 10월 10일";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -44,7 +44,7 @@ function PrivacyPage() {
       <Section title="이 기기 안에만 저장되는 것">
         <p>
           단어장, 연속 학습일·XP, 설정은 브라우저의 localStorage에, 학습 기록·선생님의 기억·선생님
-          대화는 IndexedDB에, 내려받은 Gemma 모델 파일은 브라우저 저장소(OPFS)에 저장됩니다. 어느
+          대화는 IndexedDB에, 내려받은 Gemma 모델·발음 판정 모델 파일은 브라우저 저장소(OPFS)에 저장됩니다. 어느
           것도 서버로 전송되지 않습니다.
         </p>
         <p>
@@ -87,9 +87,11 @@ function PrivacyPage() {
 
       <Section title="기능 때문에 외부로 가는 요청">
         <p>
-          <b className="font-normal text-gray-700">오십음도 발음 게임</b> — 브라우저의 음성 인식을
-          씁니다. Chrome은 음성 인식을 기기에서 처리하지 않고 목소리를 Google 서버로 보냅니다. 게임을
-          시작하지 않으면 마이크를 쓰지 않습니다.
+          <b className="font-normal text-gray-700">오십음도 발음 게임</b> — 발음 판정 모델(약 190MB)을
+          내려받았으면 판정을 기기 안에서 하고 목소리는 어디로도 보내지 않습니다. 모델 파일은 Hugging Face에서,
+          실행 엔진(ONNX Runtime)은 jsDelivr에서 받습니다. 모델이 없으면 브라우저의 음성 인식을 쓰는데,
+          Chrome은 이를 기기에서 처리하지 않고 목소리를 Google 서버로 보냅니다. 게임을 시작하지 않으면
+          마이크를 쓰지 않습니다.
         </p>
         <p>
           <b className="font-normal text-gray-700">AI 기능</b> — 회화·작문·선생님의 AI는 기기 안에서
