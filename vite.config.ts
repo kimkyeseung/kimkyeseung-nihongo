@@ -1,11 +1,35 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import fs from 'node:fs'
+import path from 'node:path'
+import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+
+/**
+ * 발음 인식 시험(`/lab/asr`)용 모델 파일을 **개발 서버에서만** `/lab-models/*`로 내보낸다.
+ * 수백 MB라 `public/`에 두면 빌드 결과에 그대로 복사되고, 저장소에도 넣지 않는다(.gitignore).
+ */
+function labModels(): Plugin {
+  const root = path.resolve(import.meta.dirname, 'lab-models')
+  return {
+    name: 'lab-models',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/lab-models', (req, res, next) => {
+        const file = path.join(root, decodeURIComponent((req.url ?? '').split('?')[0]))
+        if (!file.startsWith(root) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return next()
+        res.setHeader('Content-Length', fs.statSync(file).size)
+        res.setHeader('Content-Type', file.endsWith('.json') ? 'application/json' : 'application/octet-stream')
+        fs.createReadStream(file).pipe(res)
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    labModels(),
     react(),
     tailwindcss(),
     VitePWA({

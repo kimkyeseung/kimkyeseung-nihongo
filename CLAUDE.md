@@ -301,7 +301,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      wordLink.test.ts ·
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
-                     grammarPatterns.test.ts · kanaPronunciation.test.ts · speechRecognition.test.ts · srs.test.ts ·
+                     grammarPatterns.test.ts · kanaPronunciation.test.ts · speechRecognition.test.ts · kanaPhonemes.test.ts · srs.test.ts ·
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
                      conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
                      sentenceReview.test.ts · kanjiWriting.test.ts · studyCalendar.test.ts ·
@@ -1632,6 +1632,20 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
   나머지(정답·시간 초과·오답·늦게 말하기)는 이벤트 순서를 흉내 낸 가짜 인식기로 확인했다.
   남은 확인거리: **짧은 한 글자를 실제 인식기가 얼마나 잘 받아 적는지**(특히 Android Chrome),
   2.5초 유예가 충분한지, "거의 맞음"이 너무 후한지(탁음을 구분 못 하는 학습자도 통과시킨다).
+
+## 발음 인식 시험 (`/lab/asr` — spike/kana-asr 브랜치, 아직 게임에 안 붙임)
+- 브라우저 음성 인식은 가나 한 글자를 못 받아 적는다(Chrome은 결과 없이 `end`, 웨일은 빈 결과 — 발음 게임 절).
+  그래서 **직접 판정**을 시험 중이다: 말 시작·끝은 소리 크기로 직접 자르고(`voiceCapture.ts` — 앞 300ms를
+  남긴다, 첫 자음이 잘리면 か가 は로 들린다), 음소 CTC 모델(prj-beatrice/japanese-hubert-base-phoneme-ctc-v3,
+  Apache-2.0, ONNX로 직접 변환)로 `k a` 같은 음소를 받아 `kanaPhonemes.ts`가 채점한다.
+- 결과(실제 목소리 15글자, 웨일 녹음): 한 번 읽기 정확 10 + 거의 2~3 / 15. fp16(189MB) + WebGPU면 한 글자 **약
+  20~30ms**, 같은 파일 WASM이면 약 390ms(교차 출처 격리가 없어 스레드 1개). int8(122MB)은 WebGPU에서 안 빨라진다.
+  macOS `say`로 만든 합성 음성은 한 글자를 이상하게 읽어서 시험 재료로 못 쓴다(두 모델이 똑같이 틀렸다).
+- 모델 파일은 저장소 밖 `lab-models/`(gitignore)에 두고 **개발 서버만** `/lab-models/*`로 내보낸다(vite.config.ts의
+  `labModels`). onnxruntime-web은 실행 코드까지 jsDelivr에서 받는다 — npm 패키지를 import하면 26.8MB WASM이
+  배포물에 들어가 PWA 프리캐시 한도에 걸려 빌드가 실패했다(패키지는 devDependency, 타입 전용).
+- 남은 일: 더 많은 글자·여러 사람·Chrome 녹음으로 확인, 모델을 올릴 곳(Hugging Face 등) 정하기, 받기 동의·OPFS
+  저장(Gemma와 같은 규칙), "세 번 읽기" 채점(`k k i k i`처럼 자음이 겹쳐 나오는 모양을 아직 못 받는다).
 
 ## 발음 재생(TTS) 구현 노트
 - 문장/단어 끝의 🔊 버튼은 전부 `SpeakButton` 하나다(내부에서 `useJapaneseSpeech` 사용).

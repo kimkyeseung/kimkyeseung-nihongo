@@ -27,3 +27,6 @@ docs/.*
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# 시험용 모델 파일(수백 MB) — 저장소에 넣지 않는다
+/lab-models/
