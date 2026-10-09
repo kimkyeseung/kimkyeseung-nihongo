@@ -5,6 +5,7 @@ import { judgeKana, pickRounds } from "../lib/kanaPronunciation";
 import {
   describeRecognitionEvent,
   getSpeechRecognition,
+  onDeviceAvailability,
   transcriptsOf,
   type KanaSpeechRecognition,
 } from "../lib/speechRecognition";
@@ -142,8 +143,12 @@ function GameContent({
   // 문제(빈 결과 등)는 가짜 인식기로 재현할 수 없어서, 사용자 기기에서 무슨 일이 있었는지 봐야 한다.
   const debug = useDebugMode((s) => s.enabled);
   const [traceLines, setTraceLines] = useState<string[]>([]);
+  // 이벤트 사이 간격을 보려고 판 시작 기준 ms를 붙인다(Chrome에서 결과 없이 end만 올 때 얼마나 빨리 끝나는지).
+  const traceStartRef = useRef(0);
   const trace = (line: string) => {
     if (!debug) return;
+    if (line.startsWith("—")) traceStartRef.current = performance.now();
+    else line = `+${Math.round(performance.now() - traceStartRef.current)}ms ${line}`;
     console.info("[발음 게임]", line);
     setTraceLines((lines) => [...lines.slice(-40), line]);
   };
@@ -276,6 +281,9 @@ function GameContent({
 
     const cell = rounds[roundIndex];
     trace(`— ${roundIndex + 1}번 「${char(cell)}」 ${attempt ? "다시 듣기" : "시작"}`);
+    if (debug && roundIndex === 0 && attempt === 0) {
+      void onDeviceAvailability().then((a) => trace(`on-device ja-JP: ${a ?? "API 없음"}`));
+    }
     const rec = new Recognition();
     rec.lang = "ja-JP";
     rec.continuous = false;
@@ -393,6 +401,7 @@ function GameContent({
           return;
       }
     };
+    rec.onnomatch = () => trace("nomatch");
     rec.onend = () => {
       trace("end");
       finish(false, lastHeard, lastHeard === null);

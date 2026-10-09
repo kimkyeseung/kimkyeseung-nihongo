@@ -20,6 +20,8 @@ export interface KanaSpeechRecognition extends EventTarget {
   onaudiostart: ((ev: Event) => void) | null;
   onspeechstart: ((ev: Event) => void) | null;
   onresult: ((ev: SpeechRecognitionEvent) => void) | null;
+  /** 최종 결과가 신뢰도 기준에 못 미쳤다(짧은 한 글자에서 잘 난다). 옛 엔진에는 없을 수 있다. */
+  onnomatch?: ((ev: Event) => void) | null;
   onerror: ((ev: SpeechRecognitionErrorEvent) => void) | null;
   onend: ((ev: Event) => void) | null;
 }
@@ -34,6 +36,22 @@ export function getSpeechRecognition(): RecognitionConstructor | null {
     webkitSpeechRecognition?: RecognitionConstructor;
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+/**
+ * 기기 안 인식(`processLocally`)으로 ja-JP를 쓸 수 있는지 — Chrome의 새 API(`available`). 없거나 실패하면
+ * null. 지금은 디버그 기록에만 남긴다(쓸지 말지는 실제 기기 결과를 보고 정한다).
+ */
+export async function onDeviceAvailability(): Promise<string | null> {
+  const Recognition = getSpeechRecognition() as unknown as {
+    available?: (opts: { langs: string[]; processLocally: boolean }) => Promise<string>;
+  } | null;
+  if (!Recognition?.available) return null;
+  try {
+    return await Recognition.available({ langs: ["ja-JP"], processLocally: true });
+  } catch (e) {
+    return `error: ${(e as Error).message}`;
+  }
 }
 
 /** `transcriptsOf`가 읽는 만큼만 — 테스트에서 가짜 이벤트를 만들 수 있게. */
