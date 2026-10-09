@@ -216,9 +216,15 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                        TodayPlanCard(대문 "오늘의 학습" — 시작 단계 묻기 + 추천 목록) ·
                        TeacherHistorySidebar(선생님 대화 기록 — 넓은 화면 붙박이/375px 서랍) ·
                        SentenceGrammar(문장에 든 커리큘럼 문형을 칩으로 — 인라인으로 펼침) ·
-                       TeacherPracticeSheet(선생님 답변 끝 "연습해보기"와 `/test` — 네 유형 + AI 재확인 + 피드백) ·
+                       TeacherPracticeSheet(선생님 답변 끝 "연습해보기" — 네 유형 + AI 재확인 + 피드백) ·
                        TeacherCommandList(선생님 입력창의 `/` 명령어 목록) ·
-                       PracticeQuestion(연습 문제 한 개 — 유형별 푸는 화면)
+                       PracticeQuestion(연습 문제 한 개 — 유형별 푸는 화면) ·
+                       UnitCheckSheet(선생님 `/test` 단원 점검 — LLM 없음, TeacherPage에서 lazy)
+                     레벨 진단·단원 점검 공용: ChoiceQuestion(4지선다 + 모르겠어요, `revealAnswer`면 정답 공개) ·
+                       QuestionPrompt(문제 부분 — 단어·밑줄 한자·빈칸 문장·지문·청해·가나·낱말) ·
+                       ListeningPlayer(청해 — useJapaneseSpeech를 직접 쓰는 예외) ·
+                       LevelTestReview(결과의 틀린 문제 다시 보기 — 사전을 끌어와 lazy) ·
+                       LevelTestComment(결과의 "선생님 한마디" — AI 단발 세션 + 코드 총평)
                      입력: InputModeToggle(한·영 / 일본어 입력 전환 — 전용 절 참고)
                      버튼: SentenceActions(일본어 문장 옆 ⋮ 메뉴 — 발음/단어장에 담기/복사/
                        선생님에게 묻기. 항목 추가는 여기서 할 것) →
@@ -229,8 +235,9 @@ src/pages/         스펙의 7개 페이지 전부 완료(오십음도·한자·
                      + HomePage(대문 `/`) + AboutPage(정보/출처) + PrivacyPage(`/privacy` 개인정보 처리방침 —
                        /about에서 링크) + MemoryPage(`/memory` 선생님의
                        기억 — 확인/수정/삭제) + CurriculumPage(`/curriculum` 학습 로드맵) +
-                       PromptApiDiagnosticsPage(`/diagnostics` 자가진단)
-                       — 뒤 다섯은 하단 네비게이션 밖
+                       PromptApiDiagnosticsPage(`/diagnostics` 자가진단) +
+                       LevelTestPage(`/level` 레벨 진단 — "레벨 진단" 절)
+                       — 뒤 여섯은 하단 네비게이션 밖
 src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLanguageModel(Prompt API) ·
                      useGemmaSession(Gemma 4) · useGemmaModel(모델 설치 상태 — 다운로드 자체는
                        lib/gemmaDownloadController.ts가 갖고 있다) · useAiCapability(안내 경로 확정) ·
@@ -239,7 +246,8 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
                      다이얼로그 배선 — 문장을 보여주는 화면은 전부 이걸 쓴다),
                      useStickToBottom(대화 목록을 바닥에 붙여 둔다 — 선생님·회화),
                      useTeacherCommands(선생님 `/` 명령어의 목록·안내·실행 배선),
-                     useJapaneseSpeech, useJapaneseInput(wanakana 입력 + 사전 자동완성),
+                     useJapaneseSpeech(+ speakLines·stop, useJapaneseVoiceStatus — 일본어 음성이 있는지),
+                     useJapaneseInput(wanakana 입력 + 사전 자동완성),
                      useScriptInput(입력 문자 전환), useWordSuggestions(사전 자동완성 — 위 둘이 공유),
                      useWordLink(단어 상세로 가는 링크 — 단어를 누르는 화면은 전부 이걸 쓴다),
                      useDebouncedValue, useAssetPreload
@@ -248,11 +256,14 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      diff.ts(문자 단위 LCS diff) +
                      verbConjugation.ts(ます·ない·た·て·가능·의지형 규칙 활용) +
                      conjugationDrill.ts(활용 연습 출제·채점) + kanjiQuiz.ts(한자 읽기 퀴즈 생성) +
+                     kanjiReading.ts(한자 대표 읽기·한자가 든 단어 — 사전을 인자로 받는다) +
+                     koreanMeaning.ts(한국어 뜻풀이 토막 — 사전 없이 쓰려고 dictionary.ts에서 뗐다) +
+                     japaneseVoices.ts(일본어 음성 고르기·청해 A/B 화자·급수별 속도) +
                      kanjiWriting.ts(한자 쓰기 채점 — KanjiVG 경로를 점으로 바꿔 획마다 대조) +
                      프롬프트: conversationPrompts.ts · teacherPrompts.ts · wordExamples.ts ·
                        writingCorrection.ts(첨삭 프롬프트/응답 파싱) ·
                        teacherPractice.ts(연습 문제 출제·파싱·피드백 프롬프트) ·
-                       teacherCommands.ts(`/` 명령어 판별) · levelTest.ts(`/test` 출제 범위·프롬프트) ·
+                       teacherCommands.ts(`/` 명령어 판별) · unitCheck.ts(`/test` 단원 점검 출제·채점) ·
                        promptSafety.ts(인젝션 방어 — 전용 절 참고) +
                      AI 지원 판정: aiCapability.ts(안내 경로) · languageModel.ts ·
                        languageModelDiagnostics.ts · browserCheck.ts(진짜 Chrome 판별) ·
@@ -279,6 +290,10 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                        learnerProfile.ts(기록에서 취약/강점/수준을 결정적으로 계산) ·
                        weakReview.ts(다시 풀 약한 한자·단어 고르기) · weakReviewQuiz.ts(그 문제 만들기) ·
                        memoryExtraction.ts(대화에서 개인적인 사실 추출·파싱)
+                     레벨 진단(levelTest/): adaptive.ts(계단·종료·추정) · result.ts(종합 판정) ·
+                       questions.ts(영역별 출제 — 데이터는 인자로) · run.ts(한 판의 흐름) ·
+                       history.ts(결과 저장·effectiveLevel·선생님 프롬프트 한 줄) · comment.ts(총평 프롬프트·코드 총평) ·
+                       profile.ts(두 질문 → 기억) · loadData.ts(동적 import) · labels.ts(영역 이름)
                    테스트: promptSafety.test.ts · conversationPrompts.test.ts ·
                      writingCorrection.test.ts · aiCapability.test.ts · gemmaModel.test.ts ·
                      romajiInput.test.ts · dictionary.test.ts · learnerProfile.test.ts ·
@@ -289,8 +304,9 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
                      conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
                      sentenceReview.test.ts · kanjiWriting.test.ts · studyCalendar.test.ts ·
-                     teacherCommands.test.ts · levelTest.test.ts · appViewport.test.ts ·
-                     chatHistory.test.ts · teacherPrompts.test.ts
+                     teacherCommands.test.ts · unitCheck.test.ts · appViewport.test.ts ·
+                     chatHistory.test.ts · teacherPrompts.test.ts · japaneseVoices.test.ts ·
+                     levelTestBank.test.ts · levelTest/(adaptive·result·questions·run·history·comment).test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -301,27 +317,31 @@ src/stores/        Zustand 스토어:
                        useSentenceReview(문장 복습 큐, 메모리) · useAppearance(화면 모드, persist)) ·
                      teacherChatStore(선생님 대화 — 날짜별, IndexedDB 저장) ·
                      teacherSessionStore(선생님 세션 상태 + 질문 큐, 메모리 전용) ·
-                     gemmaDownloadStore(모델 다운로드 상태, 메모리 전용)
+                     gemmaDownloadStore(모델 다운로드 상태, 메모리 전용) ·
+                     levelTestStore(레벨 진단 결과 최근 3번, persist `level-test`, 백업에 담는다) ·
+                     pageStateStore의 useLevelTestSession(진단 진행·두 질문·총평, 메모리 전용)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, kana-homophones.json, gojuon.ts) — 완료
                      · dictionary.json의 `usuallyKana`는 JMDict `uk`(보통 가나로 쓰는 단어) —
                        문장 분절이 읽기로도 찾을지 판단하는 데만 쓴다
                    + curriculum.json(JLPT 커리큘럼 — **손으로 만든 데이터**, scripts/data 파이프라인 밖)
+                   + level-test-bank.json(레벨 진단·단원 점검 문제 은행 — **손으로 만든 데이터**, 같은 취급)
 public/            favicon.svg(브랜드 마크 원본), hero.png(대문 그림 1536×1024), icons.svg(템플릿 잔재) +
                      PWA 아이콘(favicon.ico, pwa-*.png, maskable-icon-512x512.png,
                      apple-touch-icon-180x180.png — favicon.svg에서 `@vite-pwa/assets-generator`로 생성.
                      로고를 바꾸면 다시 생성할 것)
-src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입, opfs.ts(move 선언) — 완료
+src/types/         WordEntry, KanjiEntry, JlptLevel, LanguageModel API 타입, opfs.ts(move 선언),
+                     levelTest.ts(문제 은행·진단 상태·결과 타입)
 scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립트 (완료, scripts/data/README.md 참고)
 ```
 
 하단 네비게이션 경로: `/gojuon` · `/dictionary` · `/kanji` ·
 `/wordbook` · `/conversation` · `/writing` · `/teacher`(7개). 스펙 문서(japanese_app_prompt_1.md)의
-페이지 구성은 전부 최소 기능으로 구현됨. 하단 네비 **밖**에 다섯 개가 더 있다: `/`(대문),
+페이지 구성은 전부 최소 기능으로 구현됨. 하단 네비 **밖**에 여섯 개가 더 있다: `/`(대문),
 `/about`(정보/출처, 헤더 ⓘ 아이콘), `/memory`(선생님의 기억, 헤더 🧠 아이콘),
 `/curriculum`(학습 로드맵 — 헤더가 아니라 대문 카드와 `/memory`에서 링크),
-`/diagnostics`(자가진단, 미지원 안내에서 링크), 그리고 `/word/:id`(단어 상세 — "단어 상세
-페이지" 절 참고).
+`/diagnostics`(자가진단, 미지원 안내에서 링크), `/level`(레벨 진단 — 대문 카드·`/curriculum`·
+선생님 `/level`에서 링크), 그리고 `/word/:id`(단어 상세 — "단어 상세 페이지" 절 참고).
 남은 건 다듬기와 QA — 특히 **Chrome에서의 Gemma 추론 검증**(Safari에서는 확인됨)과
 브라우저별 안내 화면 실물 확인.
 
@@ -344,6 +364,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   정리한 자료라 라이선스 표에 넣지 않고 따로 문단을 뒀다(참고: JLPT 공식 급수 기준·jlptsensei·
   migaku). **목표치가 공식 수치가 아니라 추정치**라는 단서도 세 곳에 같이 있어야 한다 —
   /about, README, `/curriculum` 화면 하단.
+- **레벨 진단 문제 은행(`level-test-bank.json`)도 같은 세 곳에 적는다**(커리큘럼 문단 옆) — 직접 정리한
+  문제이고 **JLPT 공식 문제가 아니며 기출·시판 문제집 문장을 옮기지 않았다**는 것. 은행을 고칠 때도 남의
+  문장을 옮기지 말 것(저작권).
 - AboutPage 소개문에 **"Chrome 온디바이스 AI"라고만 쓰지 말 것.** 엔진은 둘이고 Chrome 전용
   앱이 아니다("AI 안내 흐름" 노트와 같은 이야기). Gemma 경로가 생긴 뒤로 한동안 어긋나 있었다.
 
@@ -386,6 +409,8 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - **담는 키는 허용 목록(`BACKUP_LOCAL_KEYS`)이다.** `ai-engine`(기기마다 다르다 — Gemma를 받은
   컴퓨터의 백업을 폰에 풀면 모델도 없는 폰이 Gemma로 설정된다)·`teacher-greeting`·
   `promptApiNoticeDismissed`는 일부러 뺐다. 되돌릴 때도 파일에 뭐가 들었든 이 목록의 키만 쓴다.
+  레벨 진단 결과(`level-test`)는 학습 이력이라 담는다 — 그 스토어는 `merge`에서 `parseRecords`로 값을 다시
+  검사한다(이 파일은 persist 모양만 본다).
 - **되돌리기는 합치기가 아니라 갈아끼우기다.** 스트릭·XP처럼 "하나의 값"은 합칠 방법이 없다.
   대신 무엇이 든 백업인지 숫자로 보여주고 한 번 더 묻는다.
 - 순서: **IndexedDB를 한 트랜잭션으로 먼저 갈아끼우고(`replaceAllMemory`), 성공했을 때만
@@ -1225,45 +1250,112 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   일→한 해석(사실상 전부 AI 판정이라 점수 밖 "선생님 의견"으로만 둘 것). 활용형 바꾸기는 AI가
   필요 없어서 연습해보기가 아니라 단어장의 "동사 활용 연습"으로 따로 만들었다.
 
-## 선생님 `/` 명령어 (`teacherCommands.ts` / `levelTest.ts`) 구현 노트
+## 레벨 진단 (`/level` — `LevelTestPage` / `lib/levelTest/`) 구현 노트
+- 선생님과 처음 만났을 때, 또는 "내가 지금 어느 정도지?"일 때 보는 10~15분 진단. 어휘·한자·문법·독해·청해
+  다섯 영역(+ 조건부 문자)을 적응형으로 풀고, 결과가 곧 커리큘럼 시작 단계가 된다. 기획은
+  [docs/level-test-prompt.md](docs/level-test-prompt.md)(9절에 결정 사항).
+- **이름은 `/level`이다 — `/diagnostics`(Prompt API 자가진단)가 이미 있어서** 링크·명령어·문서에서 계속
+  헷갈린다. 하단 네비·헤더 아이콘 밖이고 입구는 넷: 선생님 `/level`, 대문 시작 단계 카드("잘 모르겠어요 →
+  10분 레벨 진단"), 대문 "오늘의 학습"(마지막 진단이 90일 넘으면 한 줄), `/curriculum`.
+- **문제는 전부 코드가 낸다(LLM 없음)** — 어휘 뜻·한자 읽기는 사전/KANJIDIC, 문법·독해·청해는 **손으로 만든
+  문제 은행 `src/data/level-test-bank.json`**(급수별 문법 35~45 · 독해 4 · 청해 5, JLPT 공식 문제 아님 —
+  기출·시판 문제집 문장을 옮기지 말 것). 모델은 끝에 총평 한 번만 쓴다. 그래서 AI가 안 되는 브라우저에서도
+  진단은 돈다. 은행을 고치면 `levelTestBank.test.ts`부터 — 빈칸 하나·보기 4개·정답 인덱스·깨진 예문·언어·
+  커리큘럼 패턴과의 급수 일치·N5/N4 패턴 커버리지를 본다. **N2·N1 보기는 "둘 다 말이 되는" 함정이 많아서**
+  비슷한 문형(にあたって/に際して, て以来/たきり…)은 서로의 오답으로 쓰지 않았다.
+- **급수를 지어내지 않는다** — `jlptLevel: null` 단어는 출제·보기에서 뺀다. 보기는 **정답과 같은 언어로만**
+  (한국어 뜻이 없는 단어는 어휘 출제에서 뺀다). 원본 뜻풀이의 「어간의 하나」「다음 단어를 만듦」 같은 문법
+  설명 줄, 18자 넘는 설명형 뜻, 가타카나 외래어(소리만으로 맞힌다), 표기가 같은 단어(上手)도 뺀다
+  (`questions.ts`의 `isVocabCandidate`). 한자는 단어 속 읽기(水曜日 → すい)를 묻고, 단어 속 다른 한자는 한
+  급수 위까지만(N5 見을 「接見」으로 물었다).
+- 적응형(`adaptive.ts`): 영역마다 계단식 — 2연속 정답이면 위, 틀리면(모르겠어요 포함) 아래, 방향 전환 3번·
+  상한·N5 2연속 오답으로 끝. 추정 = "2문항 이상 + 정답률 ≥ 2/3"인 가장 높은 급수. 독해·청해는 문항이 적어
+  "문법·어휘 중 낮은 쪽"에서 시작해 맞히면 위·틀리면 아래 하나 더, 추정은 "절반 이상". **독해·청해에서 통과한
+  급수가 없으면 Pre-N5가 아니라 "풀어 본 가장 낮은 급수의 한 칸 아래"**다(N1 지문부터 시작해 놓친 학습자가
+  "N5 전"으로 나와 종합을 끌어내렸다). 가나 영역은 어휘가 N5에서 끝나거나 N5 정답률 < 1/2일 때만 끝에 붙는다.
+- 종합(`result.ts`): 측정한 영역의 중앙값(짝수면 낮은 쪽), 최저 영역이 2단계 이상 낮으면 한 단계 내림, 가나
+  미통과면 Pre-N5. "측정 안 함"(청해에 음성이 없을 때)은 0점이 아니라 **빼고** 계산한다.
+- 진단 중에는 정답을 보여주지 않는다(다음 문제 판단을 흔든다). 독해 지문도 `ClickableSentence`로 그리지
+  않는다(단어를 눌러 뜻을 보면 진단이 안 된다) — 결과의 "틀린 문제 다시 보기"(`LevelTestReview`, lazy)에서만.
+  진행은 메모리 스토어(`useLevelTestSession`)라 탭을 옮겨도 이어지고, 돌아오면 "이어서 풀기 / 처음부터".
+- **페이지는 사전을 동적 import로 받는다**(`loadData.ts`) — 인사 화면이 사전(7.7MB)을 기다리지 않게. 그래서
+  `kanjiReading.ts`(대표 읽기·한자가 든 단어)와 `koreanMeaning.ts`(`koreanTokens`)는 사전을 **인자로** 받는다.
+  `ClickableSentence`는 사전을 정적으로 끌어오므로 그걸 쓰는 화면 조각은 lazy로 뗀다.
+- **청해**는 `ListeningPlayer`가 `useJapaneseSpeech`를 직접 쓴다(TTS 절의 예외). 자동 재생 안 함·두 번까지·
+  재생 중에도 답 가능·다음 문제/떠나면 멈춤. 일본어 음성이 없으면(`useJapaneseVoiceStatus`) 청해를 건너뛰고
+  "측정 안 함".
+- **결과를 학습 기록(`recordStudyEvent`)에 문제별로 남기지 않는다.** 진단은 일부러 실력 위 급수를 묻는
+  시험이라, 틀린 N1 단어를 "약한 단어"로 넣으면 `/review`가 엉뚱한 단어로 찬다. **요약(영역별 급수)만**
+  `levelTestStore`(persist `level-test`, 최근 3번, **백업에 담는다**)에 남긴다. 불러올 때 `parseRecords`로
+  검사한다(백업 파일에서도 돌아오고, 그 급수 문자열이 선생님 프롬프트에 들어간다).
+- **지금 수준은 `effectiveLevel()` 한 곳에서 고른다**(`history.ts`) — 30일 안의 진단이 기록 추정(`levelGuess`)을
+  이긴다. 진단 시작 급수가 이걸 쓴다. 선생님 기억 블록에는 진단 한 줄(`레벨 진단(날짜): 종합 N3 · 어휘 …`)이
+  들어가고, 30일 안이면 "어휘 수준은 ~ 언저리" 줄을 **대신한다**(두 줄이 다른 급수를 말하지 않게). 진단을
+  끝내면 기억 스냅샷을 새로 만든다. `looksLikePromptLeak`에는 여전히 고정 부분만 넘긴다.
+- 결과 화면: "이 단계부터 시작하기"(다른 시작 단계가 있으면 "지금: N4 → 진단: N3"로 한 번 묻는다, 진도는
+  그대로) · "선생님에게 결과 물어보기"(질문 문장은 코드가 만든다 — 급수 뒤에 조사를 붙이지 않는다,
+  "N4가/N1이"처럼 읽는 소리에 따라 갈린다). 버튼은 틀린 문제 목록 **위에** 둔다. XP는 하루 한 번
+  (`levelTestCompleted`).
+- 첫머리의 두 질문(공부 목적·시험 일정)은 **버튼으로만** 고르고, 고른 것은 바로 **확인된 기억**으로 넣는다
+  (코드가 만든 문장, `sanitizeMemoryLine` 통과, 같은 기억은 다시 넣지 않는다).
+- **선생님 한마디**(`LevelTestComment` / `comment.ts`): 선생님 수업과 분리된 단발 세션. 프롬프트에는 코드가
+  만든 값(급수·정답 수·고른 목적/시험)만 들어간다 — 학습자 글자가 없으니 `wrapStudentText`는 해당 없음, 나머지
+  방어(거절 규칙·출력 가드·세션 버리기)는 그대로. 유출 기준은 답변 모양 지시를 뺀 `LEVEL_COMMENT_LEAK_REFERENCE`.
+  **모델이 바로 쓸 수 있을 때(`available`)만 부른다** — `downloadable`에서 부르면 총평 하나에 모델 다운로드가
+  시작된다. 못 쓰거나 실패·30초 초과·유출이면 `fallbackComment`(코드가 쓴 총평).
+- 헤드리스(375px)에서 확인했다: 처음부터 결과까지(N3 학습자·전부 모르겠어요·이어서 풀기), 가나 영역 붙기,
+  기억 중복 없음, 음성 없음 → 청해 건너뛰기, 가짜 음성 엔진으로 A/B 목소리·쉼·두 번 제한·답하면 멈춤, 결과
+  저장·XP 하루 한 번·시작 단계 바꾸기·선생님에게 묻기, 가짜 Prompt API로 총평·유출 가드·unavailable.
+- **남은 확인거리**: 실제 기기 TTS로 청해 들어보기(특히 Android 음성 — 음성이 하나뿐이면 A/B가 같은 목소리에
+  음높이만 다르다), 실제 모델의 총평 품질(작은 모델이 "다시 판정하지 말 것"을 지키는지), **실사용자 몇 명의
+  진단 결과가 자기 체감 급수와 맞는지**(계단·종합 규칙의 기준값은 아직 사람으로 검증하지 않았다), 한자
+  지식이 있는 한국어 화자는 한자어(動物園 → 동물원)를 한국어 음으로 맞혀 어휘가 조금 높게 나올 수 있다.
+
+## 선생님 `/` 명령어 (`teacherCommands.ts` / `unitCheck.ts`) 구현 노트
 - 입력창에 `/`를 치면 명령어 목록(`TeacherCommandList`)이 위로 뜬다. ↑↓·Enter로 고르고 Escape로 닫는다.
-  지금은 셋이다: **`/test`**(수준 테스트) · **`/review`**(약한 것 모아 풀기로 이동 — `WEAK_REVIEW_PATH`) ·
-  **`/today`**(대문의 "오늘의 학습" 카드를 대화 끝에 띄움 — 기록에 안 남고 다음 질문을 하면 걷힌다).
-  한글 별칭(`/테스트`·`/복습`·`/오늘`)도 받는다.
+  지금은 넷이다: **`/test`**(지금 단원 점검 — 아래) · **`/level`**(레벨 진단 페이지로 이동 — "레벨 진단" 절) ·
+  **`/review`**(약한 것 모아 풀기로 이동 — `WEAK_REVIEW_PATH`) · **`/today`**(대문의 "오늘의 학습" 카드를 대화
+  끝에 띄움 — 기록에 안 남고 다음 질문을 하면 걷힌다). 한글 별칭(`/테스트`·`/점검`·`/레벨`·`/진단`·`/복습`·
+  `/오늘`)도 받는다. **`/level`이지 `/diagnostics`가 아니다** — 같은 이름의 Prompt API 자가진단 페이지가 있다.
 - **명령어 판단은 전부 코드가 한다. 명령어로 읽힌 입력은 모델에게 한 글자도 가지 않는다.** 프롬프트에
   "/test면 테스트를 내라"고 적으면 입력창이 곧 지시문이 된다(인젝션 통로). **없는 명령어**(`/help`)도
   보내지 않고 안내만 한다 — 보내면 선생님이 "/help가 뭔가요?"에 답한다.
 - **공백이 들어가면 명령어가 아니다**(`/ 이건 무슨 뜻이야?`는 질문). 인자를 받는 명령을 만들 때 이 규칙부터
   바꿀 것 — 안 그러면 `/quiz 食べる`가 질문으로 새어 나간다.
 - **일본어 입력 모드에서는 `/`가 `・`로 바뀐다**(wanakana IME 표). 그래서 `・`도 시작 표시로 받고,
-  이름은 `てst`·`れゔぃえw`처럼 들어온다. 비교는 "원래 글자"와 "로마자로 되돌린 것" **둘 다** 본다 —
-  `れゔぃえw`는 로마자로 되돌려도 review가 아니고, 치는 도중의 `れv`는 가나 이름에 안 걸려서 한쪽만
-  보면 중간에 목록이 끊긴다(테스트가 모든 중간 글자를 훑는다). 명령어를 치는 동안은 사전 자동완성을 끈다.
-- **`/test`의 출제 범위는 코드가 정한다(`planLevelTest`)** — 약한 한자·단어(절반까지) → 지금 단원 문법 →
-  지난 단원 문법 → 이번 단원에서 익힌 한자. 모델은 그 범위로 문제 **문장만** 쓴다. 약한 것을 절반으로
-  묶는 이유는 넘기면 수준 테스트가 아니라 `/review`가 되기 때문이다. 무작위로 섞지 않는다(같은 기록이면
-  같은 범위 — "새 문제 받기"가 같은 실력을 다른 문장으로 잰다).
-  - 난이도 기준은 **커리큘럼 단계 → 기록으로 추정한 수준** 순이다. 둘 다 없으면 테스트를 내지 않고 시작
-    단계부터 고르게 한다(`/today` 카드를 같이 띄운다) — 근거 없이 N5로 찍지 않는다.
-  - 한자·단어 항목은 **읽기를 묻지 말라**고 못박았다. 읽기는 사전 정보라 모델이 정답을 달면 안 된다
-    (읽기 퀴즈는 `kanjiQuiz`가 데이터로 낸다). 문장 속에서 알맞게 쓰는지만 묻는다.
-  - 문제 형식·채점·피드백은 "연습해보기"와 **같은 시트**다(`TeacherPracticeSheet`가 `PracticeTarget`으로
-    지시문·프롬프트·문제 수·XP를 받는다 — 타입과 만드는 함수는 lib에 있다: `answerPracticeTarget`
-    (teacherPractice.ts)·`levelTestTarget`(levelTest.ts)). 형식 설명은 `PRACTICE_FORMAT` 하나를 둘이 나눠 쓴다 — 파서가
-    하나라 형식도 하나여야 한다. 유출 검사 기준은 `LEVEL_TEST_LEAK_REFERENCE`(형식·예시를 뺀 지시문).
-  - XP는 테스트마다 첫 완주 한 번(`levelTestCompleted`). 칠 때마다 새 id라 캐시된 문제가 다시 나오지 않는다.
-  - **결과를 학습 기록에 남기지 않는다.** 모델이 쓴 문제가 어느 범위 항목을 물은 건지 코드가 확실히 알 수
-    없어서, 틀린 문제를 약한 단어로 되돌려 넣으면 엉뚱한 단어가 쌓인다. 넣으려면 문제마다 범위 번호를
-    받는 형식부터 설계할 것.
+  이름은 `てst`·`れゔぃえw`·`ぇゔぇl`(level — l로 시작하면 작은 가나라 le가 작은 ぇ)처럼 들어온다. 비교는 셋을
+  본다: "원래 글자", "로마자로 되돌린 것", **"이름을 한 글자씩 늘려 가나로 바꾼 것"**. 앞의 둘만으로는
+  `/lev`(`・ぇv`)가 어디에도 안 걸려 **level을 더하자마자 치는 도중에 목록이 끊겼다**(테스트가 모든 중간 글자를
+  훑다가 잡았다). 명령어를 치는 동안은 사전 자동완성을 끈다.
+- **`/test`는 단원 점검이다(`unitCheck.ts` / `UnitCheckSheet`) — LLM을 쓰지 않는다.** 예전 `/test`는 범위만
+  코드가 정하고 문제 문장은 모델이 써서, 정답을 틀리게 달고 형식을 어겼고 3~5문제라 수준을 재기에도 짧았다.
+  지금은 "지금 단원을 다 익혔나"만 3~5분에 본다. 약한 것 섞기는 하지 않는다 — 그건 `/review`다.
+  - 단원은 `plan.current`(다 끝냈으면 마지막 단원 + "레벨 진단 다시 보기" 권유). **시작 단계가 없으면 점검하지
+    않고 레벨 진단으로 안내한다**(안내 옆에 `/level` 링크 — `useTeacherCommands`의 `notice.action`).
+  - 문항: 단원 문형마다 문법 1(문제 은행 `level-test-bank.json`에서 `pattern`이 같은 항목) → 단원 `kanjiFocus`의
+    한자 읽기 3(단어 속 읽기 — 진단과 같은 `buildKanjiQuestionFor`) → 단원 급수 어휘 2, **8문항이 안 되면 한자·
+    어휘로 채운다**(문형이 한두 개뿐인 단원이 많아 그대로면 6문항이다). Pre-N5는 가나 단원이면 가나, 나머지는
+    커리큘럼이 들고 있는 낱말·인사말의 뜻. 5문항이 안 나오면 "아직 점검 문제가 준비되지 않았어요".
+  - 어휘는 "이 단원 몫"이 아니라 **단원 급수의 흔한 단어**다 — 커리큘럼이 단원에 단어를 묶어 두지 않았다
+    (테마로 사전을 거를 수 없다 — 커리큘럼 절).
+  - **문제마다 ⭕/❌와 한 줄 해설을 바로 보여준다**(진단과 반대 — 점검은 공부의 일부다). `ChoiceQuestion`의
+    `revealAnswer`.
+  - **통과 = 80% 이상 + 문법 무오답**(정수로 비교한다). 통과하면 단원 완료를 **버튼으로 묻는다** — 자동으로
+    `manualUnits`에 넣지 않는다(커리큘럼의 "되돌아갈 길" 원칙). 틀린 문형은 "선생님에게 「〜」 물어보기"
+    (`requestQuestion` — 질문 문장은 코드가 만든다).
+  - "같은 문제 다시"는 문제·보기 순서만 섞고, "새 문제 받기"는 같은 문형의 **다른 은행 항목**을 고른다(그런
+    항목이 있는 단원에서만 버튼이 보인다 — N5는 문형마다 하나뿐인 곳이 많다).
+  - XP는 시트를 연 뒤 첫 완주 한 번(`unitCheckCompleted`). 한자 읽기 결과는 기존 이벤트(`kanji-quiz-*`)로
+    남긴다 — 단원 범위 안의 한자라 "약한 한자"로 잡히는 게 맞다(실력 위를 일부러 묻는 진단과 다르다). 문법
+    결과는 이벤트 타입이 없어 남기지 않는다.
+  - 단원 점검은 문제 은행·한자 데이터를 끌어오므로 TeacherPage에서 `lazy()`로 연다.
 - 화면 상태(목록·안내·`/today` 카드)와 실행은 `useTeacherCommands` 훅이 들고 있다. TeacherPage는
-  `command.submit()`이 false일 때만 선생님에게 묻는다. 진도 → 테스트 입력은 `levelTestInputFromPlan`
-  (지난 단원 = 진도 목록의 바로 앞, 다 끝냈으면 마지막 단원)이고 테스트가 있다.
+  `command.submit()`이 false일 때만 선생님에게 묻는다.
 - 새 명령어를 더할 때: `TEACHER_COMMANDS`에 한 줄, `useTeacherCommands`의 `run`에 한 갈래. 모델이 필요 없는
-  명령(`/review`·`/today`처럼)을 먼저 고려할 것 — AI가 안 되는 브라우저에서도 돌고 인젝션 걱정이 없다.
-- 헤드리스(미리보기 브라우저)에서 가짜 모델로 확인했다: 명령어 목록·↑↓·Esc, 일본어 모드(`・れゔぃえw`),
-  `/today`, 수준 없을 때의 `/test` 안내, N4 1단원 범위로 출제 → 풀기 → AI 재확인 → 피드백 → XP(+10, 다시
-  풀기로는 안 쌓임), 없는 명령어 안내, 기존 연습해보기. **실제 모델로는 아직 확인하지 못했다** — 특히 작은
-  모델이 "범위 항목마다 한 문제씩, 순서대로"를 지키는지.
+  명령(`/review`·`/today`·`/test`처럼)을 먼저 고려할 것 — AI가 안 되는 브라우저에서도 돌고 인젝션 걱정이 없다.
+- 헤드리스(미리보기 브라우저, 375px)에서 확인했다: 명령어 목록(넷), `/test` → N4 1단원 8문항 → 문제마다
+  ⭕/❌·해설 → 1/8 실패(틀린 문형 버튼 〜たら·〜ば) → 같은 문제 다시 8/8 통과 → 완료 표시(`N4-1`), XP는 첫 완주에만,
+  진도 없을 때의 안내, `/level` 이동.
 
 ## 작문 첨삭 페이지 구현 노트
 - `useLanguageModel`을 그대로 재사용(회화 페이지와 동일 패턴). 모델에게 항상 고정된
