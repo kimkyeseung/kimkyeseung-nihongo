@@ -33,6 +33,8 @@ export type ChoiceQuestionBase = {
 export type LevelTestQuestion = ChoiceQuestionBase &
   (
     | { kind: "kana"; char: string; script: "hiragana" | "katakana" }
+    /** 커리큘럼이 직접 들고 있는 낱말·인사말(Pre-N5 단원 점검) — 보기는 한국어 뜻 */
+    | { kind: "item"; text: string; reading: string }
     | { kind: "vocab"; word: WordEntry; display: string }
     | { kind: "kanji"; kanji: string; word: WordEntry }
     | { kind: "grammar"; item: GrammarItem }
@@ -251,11 +253,54 @@ function kanjidicToKana(reading: string): string {
 }
 
 /**
- * 한자 읽기 문제 — 단어 속 한자(밑줄)의 읽기를 고른다. 보기는 전부 히라가나.
+ * 한자 하나로 읽기 문제를 만든다 — 단어 속 한자(밑줄)의 읽기를 고른다. 보기는 전부 히라가나.
  * - 오답 하나는 **같은 한자의 다른 읽기**(水曜日의 水에 みず) — 단어 속에서 어떻게 읽히는지를 묻는
  *   문제라 이게 진짜 함정이다. 나머지는 같은 급수의 다른 한자가 단어 속에서 읽힌 소리.
  * - 정답과 탁음·촉음만 다른 소리(じ/し, がく/がっ)는 오답으로 쓰지 않는다 — 한자를 알아도 헷갈린다.
+ * 물을 단어가 없거나 오답이 모자라면 null. 단원 점검(unitCheck.ts)은 단원의 한자를 하나씩 넘긴다.
  */
+export function buildKanjiQuestionFor(
+  entry: KanjiEntry,
+  kanjiList: readonly KanjiEntry[],
+  dictionary: readonly WordEntry[],
+  used: ReadonlySet<string>,
+  random: Random = Math.random,
+): LevelTestQuestion | null {
+  if (used.has(`kanji:${entry.kanji}`)) return null;
+  const words = kanjiQuestionWords(entry, kanjiList, dictionary).filter((w) => !used.has(`word:${w.id}`));
+  const word = pickRandom(words.slice(0, 3), random);
+  if (!word) return null;
+  const answer = readingInWord(entry.kanji, word)!;
+
+  const distractors: string[] = [];
+  const accept = (reading: string) => {
+    if (distractors.length >= 3 || !HIRAGANA_ONLY.test(reading)) return;
+    if (soundsLike(reading, answer) || distractors.some((d) => soundsLike(d, reading))) return;
+    distractors.push(reading);
+  };
+  const ownReadings = [...entry.kunyomi, ...entry.onyomi].map(kanjidicToKana);
+  const own = pickRandom(ownReadings.filter((r) => HIRAGANA_ONLY.test(r) && !soundsLike(r, answer)), random);
+  if (own) accept(own);
+  for (const other of shuffle(kanjiList.filter((k) => k.jlptLevel === entry.jlptLevel), random)) {
+    if (distractors.length >= 3) break;
+    if (other.kanji === entry.kanji) continue;
+    const otherWord = kanjiQuestionWords(other, kanjiList, dictionary)[0];
+    const reading = otherWord && readingInWord(other.kanji, otherWord);
+    if (reading) accept(reading);
+  }
+  if (distractors.length < 3) return null;
+
+  return {
+    kind: "kanji",
+    kanji: entry.kanji,
+    word,
+    level: entry.jlptLevel,
+    keys: [`kanji:${entry.kanji}`, `word:${word.id}`],
+    ...withChoices(answer, distractors, random),
+  };
+}
+
+/** 그 급수의 한자 중 아직 안 낸 것으로 읽기 문제를 하나(레벨 진단). */
 export function buildKanjiQuestion(
   level: JlptLevel,
   kanjiList: readonly KanjiEntry[],
@@ -263,40 +308,9 @@ export function buildKanjiQuestion(
   used: ReadonlySet<string>,
   random: Random = Math.random,
 ): LevelTestQuestion | null {
-  const atLevel = kanjiList.filter((k) => k.jlptLevel === level);
-  for (const entry of shuffle(atLevel, random)) {
-    if (used.has(`kanji:${entry.kanji}`)) continue;
-    const words = kanjiQuestionWords(entry, kanjiList, dictionary).filter((w) => !used.has(`word:${w.id}`));
-    const word = pickRandom(words.slice(0, 3), random);
-    if (!word) continue;
-    const answer = readingInWord(entry.kanji, word)!;
-
-    const distractors: string[] = [];
-    const accept = (reading: string) => {
-      if (distractors.length >= 3 || !HIRAGANA_ONLY.test(reading)) return;
-      if (soundsLike(reading, answer) || distractors.some((d) => soundsLike(d, reading))) return;
-      distractors.push(reading);
-    };
-    const ownReadings = [...entry.kunyomi, ...entry.onyomi].map(kanjidicToKana);
-    const own = pickRandom(ownReadings.filter((r) => HIRAGANA_ONLY.test(r) && !soundsLike(r, answer)), random);
-    if (own) accept(own);
-    for (const other of shuffle(atLevel, random)) {
-      if (distractors.length >= 3) break;
-      if (other.kanji === entry.kanji) continue;
-      const otherWord = kanjiQuestionWords(other, kanjiList, dictionary)[0];
-      const reading = otherWord && readingInWord(other.kanji, otherWord);
-      if (reading) accept(reading);
-    }
-    if (distractors.length < 3) continue;
-
-    return {
-      kind: "kanji",
-      kanji: entry.kanji,
-      word,
-      level,
-      keys: [`kanji:${entry.kanji}`, `word:${word.id}`],
-      ...withChoices(answer, distractors, random),
-    };
+  for (const entry of shuffle(kanjiList.filter((k) => k.jlptLevel === level), random)) {
+    const q = buildKanjiQuestionFor(entry, kanjiList, dictionary, used, random);
+    if (q) return q;
   }
   return null;
 }
@@ -384,4 +398,9 @@ export function buildKanaQuestion(
     keys: [`kana:${cell.hiragana}`],
     ...withChoices(cell.romaji, distractors, random),
   };
+}
+
+/** 보기 글꼴 — 일본어 보기(문법·한자 읽기)는 font-ja, 한국어 뜻·로마자는 font-mixed */
+export function choiceFont(q: LevelTestQuestion): string {
+  return q.kind === "grammar" || q.kind === "kanji" ? "font-ja" : "font-mixed";
 }

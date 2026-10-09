@@ -78,8 +78,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   - 문장 복습의 번역 찾기(`sentenceReview`의 `findExampleTranslation`) — 선생님의 설명 한 줄을
     번역으로 잘못 집으면 복습 카드 뒷면에 엉뚱한 "뜻"이 **영구히** 저장된다.
 
-  - 선생님 `/` 명령어(`teacherCommands`)·`/test` 출제 범위(`levelTest`의 `planLevelTest`) — 범위를 잘못
-    잡으면 평범한 질문이 명령어로 먹혀 사라지거나, 테스트가 약한 것만(=복습) 또는 엉뚱한 급수로 나온다.
+  - 선생님 `/` 명령어(`teacherCommands`)·`/test` 단원 점검(`unitCheck`) — 범위를 잘못 잡으면 평범한 질문이
+    명령어로 먹혀 사라지거나 일본어 모드로 치는 도중에 목록이 끊기고(`/lev` → `・ぇv`, 실제로 걸렸다), 점검이
+    엉뚱한 단원을 묻거나 통과 기준이 새서 못 익힌 단원이 완료로 넘어간다.
 
   - 선생님 앞선 대화 다시 채우기(`chatHistory`의 `fitHistory`/`historyBudget`, `teacherPrompts`의
     `teacherHistoryTurns`) — 적게 넣으면 이어지는 질문에 맥락 없이 답하고, 실패 안내문·거절된 질문이

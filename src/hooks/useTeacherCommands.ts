@@ -2,11 +2,9 @@ import { useCallback, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { WEAK_REVIEW_PATH } from "../lib/dailyPlan";
-import { levelTestInputFromPlan, levelTestTarget, planLevelTest } from "../lib/levelTest";
 import { commandQuery, matchCommands, parseCommand, type TeacherCommand } from "../lib/teacherCommands";
-import type { PracticeTarget } from "../lib/teacherPractice";
+import { unitCheckTargetFromPlan, type UnitCheckTarget } from "../lib/unitCheck";
 import { useCurriculumStore } from "../stores/curriculumStore";
-import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 import type { CurriculumPlanResult } from "./useCurriculumPlan";
 
 /**
@@ -28,7 +26,8 @@ export function useTeacherCommands({
   enabled: boolean;
   /** 지금 진도. 아직 못 읽었으면 null(useCurriculumPlan). */
   curriculum: CurriculumPlanResult | null;
-  onStartTest: (target: PracticeTarget) => void;
+  /** `/test` — 단원 점검 시트를 연다 */
+  onStartTest: (target: UnitCheckTarget) => void;
 }) {
   const navigate = useNavigate();
   const startLevel = useCurriculumStore((s) => s.startLevel);
@@ -38,8 +37,13 @@ export function useTeacherCommands({
   const [focused, setFocused] = useState(false);
   const [index, setIndex] = useState(0);
   const [dismissedFor, setDismissedFor] = useState<string | null>(null);
-  /** 한 줄 안내. 그때의 입력이 그대로일 때만 보인다 — 고쳐 치기 시작하면 사라진다. */
-  const [notice, setNotice] = useState<{ text: string; forInput: string } | null>(null);
+  /**
+   * 한 줄 안내. 그때의 입력이 그대로일 때만 보인다 — 고쳐 치기 시작하면 사라진다. `action`이 있으면 안내
+   * 옆에 그 화면으로 가는 버튼이 붙는다(진도가 없을 때 레벨 진단으로).
+   */
+  const [notice, setNotice] = useState<{ text: string; forInput: string; action?: { label: string; to: string } } | null>(
+    null
+  );
   /** `/today`로 연 "오늘의 학습" 카드. 기록에 남기지 않는다(인사와 같은 앱의 화면이다). */
   const [showToday, setShowToday] = useState(false);
 
@@ -54,27 +58,32 @@ export function useTeacherCommands({
     setNotice(null);
     switch (command.id) {
       case "test": {
-        // 커리큘럼은 동적 import라 한 박자 늦게 온다. 그 사이에 치면 기록만으로 수준을 정해 버리므로
-        // 기다리게 한다(시작 단계를 안 골랐으면 영영 안 오니 기다리지 않는다).
-        if (startLevel && !curriculum) {
+        // 단원 점검 — 점검할 단원이 있어야 한다. 시작 단계가 없으면 진단부터 권한다(예전엔 `/today` 카드를
+        // 띄웠지만, 어느 단계인지 모르는 사람에게는 진단이 맞다).
+        if (!startLevel) {
+          setNotice({
+            text: "아직 진도가 없어서 점검할 단원이 없어요. 먼저 레벨 진단을 받아볼까요?",
+            forInput: "",
+            action: { label: "🎓 레벨 진단 받기", to: "/level" },
+          });
+          return;
+        }
+        // 커리큘럼은 동적 import라 한 박자 늦게 온다.
+        if (!curriculum) {
           setNotice({ text: "진도를 불러오는 중이에요. 잠시 뒤에 다시 해 주세요.", forInput: "" });
           return;
         }
-        // 프로필은 누른 순간의 값이면 된다 — 구독하면 퀴즈 하나 풀 때마다 이 화면이 다시 그려진다.
-        const { profile } = useLearnerMemoryStore.getState();
-        const test = planLevelTest(levelTestInputFromPlan(curriculum, profile));
-        if (!test) {
-          // 수준을 모르는 채로 내면 너무 쉽거나 어렵다. 시작 단계를 고르는 카드를 바로 띄운다.
-          setNotice({
-            text: "아직 수준을 알 수 없어서 테스트를 낼 수 없어요. 아래에서 시작 단계를 먼저 골라 주세요.",
-            forInput: "",
-          });
-          setShowToday(true);
+        const target = unitCheckTargetFromPlan(curriculum.plan);
+        if (!target) {
+          setNotice({ text: "점검할 단원을 찾지 못했어요.", forInput: "" });
           return;
         }
-        onStartTest(levelTestTarget(test, `level-test-${Date.now()}`));
+        onStartTest(target);
         return;
       }
+      case "level":
+        navigate("/level");
+        return;
       case "review":
         navigate(WEAK_REVIEW_PATH);
         return;
@@ -142,6 +151,7 @@ export function useTeacherCommands({
     handleKeyDown,
     setFocused,
     notice: notice && notice.forInput === input ? notice.text : null,
+    noticeAction: notice && notice.forInput === input ? (notice.action ?? null) : null,
     showToday,
     closeToday: () => setShowToday(false),
     clearForQuestion,

@@ -27,7 +27,7 @@ describe("commandQuery", () => {
 
 describe("matchCommands", () => {
   it("/만 치면 전부 보여준다", () => {
-    expect(ids("/")).toEqual(["test", "review", "today"]);
+    expect(ids("/")).toEqual(["test", "level", "review", "today"]);
   });
 
   it("치는 중인 글자로 시작하는 것만", () => {
@@ -44,6 +44,14 @@ describe("matchCommands", () => {
   it("한글 별칭", () => {
     expect(ids("/테")).toEqual(["test"]);
     expect(ids("/복습")).toEqual(["review"]);
+    expect(ids("/레")).toEqual(["level"]);
+    expect(ids("/진단")).toEqual(["level"]);
+    expect(ids("/점검")).toEqual(["test"]);
+  });
+
+  it("/l로 레벨 진단이 뜬다 — /diagnostics(자가진단)와 헷갈리지 않게 이름을 level로 했다", () => {
+    expect(ids("/l")).toEqual(["level"]);
+    expect(ids("/d")).toEqual([]);
   });
 
   it("일본어 입력 모드: /는 ・로, test는 てst로 바뀌어 들어온다", () => {
@@ -51,13 +59,16 @@ describe("matchCommands", () => {
     expect(typed.startsWith("・")).toBe(true);
     expect(ids(typed)).toEqual(["test"]);
     expect(ids(toKana("/to", { IMEMode: "toHiragana" }))).toEqual(["today"]);
-    expect(ids("・")).toEqual(["test", "review", "today"]);
+    expect(ids("・")).toEqual(["test", "level", "review", "today"]);
   });
 
   it("일본어 모드로 치는 도중의 모든 글자에서 목록이 끊기지 않는다", () => {
     // `れゔぃえw`는 로마자로 되돌리면 review가 아니고, `れv`는 가나 이름에 안 걸린다 —
     // 한쪽 비교만 하면 어느 중간에서 목록이 사라진다.
-    for (const name of ["test", "review", "today"]) {
+    // level은 일본어 모드에서 `ぇゔぇl`로 들어온다 — wanakana에서 l로 시작하면 작은 가나라 le가 작은 ぇ가
+    // 된다(구현 프롬프트는 れゔぇl로 짐작했지만 실제로 쳐 보니 달랐다).
+    expect(toKana("/level", { IMEMode: "toHiragana" })).toBe("・ぇゔぇl");
+    for (const name of ["test", "level", "review", "today"]) {
       for (let n = 1; n <= name.length; n++) {
         const typed = toKana(`/${name.slice(0, n)}`, { IMEMode: "toHiragana" });
         expect(ids(typed), typed).toContain(name);
@@ -74,6 +85,12 @@ describe("parseCommand", () => {
   it("정확히 맞으면 그 명령", () => {
     expect(parseCommand("/test")).toMatchObject({ kind: "command", command: { id: "test" } });
     expect(parseCommand("/오늘")).toMatchObject({ kind: "command", command: { id: "today" } });
+    expect(parseCommand("/level")).toMatchObject({ kind: "command", command: { id: "level" } });
+    expect(parseCommand("/레벨테스트")).toMatchObject({ kind: "command", command: { id: "level" } });
+    expect(parseCommand(toKana("/level", { IMEMode: "toHiragana" }))).toMatchObject({
+      kind: "command",
+      command: { id: "level" },
+    });
     expect(parseCommand(toKana("/review", { IMEMode: "toHiragana" }))).toMatchObject({
       kind: "command",
       command: { id: "review" },
