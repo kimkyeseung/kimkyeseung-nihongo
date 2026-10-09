@@ -1,6 +1,7 @@
 import { useLanguageModel, type LanguageModelStatus } from "./useLanguageModel";
 import { useGemmaSession } from "./useGemmaSession";
 import { useAiEngineStore, type AiEngine } from "../stores/aiEngineStore";
+import type { ChatTurn } from "../lib/chatHistory";
 
 export type AiModelStatus = LanguageModelStatus | "model-missing";
 
@@ -28,10 +29,20 @@ export interface AiModel {
  * (Prompt API는 첫 prompt 때 지연 생성, Gemma는 `enabled=false`면 확인조차 하지 않는다).
  * 페이지에서 `useLanguageModel`을 직접 부르지 말고 이 훅을 쓸 것.
  */
-export function useAiModel(systemPrompt: string): AiModel {
+export function useAiModel(
+  systemPrompt: string,
+  options?: {
+    /**
+     * 세션을 **새로 만들 때** 다시 채울 앞선 대화(오래된 것부터). 세션이 살아 있는 동안은 부르지
+     * 않는다 — 모델이 이미 들고 있다. 창에 안 들어가는 오래된 턴은 훅이 잘라낸다(chatHistory.ts).
+     * 저장된 대화가 있는 화면(선생님)만 준다. 부를 때마다 최신 값을 읽도록 함수로 받는다.
+     */
+    history?: () => ChatTurn[];
+  }
+): AiModel {
   const engine = useAiEngineStore((s) => s.engine);
-  const promptApi = useLanguageModel(systemPrompt);
-  const gemma = useGemmaSession(systemPrompt, engine === "gemma4");
+  const promptApi = useLanguageModel(systemPrompt, options?.history);
+  const gemma = useGemmaSession(systemPrompt, engine === "gemma4", options?.history);
 
   if (engine === "gemma4") {
     return {

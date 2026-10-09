@@ -81,6 +81,10 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
   - 선생님 `/` 명령어(`teacherCommands`)·`/test` 출제 범위(`levelTest`의 `planLevelTest`) — 범위를 잘못
     잡으면 평범한 질문이 명령어로 먹혀 사라지거나, 테스트가 약한 것만(=복습) 또는 엉뚱한 급수로 나온다.
 
+  - 선생님 앞선 대화 다시 채우기(`chatHistory`의 `fitHistory`/`historyBudget`, `teacherPrompts`의
+    `teacherHistoryTurns`) — 적게 넣으면 이어지는 질문에 맥락 없이 답하고, 실패 안내문·거절된 질문이
+    섞이면 "선생님이 한 말"이 되거나 유출 가드가 버린 턴이 되살아난다. 화면은 멀쩡하다.
+
   - 디버그 모드 질의·대화 내보내기(`debugMode`의 `parseDebugQuery`/`buildTeacherChatExport`) — 빈 값(`?debug=`)이
     끄기로 읽히면 모드가 조용히 꺼지고, 내보내기 행이 한 글자라도 바뀌면 되돌려 넣을 수 없는 파일이 된다.
 
@@ -262,7 +266,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
                      conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
                      sentenceReview.test.ts · kanjiWriting.test.ts · studyCalendar.test.ts ·
-                     teacherCommands.test.ts · levelTest.test.ts · appViewport.test.ts
+                     teacherCommands.test.ts · levelTest.test.ts · appViewport.test.ts ·
+                     chatHistory.test.ts · teacherPrompts.test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
                      recentSearchesStore·gamificationStore·
@@ -442,8 +447,8 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   `PromptApiUnsupportedNotice`를 재사용하면 "브라우저가 Prompt API를 지원하지 않는다"는 엉뚱한
   안내가 되므로 따로 뒀다 — 이건 "LLM 화면은 안내 컴포넌트를 재사용할 것" 규칙의 예외다.
   대신 되돌아갈 길("Chrome 내장 AI로 전환" 버튼)을 항상 같이 준다.
-- 남은 확인거리: `createGemmaSession()`의 응답 품질과 `maxNumTokens: 4096`이 긴 회화 맥락에
-  충분한지(추론 자체가 도는 것은 Safari에서 확인했다 — 아래 참고).
+- 남은 확인거리: `createGemmaSession()`의 응답 품질과 `GEMMA_MAX_TOKENS`(8192)가 모바일 GPU 메모리에
+  무리가 없는지(추론 자체가 도는 것은 Safari에서 확인했다 — 아래 참고).
 - 진행률은 LiteRT-LM이 제공하지 않는다(`Engine.create`에 progress 콜백 없음). 그래서
   `downloadModel()`이 직접 `fetch` 응답 스트림의 바이트를 세고, 받은 조각은 **메모리에 쌓지 않고
   바로 OPFS로 흘려보낸다** — 2GB를 통째로 들고 있으면 탭이 죽는다.
@@ -1077,6 +1082,25 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
     답변 중이라 무시되면 질문이 사라진다. 끝나면 effect가 다시 돌며 꺼낸다.
   - 헤드리스 브라우저에서 "묻고 → 단어장으로 이동 → 돌아옴"(답변 도중·끝난 뒤 둘 다)을 가짜
     모델로 확인했다: 답변이 끝까지 받아지고 IndexedDB에 저장된다.
+- **세션을 새로 만들 때 오늘 대화로 맥락을 다시 채운다 (실제로 겪은 문제).** 모델이 앞 대화를 아는
+  곳은 메모리의 세션뿐이고 화면의 대화는 IndexedDB에서 따로 온다. 그래서 세션이 새로 만들어지면
+  (새로고침·기억 스냅샷 갱신으로 시스템 프롬프트가 바뀜·모바일 GPU 유실·유출 가드 reset) 화면엔 앞
+  대화가 있는데 모델은 처음부터라, 「わたしは 食べ物 にまじめだ」 다음의 「부정형 문장으로 바꾸면?」을
+  그 한국어 질문 자체를 문장 분석했다(디버그 내보내기로 확인). 지금은 `useAiModel(…, { history })`가
+  **세션을 새로 만들 때만** 저장된 오늘 대화를 Prompt API `initialPrompts`/Gemma `preface`로 채운다.
+  - 창이 허락하는 만큼 **최근 쌍부터 통째로** 넣는다(`fitHistory`). 토큰은 세기 전에 알 수 없어
+    `estimateTokens`가 넉넉하게(많게) 어림한다 — 적게 세면 Prompt API `create()`가 QuotaExceededError로
+    실패한다(그때는 맥락 없이 다시 만든다). 답변 몫 `OUTPUT_RESERVE_TOKENS`를 남긴다.
+  - Gemma는 대화가 쌓여 창(`GEMMA_MAX_TOKENS`)을 넘기 직전이면 세션을 새로 만들고 예산만큼 다시
+    채운다(`wouldOverflow` — 실제 토큰 수는 `getTokenCount()`). Prompt API는 Chrome이 오래된 턴부터
+    알아서 밀어낸다.
+  - `GEMMA_MAX_TOKENS`는 4096 → **8192**로 올렸다. 4096에선 시스템 프롬프트만으로 거의 차서 앞선 대화를
+    못 실었다(`chatHistory.test.ts`가 "긴 답변 두 턴은 들어간다"를 고정한다). 엔진 전역 값이라 모든
+    Gemma 세션에 적용되고 그만큼 KV 캐시를 GPU에 잡는다 — **모바일 실기기 확인 전엔 더 올리지 말 것.**
+  - 실패 안내문(`TEACHER_ERROR_ANSWER`)·거절 문구로 끝난 쌍은 다시 채우지 않는다(유출 가드가 버린 턴을
+    되살리지 않으려고). 앞선 질문도 처음처럼 `buildTeacherUserPrompt`로 감싼다.
+  - 오늘 대화를 지우거나 자정을 넘기면 세션을 버린다 — 화면에 없는 대화를 선생님이 기억하면 안 된다.
+  - **실제 모델로는 아직 확인하지 못했다** — 특히 Gemma에서 preface가 길 때 첫 응답까지 걸리는 시간.
 - **다른 화면에서 대신 질문 보내기**: `AskTeacherButton`이 `teacherChatStore.requestQuestion()`에
   질문을 넣고 `/teacher`로 이동하면, TeacherPage가 마운트되면서 `consumePendingQuestion()`으로
   꺼내 바로 물어본다. **꺼내는 즉시 store를 비우는 게 중요하다** — StrictMode에서 effect가 두 번

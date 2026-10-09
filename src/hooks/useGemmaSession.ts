@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createGemmaSession, discardGemmaEngine, type GemmaSession } from "../lib/gemmaEngine";
+import { historyBudget, fitHistory, wouldOverflow, type ChatTurn } from "../lib/chatHistory";
+import {
+  GEMMA_MAX_TOKENS,
+  createGemmaSession,
+  discardGemmaEngine,
+  type GemmaSession,
+} from "../lib/gemmaEngine";
 import { getCachedModelFile, isOpfsSupported, isWebGpuSupported } from "../lib/gemmaModel";
 
 export type GemmaSessionStatus =
@@ -17,13 +23,21 @@ export type GemmaSessionStatus =
  *
  * `enabled`가 false면(= 지금 Prompt API를 쓰는 중이면) 아무것도 확인하지 않고 세션도 안 만든다.
  */
-export function useGemmaSession(systemPrompt: string, enabled: boolean) {
+export function useGemmaSession(
+  systemPrompt: string,
+  enabled: boolean,
+  getHistory?: () => ChatTurn[]
+) {
   const [status, setStatus] = useState<GemmaSessionStatus>(() =>
     isWebGpuSupported() && isOpfsSupported() ? "checking" : "unsupported"
   );
   /** 엔진을 GPU에 올리는 동안 페이지에 보여줄 문구 (다운로드와 달리 퍼센트가 없다) */
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const sessionRef = useRef<GemmaSession | null>(null);
+  const getHistoryRef = useRef(getHistory);
+  useEffect(() => {
+    getHistoryRef.current = getHistory;
+  });
 
   useEffect(() => {
     if (!enabled) return;
@@ -50,18 +64,30 @@ export function useGemmaSession(systemPrompt: string, enabled: boolean) {
     };
   }, [systemPrompt]);
 
-  const ensureSession = useCallback(async (): Promise<GemmaSession> => {
+  const ensureSession = useCallback(async (input: string): Promise<GemmaSession> => {
     if (sessionRef.current) {
-      if (!sessionRef.current.isStale()) return sessionRef.current;
+      const current = sessionRef.current;
       // 그 사이 엔진이 버려졌다(GPU 디바이스 유실 — 모바일에서 다른 앱을 보고 돌아온 경우).
       // 죽은 엔진 위의 대화는 버리고 새 엔진에서 다시 판다.
-      void sessionRef.current.destroy().catch(() => {});
+      let keep = !current.isStale();
+      // 대화가 쌓여 이번 질문과 답변이 창에 안 들어가면 새로 판다. 앞선 대화는 아래에서 예산만큼
+      // 다시 채우므로 오래된 쪽만 빠진다. 못 세면(null) 그대로 쓴다 — 넘치면 엔진이 알려준다.
+      if (keep && getHistoryRef.current) {
+        const used = await current.tokenCount();
+        if (used !== null && wouldOverflow(used, input, GEMMA_MAX_TOKENS)) keep = false;
+      }
+      if (keep) return current;
+      void current.destroy().catch(() => {});
       sessionRef.current = null;
     }
+    // 새 세션에는 앞선 대화를 창이 허락하는 만큼 다시 채운다(chatHistory.ts 머리 주석 참고).
+    const history = getHistoryRef.current
+      ? fitHistory(getHistoryRef.current(), historyBudget(GEMMA_MAX_TOKENS, systemPrompt, input))
+      : [];
     // 엔진이 아직 안 떠 있으면 여기서 모델이 GPU에 올라간다 — 수 초 걸린다.
     setBusyLabel("Gemma 4 모델을 GPU에 올리는 중...");
     try {
-      const session = await createGemmaSession(systemPrompt);
+      const session = await createGemmaSession(systemPrompt, history);
       sessionRef.current = session;
       return session;
     } catch (err) {
@@ -98,7 +124,7 @@ export function useGemmaSession(systemPrompt: string, enabled: boolean) {
       for (let attempt = 0; ; attempt++) {
         let yielded = false;
         try {
-          const session = await ensureSession();
+          const session = await ensureSession(input);
           for await (const chunk of session.promptStreaming(input)) {
             yielded = true;
             yield chunk;
@@ -117,7 +143,7 @@ export function useGemmaSession(systemPrompt: string, enabled: boolean) {
     async (input: string): Promise<string> => {
       for (let attempt = 0; ; attempt++) {
         try {
-          const session = await ensureSession();
+          const session = await ensureSession(input);
           return await session.prompt(input);
         } catch (err) {
           recoverFromFailure();

@@ -1,4 +1,5 @@
 import { REFUSE_PROMPT_DISCLOSURE, sanitizeMemoryLine, wrapStudentQuestion } from "./promptSafety";
+import type { ChatTurn } from "./chatHistory";
 import { FACT_KIND_LABEL } from "./memoryExtraction";
 import type { MemoryFact } from "./learnerMemoryDb";
 import type { LearnerProfile } from "./learnerProfile";
@@ -39,6 +40,12 @@ const TEACHER_RULES = [
   "- 그 밖의 짧은 질문(단어 하나의 뜻, 읽는 법 등)에는 한두 문장으로 짧게 답하세요.",
   "  소제목도 목록도 쓰지 마세요.",
   "- 소제목으로 나누는 건 문법 설명처럼 정말 길어질 때만 하세요. 그때도 2~3개면 충분합니다.",
+  // 위의 ①②③을 **한국어 질문 자체**에 적용한 일이 있었다 — 「부정형 문장으로 바꾸면?」을
+  // 백틱으로 감싸 "자연스러운 한국어 해석: 부정형 문장으로 바꾸면?"이라고 분석했다.
+  "- ①②③ 형식은 질문에 일본어 문장이 들어 있을 때만 쓰세요. 학습자의 한국어 질문 자체를",
+  "  백틱으로 감싸거나 해석·분석하지 마세요.",
+  "- 질문이 '그럼', '부정형으로 바꾸면?', '이건?'처럼 앞 대화를 이어받으면, 바로 앞 대화에 나온",
+  "  일본어 문장이나 주제를 대상으로 답하세요.",
   "- 질문과 상관없는 다른 문법이나 단어를 끌어와 설명을 늘리지 마세요.",
   // 연습 문제는 앱이 답변 아래 "연습해보기" 버튼으로 따로 낸다(teacherPractice.ts). 모델이
   // 「✏️ 간단 연습!」 섹션을 직접 달면 정답 확인도 안 되는 문제가 두 번 나온다(실제로 달았다).
@@ -83,6 +90,39 @@ export function buildTeacherUserPrompt(question: string): string {
   // wrapStudentText가 아니다 — 그 문구("교정/분석 대상으로만 취급")를 쓰면 모델이 질문에 답하지 않고
   // 질문을 분석하려 든다. wrapStudentQuestion의 주석 참고.
   return wrapStudentQuestion(question);
+}
+
+/**
+ * 답변 도중 실패했을 때 화면에만 보여주는 문구. 기록에는 남기지 않고(teacherChatStore의
+ * `finishAnswer` 주석), 앞선 대화로 다시 채울 때도 뺀다.
+ */
+export const TEACHER_ERROR_ANSWER = "(답변을 만드는 중 오류가 발생했습니다)";
+
+/**
+ * 오늘 대화를 새 세션에 다시 채울 턴으로 바꾼다(chatHistory.ts 머리 주석 참고).
+ *
+ * - 질문은 **처음 보낼 때와 같은 모양**(`buildTeacherUserPrompt`)으로 감싼다. 앞선 질문도
+ *   학습자가 친 글이라, 인젝션 방어를 이 경로에서 빼면 "아까 질문"으로 지시를 밀어 넣을 수 있다.
+ * - 답이 비었거나 실패 안내문이면 그 쌍을 통째로 뺀다 — 모델이 실제로 한 말이 아니다.
+ * - **거절 문구로 끝난 쌍도 뺀다.** 유출 가드는 그 턴을 히스토리에서 버리려고 세션을 reset한다.
+ *   여기서 되살리면 그 노력이 무의미해진다(오염된 질문이 다음 세션에 그대로 실린다).
+ * - 답을 기다리는 중인 질문(짝이 없는 꼬리)은 넣지 않는다 — 그건 지금 보낼 질문이다.
+ */
+export function teacherHistoryTurns(messages: readonly { role: "user" | "assistant"; text: string }[]): ChatTurn[] {
+  const turns: ChatTurn[] = [];
+  for (let i = 0; i < messages.length - 1; i++) {
+    const question = messages[i];
+    const answer = messages[i + 1];
+    if (question.role !== "user" || answer.role !== "assistant") continue;
+    i++;
+    const text = answer.text.trim();
+    if (!text || text === TEACHER_ERROR_ANSWER || text === TEACHER_REFUSAL_ANSWER) continue;
+    turns.push(
+      { role: "user", content: buildTeacherUserPrompt(question.text) },
+      { role: "assistant", content: answer.text }
+    );
+  }
+  return turns;
 }
 
 /**
