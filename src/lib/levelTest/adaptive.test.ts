@@ -50,6 +50,10 @@ describe("pickStartLevel", () => {
   it("Pre-N5를 골랐어도 문제는 N5부터 낸다", () => {
     expect(pickStartLevel("Pre-N5", "N3")).toBe("N5");
   });
+
+  it("지난 진단이 입문(Pre-N5)이었으면 N5부터 낸다", () => {
+    expect(pickStartLevel(null, "Pre-N5")).toBe("N5");
+  });
 });
 
 describe("계단식 — 이동", () => {

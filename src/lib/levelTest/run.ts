@@ -48,14 +48,7 @@ export type LevelTestData = {
   vocabPool: VocabPool;
 };
 
-export const SECTION_LABEL: Record<LevelTestSection, string> = {
-  kana: "문자",
-  vocab: "어휘",
-  kanji: "한자",
-  grammar: "문법",
-  reading: "독해",
-  listening: "청해",
-};
+export { SECTION_LABEL } from "./labels";
 
 /** 기본 영역 순서. 문자(가나)는 처음엔 건너뛰고, 어휘 결과를 보고 끝에 붙인다. */
 export const MAIN_SECTIONS: LevelTestSection[] = ["vocab", "kanji", "grammar", "reading", "listening"];

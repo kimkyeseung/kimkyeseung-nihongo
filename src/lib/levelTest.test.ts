@@ -278,7 +278,7 @@ describe("시트에 넘기는 것(PracticeTarget)", () => {
       systemPrompt: LEVEL_TEST_SYSTEM_PROMPT,
       leakReference: LEVEL_TEST_LEAK_REFERENCE,
       maxProblems: 4,
-      xp: XP_REWARDS.levelTestCompleted,
+      xp: XP_REWARDS.unitCheckCompleted,
     });
     expect(target.prompt).toContain("문제 수: 4개");
   });

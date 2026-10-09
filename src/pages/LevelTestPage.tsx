@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import ChoiceQuestion from "../components/ChoiceQuestion";
 import ListeningPlayer from "../components/ListeningPlayer";
 import { useJapaneseVoiceStatus } from "../hooks/useJapaneseSpeech";
@@ -28,6 +28,18 @@ import {
 } from "../lib/levelTest/run";
 import type { LevelTestQuestion } from "../lib/levelTest/questions";
 import { localDateKey } from "../lib/localDate";
+import {
+  effectiveLevel,
+  latestRecord,
+  recordFromSections,
+  teacherQuestionFor,
+  type LevelTestRecord,
+} from "../lib/levelTest/history";
+import { XP_REWARDS } from "../lib/xpRewards";
+import { useConfettiStore } from "../stores/confettiStore";
+import { useGamificationStore } from "../stores/gamificationStore";
+import { useLevelTestStore } from "../stores/levelTestStore";
+import { useTeacherChatStore } from "../stores/teacherChatStore";
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 import { useLevelTestSession } from "../stores/pageStateStore";
@@ -309,8 +321,73 @@ function LevelSteps({ result }: { result: SectionResult }) {
   );
 }
 
+/**
+ * "이 단계부터 시작하기" — 커리큘럼 시작 단계를 진단 결과로. 이미 다른 단계가 있으면 한 번 묻는다
+ * ("지금: N5 → 진단: N4"). **진도(직접 완료한 유닛)는 건드리지 않는다** — 시작 단계만 바꾼다.
+ */
+function StartFromHere({ overall }: { overall: LevelTestRecord["overall"] }) {
+  const startLevel = useCurriculumStore((s) => s.startLevel);
+  const setStartLevel = useCurriculumStore((s) => s.setStartLevel);
+  const [step, setStep] = useState<"idle" | "confirm" | "done">("idle");
+  if (!overall) return null;
+
+  if (step === "done" || (step === "idle" && startLevel === overall)) {
+    return (
+      <p className="rounded-2xl bg-primary/10 px-4 py-3 text-center text-sm text-primary">
+        ✅ {levelName(overall)} 단계부터 공부해요 ·{" "}
+        <Link to="/curriculum" className="text-info underline underline-offset-2">
+          로드맵 보기
+        </Link>
+      </p>
+    );
+  }
+  if (step === "confirm") {
+    return (
+      <div className="flex flex-col gap-2 rounded-2xl border-2 border-primary/30 bg-white p-4 text-center">
+        <p className="text-gray-700">
+          지금: {startLevel ? levelName(startLevel) : "없음"} → 진단: {levelName(overall)}
+        </p>
+        <p className="text-sm text-gray-400">시작 단계를 바꿀까요? 이미 끝낸 단원 표시는 그대로 남아요.</p>
+        <div className="flex gap-2">
+          <button onClick={() => setStep("idle")} className="flex-1 rounded-2xl border-2 border-gray-100 py-2.5 text-gray-600">
+            그대로 두기
+          </button>
+          <button
+            onClick={() => {
+              setStartLevel(overall);
+              setStep("done");
+            }}
+            className="btn-press flex-1 rounded-2xl bg-primary py-2.5 font-bold text-white"
+            style={PRIMARY_SHADOW}
+          >
+            바꾸기
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={() => {
+        if (startLevel) setStep("confirm");
+        else {
+          setStartLevel(overall);
+          setStep("done");
+        }
+      }}
+      className={PRIMARY_BUTTON}
+      style={PRIMARY_SHADOW}
+    >
+      이 단계부터 시작하기
+    </button>
+  );
+}
+
 function ResultView({ run, onRestart }: { run: LevelTestRun; onRestart: () => void }) {
+  const navigate = useNavigate();
+  const requestQuestion = useTeacherChatStore((s) => s.requestQuestion);
   const sections = runSections(run);
+  const record = recordFromSections(sections, run.finishedAt ?? run.startedAt);
   const overall = overallLevel(sections);
   const unsure = lowConfidenceSections(sections);
   const missed = run.history.filter((h) => !h.correct);
@@ -365,6 +442,26 @@ function ResultView({ run, onRestart }: { run: LevelTestRun; onRestart: () => vo
         <p className="text-xs text-gray-400">🎧 이 브라우저에는 일본어 음성이 없어서 청해는 측정하지 않았어요. 종합에서도 뺐어요.</p>
       )}
 
+      {/* 할 일 버튼은 틀린 문제 목록 위에 — 목록이 길면 다 내려가야 찾았다. */}
+      <div className="flex flex-col gap-2">
+        <StartFromHere overall={record.overall} />
+        <button
+          onClick={() => {
+            // 질문 문장은 코드가 만든다 — 결과 숫자만 들어간다. TeacherPage가 마운트되며 꺼내 묻는다.
+            requestQuestion(teacherQuestionFor(record));
+            navigate("/teacher");
+          }}
+          className="rounded-2xl border-2 border-gray-100 bg-white py-3 text-gray-600"
+        >
+          🧑‍🏫 선생님에게 결과 물어보기
+        </button>
+        <button onClick={onRestart} className="rounded-2xl border-2 border-gray-100 bg-white py-3 text-gray-600">
+          다시 진단하기
+        </button>
+        <Link to="/" className="self-center text-sm text-info">
+          대문으로
+        </Link>
+      </div>
       {missed.length > 0 && (
         <section>
           <h3 className="font-bold text-gray-700">틀린 문제 다시 보기 ({missed.length})</h3>
@@ -377,14 +474,6 @@ function ResultView({ run, onRestart }: { run: LevelTestRun; onRestart: () => vo
         </section>
       )}
 
-      <div className="flex flex-col gap-2">
-        <button onClick={onRestart} className="rounded-2xl border-2 border-gray-100 bg-white py-3 text-gray-600">
-          다시 진단하기
-        </button>
-        <Link to="/" className="self-center text-sm text-info">
-          대문으로
-        </Link>
-      </div>
     </div>
   );
 }
@@ -402,6 +491,11 @@ function LevelTestPage() {
   const { run, profile, setRun, setProfile, reset } = useLevelTestSession();
   const startLevel = useCurriculumStore((s) => s.startLevel);
   const levelGuess = useLearnerMemoryStore((s) => s.profile.levelGuess);
+  const refreshPromptMemory = useLearnerMemoryStore((s) => s.refreshPromptMemory);
+  const records = useLevelTestStore((s) => s.records);
+  const addResult = useLevelTestStore((s) => s.addResult);
+  const recordProgress = useGamificationStore((s) => s.recordProgress);
+  const celebrate = useConfettiStore((s) => s.celebrate);
   const addManualFact = useLearnerMemoryStore((s) => s.addManualFact);
   // 청해를 낼지 — 일본어 음성이 없으면 건너뛰고 "측정 안 함"으로 둔다(0점이 아니다).
   const voiceStatus = useJapaneseVoiceStatus();
@@ -423,6 +517,18 @@ function LevelTestPage() {
     };
   }, [loadAttempt]);
 
+  // 결과가 나오면 요약을 저장하고(최근 3번), 처음이면 축하 + XP(하루 한 번), 선생님 기억 스냅샷을 새로
+  // 만든다 — 스냅샷은 명시적인 지점에서만 바뀐다(학습자 기억 절). 같은 진단은 두 번 저장되지 않으므로
+  // StrictMode나 결과 화면에 다시 들어오는 것은 괜찮다.
+  useEffect(() => {
+    if (run?.phase !== "result" || !run.finishedAt) return;
+    const { added, xp } = addResult(recordFromSections(runSections(run), run.finishedAt), localDateKey());
+    if (!added) return;
+    celebrate();
+    if (xp) recordProgress(XP_REWARDS.levelTestCompleted);
+    void refreshPromptMemory();
+  }, [run, addResult, celebrate, recordProgress, refreshPromptMemory]);
+
   // 문제가 바뀌면 맨 위로 — 긴 지문을 끝까지 내려 읽은 채로 다음 문제가 뜨면 질문이 화면 밖에 있다.
   const questionKey = run?.question?.keys[0] ?? run?.phase;
   useLayoutEffect(() => {
@@ -441,7 +547,8 @@ function LevelTestPage() {
     }
     setRun(
       startRun({
-        startLevel: pickStartLevel(startLevel, levelGuess),
+        // 시작 단계가 없으면 지금 수준 — 30일 안의 진단이 기록 추정을 이긴다(effectiveLevel).
+        startLevel: pickStartLevel(startLevel, effectiveLevel(latestRecord(records), levelGuess, Date.now())),
         listeningAvailable: voiceStatus === "available",
         now: Date.now(),
       }),

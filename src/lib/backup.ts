@@ -44,6 +44,8 @@ export const BACKUP_LOCAL_KEYS = [
   "wordbook-view",
   "writing-options",
   "input-script",
+  // 레벨 진단 결과(최근 3번). 학습 이력이다. 되돌릴 때 levelTestStore의 merge가 모양을 다시 검사한다.
+  "level-test",
 ] as const;
 
 export type BackupLocalKey = (typeof BACKUP_LOCAL_KEYS)[number];

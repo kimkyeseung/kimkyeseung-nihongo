@@ -232,6 +232,6 @@ export function levelTestTarget(test: LevelTest, id: string): PracticeTarget {
     leakReference: LEVEL_TEST_LEAK_REFERENCE,
     prompt: buildLevelTestPrompt(test),
     maxProblems: test.problemCount,
-    xp: XP_REWARDS.levelTestCompleted,
+    xp: XP_REWARDS.unitCheckCompleted,
   };
 }

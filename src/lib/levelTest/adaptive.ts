@@ -42,17 +42,17 @@ function shift(level: JlptLevel, direction: -1 | 1): JlptLevel {
 }
 
 /**
- * 계단식 영역의 시작 급수. 커리큘럼 시작 단계를 먼저, 없으면 기록으로 추정한 수준을 쓴다.
- * 학습자가 직접 고른 단계가 기록 추정보다 믿을 만하다. Pre-N5(문자 단계)를 골랐어도 문제는
+ * 계단식 영역의 시작 급수. 커리큘럼 시작 단계를 먼저, 없으면 지금 수준(`effectiveLevel` — 최근 진단 또는
+ * 기록 추정)을 쓴다. 학습자가 직접 고른 단계가 추정보다 믿을 만하다. Pre-N5(문자 단계)여도 문제는
  * N5부터 낸다 — 그 아래 급수의 문제는 없다.
  */
 export function pickStartLevel(
   curriculumStart: CurriculumLevelId | null,
-  levelGuess: JlptLevel | null,
+  currentLevel: EstimatedLevel | null,
 ): JlptLevel {
-  if (curriculumStart === "Pre-N5") return "N5";
-  if (curriculumStart) return curriculumStart;
-  return levelGuess ?? DEFAULT_START_LEVEL;
+  const level = curriculumStart ?? currentLevel;
+  if (level === "Pre-N5") return "N5";
+  return level ?? DEFAULT_START_LEVEL;
 }
 
 function emptyState(section: StaircaseSection | ShortSection, level: JlptLevel): AdaptiveState {
