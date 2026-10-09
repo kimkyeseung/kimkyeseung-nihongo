@@ -1,6 +1,8 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ChoiceQuestion from "../components/ChoiceQuestion";
+import ListeningPlayer from "../components/ListeningPlayer";
+import { useJapaneseVoiceStatus } from "../hooks/useJapaneseSpeech";
 import LoadingMascot from "../components/LoadingMascot";
 import ProgressBar from "../components/ProgressBar";
 import { loadLevelTestData } from "../lib/levelTest/loadData";
@@ -274,7 +276,13 @@ function QuestionPrompt({ q }: { q: LevelTestQuestion }) {
         </>
       );
     case "listening":
-      return <p className="font-bold text-gray-700">{q.item.question}</p>;
+      return (
+        <>
+          {/* 문제마다 key로 리마운트 — 재생 횟수가 이어지지 않고, 앞 문제의 대화가 멈춘다. */}
+          <ListeningPlayer key={q.keys[0]} item={q.item} level={q.level ?? q.item.level} />
+          <p className="mt-3 font-bold text-gray-700">{q.item.question}</p>
+        </>
+      );
   }
 }
 
@@ -395,6 +403,8 @@ function LevelTestPage() {
   const startLevel = useCurriculumStore((s) => s.startLevel);
   const levelGuess = useLearnerMemoryStore((s) => s.profile.levelGuess);
   const addManualFact = useLearnerMemoryStore((s) => s.addManualFact);
+  // 청해를 낼지 — 일본어 음성이 없으면 건너뛰고 "측정 안 함"으로 둔다(0점이 아니다).
+  const voiceStatus = useJapaneseVoiceStatus();
   const [data, setData] = useState<LevelTestData | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -432,8 +442,7 @@ function LevelTestPage() {
     setRun(
       startRun({
         startLevel: pickStartLevel(startLevel, levelGuess),
-        // 청해 플레이어는 다음 단계에서 붙인다 — 그때까지는 "측정 안 함"으로 둔다.
-        listeningAvailable: false,
+        listeningAvailable: voiceStatus === "available",
         now: Date.now(),
       }),
     );
@@ -466,7 +475,8 @@ function LevelTestPage() {
     body =
       screen === "greeting" ? (
         <Greeting
-          ready={!!data}
+          // 음성 확인(최대 1.5초)도 기다린다 — 시작하는 순간 청해를 낼지 정해야 한다.
+          ready={!!data && voiceStatus !== "checking"}
           failed={loadFailed}
           onRetry={() => {
             setLoadFailed(false);

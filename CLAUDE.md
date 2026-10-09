@@ -96,6 +96,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     계단이 한 칸 어긋나거나 가나 영역이 안 붙거나 독해가 엉뚱한 급수에서 시작해도 문제는 멀쩡히 나오고
     결과에는 그럴듯한 급수가 뜬다. 그 급수가 곧 커리큘럼 시작 단계가 된다.
 
+  - 일본어 음성 고르기(`japaneseVoices`) — 잘못 골라도 소리는 난다. macOS에서 캐릭터 목소리(Eddy)가
+    골라지고 있었고, 청해에서 A/B가 같은 목소리·같은 음높이면 누가 말하는지 못 가려 문제를 못 푼다.
+
   - 레벨 진단 문제 만들기(`levelTest/questions`) — 보기가 겹치거나 정답만 한국어면 뜻을 몰라도 맞혀서
     진단이 조용히 높게 나온다. 실제 사전·한자 데이터로 급수마다 300번씩 돌린다. 원본 뜻풀이의
     「어간의 하나」 같은 문법 설명 줄도 여기서 거른다(`NOT_A_MEANING`).
@@ -1516,6 +1519,14 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
   문장을 보여주는 새 화면에서 발음이 필요하면 이 컴포넌트를 재사용할 것 — 화면마다
   `useJapaneseSpeech`를 새로 부르지 말 것. 오십음도는 예외로 칸 자체를 탭하면 소리가
   나는 구조라 버튼을 따로 붙이지 않았다.
+- **예외: 레벨 진단의 청해 플레이어(`ListeningPlayer`)는 `useJapaneseSpeech`를 직접 쓴다.** 대사가 여러
+  줄이고 A/B 화자 사이에 쉬어야 하고 재생 횟수(2회)를 세야 해서, 문장 하나를 읽는 `SpeakButton`으로는 안
+  된다. 그래서 훅에 `speakLines`(한 줄씩 onend를 기다려 다음 줄 — 한꺼번에 큐에 넣으면 줄 사이에 쉴 수도,
+  지금 몇 번째 줄인지 알 수도 없다)와 `stop`을 더했다. A/B 목소리는 `pickSpeakerVoices`가 고른다 — 다른
+  사람의 음성이 둘이면 각각, 아니면 같은 목소리에 B만 음높이를 올린다(「Kyoko」와 「Kyoko (Enhanced)」는
+  같은 사람으로 본다). 캐릭터 목소리는 B로도 쓰지 않는다.
+- **일본어 음성이 있는지는 `useJapaneseVoiceStatus`로 본다.** Chrome은 `getVoices()`가 처음에 빈 배열이라
+  바로 "없음"으로 정하면 안 된다(헤드리스에서 실제로 0개 → 잠시 뒤 180개였다) — 1.5초 기다린다.
 - 현재 붙어있는 곳: 단어 상세(표제어·LLM 예문), 단어 뜻 다이얼로그, 회화(AI 말풍선·내
   말풍선), 작문 첨삭(원문/수정문·비슷한 문장·응용 표현·더 정중한/친근한 표현).
 - **한자 표기 대신 사전의 가나 읽기를 읽힌다**(단어 단위일 때). 음성 엔진이 한자를 다른
@@ -1527,7 +1538,7 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
 - **음성 고르기 (실제로 겪은 버그)**: 예전엔 `voices.find(v => v.lang === "ja-JP")`로 목록의
   첫 번째를 썼는데, macOS Ventura+ 의 ja-JP 목록은 캐릭터 목소리(Eddy·Flo·Grandma·Rocko…)가
   앞을 차지해서 **Kyoko가 아니라 Eddy가 선택되고 있었다**(발음이 과장되게 들리는 원인).
-  지금은 `useJapaneseSpeech`의 `scoreVoice`가 캐릭터 목소리를 걸러내고
+  지금은 `lib/japaneseVoices.ts`의 `scoreVoice`(훅에서 떼어내 테스트로 고정했다)가 캐릭터 목소리를 걸러내고
   O-ren/Hattori/Kyoko/Google 日本語 같은 표준 음성과 이름에 Premium/Enhanced/Siri가 붙은
   고품질 버전을 우선한다. **목록의 순서를 신뢰하지 말 것** — 기기마다 다르다.
   (사용자가 macOS 시스템 설정에서 고급 일본어 음성을 받아두면 자동으로 그쪽이 선택된다.)
