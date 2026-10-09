@@ -3,6 +3,7 @@ import type { ChatTurn } from "./chatHistory";
 import { FACT_KIND_LABEL } from "./memoryExtraction";
 import type { MemoryFact } from "./learnerMemoryDb";
 import type { LearnerProfile } from "./learnerProfile";
+import { diagnosisIsFresh, diagnosisPromptLine, type LevelTestRecord } from "./levelTest/history";
 
 /**
  * "선생님"(자유 질문) 페이지의 고정 지시문. 답변 형식을 마크다운으로 고정하는 이유는
@@ -150,10 +151,21 @@ export interface TeacherCurriculumContext {
   remainingKanji: string[];
 }
 
+/**
+ * 최근 레벨 진단. 있으면 학습 기록에 한 줄로 들어가고, **30일 안의 진단이면 기록 추정("어휘 수준은 ~
+ * 언저리")을 대신한다** — 두 줄이 다른 급수를 말하면 모델이 어느 쪽에 맞출지 모른다(`effectiveLevel`과
+ * 같은 판단). `now`는 인자로 받는다(테스트·자정을 넘긴 화면).
+ */
+export interface TeacherDiagnosisContext {
+  record: LevelTestRecord;
+  now: number;
+}
+
 export function buildMemoryBlock(
   profile: LearnerProfile,
   facts: MemoryFact[],
-  curriculum?: TeacherCurriculumContext | null
+  curriculum?: TeacherCurriculumContext | null,
+  diagnosis?: TeacherDiagnosisContext | null
 ): string {
   const lines: string[] = [];
 
@@ -166,7 +178,8 @@ export function buildMemoryBlock(
   }
 
   const study: string[] = [];
-  if (profile.levelGuess) {
+  if (diagnosis) study.push(`- ${diagnosisPromptLine(diagnosis.record)}`);
+  if (profile.levelGuess && !(diagnosis && diagnosisIsFresh(diagnosis.record, diagnosis.now))) {
     study.push(`- 어휘 수준은 JLPT ${profile.levelGuess} 언저리입니다.`);
   }
   if (profile.weakKanji.length > 0) {

@@ -140,6 +140,16 @@ function AboutPage() {
         </span>
       </p>
 
+      {/* 레벨 진단·단원 점검 문제 은행도 직접 만든 자료라 커리큘럼 옆에 같은 방식으로 적는다.
+          README·scripts/data/README.md에도 같은 내용이 있다 — 바꾸면 셋 다. */}
+      <h3 className="mt-6 text-sm font-bold text-gray-500">레벨 진단 문제</h3>
+      <p className="mt-2 rounded-2xl border-2 border-gray-100 bg-white p-3 text-sm text-gray-500">
+        레벨 진단과 단원 점검(선생님 /test)의 문법·독해·청해 문제는 위 커리큘럼의 문형을 바탕으로 직접
+        만든 문제입니다. <b className="font-normal text-gray-700">JLPT 공식 문제가 아니며</b>, 기출 문제나 시판
+        문제집의 문장을 옮기지 않았습니다. 어휘 뜻·한자 읽기 문제는 위 사전 데이터에서 만듭니다. 진단 결과도 공식
+        급수 판정이 아니라 공부를 시작할 단계를 고르기 위한 추정입니다.
+      </p>
+
       <p className="mt-4 rounded-2xl bg-gray-50 p-3 text-xs text-gray-400">
         사전 데이터: JMDict/KANJIDIC (EDRDG, CC BY-SA) · 한국어 뜻: 한국어 위키낱말사전 (CC BY-SA) ·
         JLPT 태그: JMDict_Extended,

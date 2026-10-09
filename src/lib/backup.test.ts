@@ -60,6 +60,14 @@ describe("buildBackup / parseBackup", () => {
     });
   });
 
+  it("레벨 진단 결과(level-test)는 학습 이력이라 담는다", () => {
+    const value = persisted({ records: [{ takenAt: 1, overall: "N4", sections: { vocab: "N4" } }], lastXpDay: null });
+    const file = buildBackup((key) => (key === "level-test" ? value : LOCAL[key] ?? null), MEMORY, new Date(2026, 8, 27));
+    expect(file.local["level-test"]).toBe(value);
+    const result = reparse(file);
+    expect(result.ok && result.backup.local["level-test"]).toBe(value);
+  });
+
   it("기기마다 다른 설정(ai-engine)은 담지 않는다", () => {
     expect(build().local).not.toHaveProperty("ai-engine");
   });

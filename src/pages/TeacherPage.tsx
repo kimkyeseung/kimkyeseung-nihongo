@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -39,6 +39,10 @@ import TeacherCommandList from "../components/TeacherCommandList";
 import TodayPlanCard from "../components/TodayPlanCard";
 import { answerPracticeTarget, isPracticeWorthy, type PracticeTarget } from "../lib/teacherPractice";
 import { useTeacherCommands } from "../hooks/useTeacherCommands";
+import type { UnitCheckTarget } from "../lib/unitCheck";
+
+// 단원 점검(`/test`)은 문제 은행·한자 데이터를 끌어오므로 열 때만 받는다.
+const UnitCheckSheet = lazy(() => import("../components/UnitCheckSheet"));
 
 /** 이보다 긴 답변에는 "답변 처음으로" 버튼을 단다 — 375px에서 대략 한 화면을 넘는 길이. */
 const LONG_ANSWER_LENGTH = 350;
@@ -115,6 +119,7 @@ function TeacherPage() {
     }
   }
   const [practiceTarget, setPracticeTarget] = useState<PracticeTarget | null>(null);
+  const [unitCheck, setUnitCheck] = useState<UnitCheckTarget | null>(null);
   // 진도는 인사말·`/test`가 같이 쓴다. 동적 import라 첫 렌더에는 null이다.
   const curriculum = useCurriculumPlan();
   const startLevel = useCurriculumStore((s) => s.startLevel);
@@ -124,7 +129,7 @@ function TeacherPage() {
     setInput,
     enabled: viewingToday,
     curriculum,
-    onStartTest: setPracticeTarget,
+    onStartTest: setUnitCheck,
   });
   const clearForQuestion = command.clearForQuestion;
 
@@ -537,6 +542,11 @@ function TeacherPage() {
             {command.notice && (
               <p role="status" className="mb-2 rounded-2xl bg-gray-50 px-3 py-2 text-xs text-gray-500">
                 {command.notice}
+                {command.noticeAction && (
+                  <Link to={command.noticeAction.to} className="ml-1 text-info underline underline-offset-2">
+                    {command.noticeAction.label}
+                  </Link>
+                )}
               </p>
             )}
             <div className="flex justify-end pb-2">
@@ -597,6 +607,11 @@ function TeacherPage() {
         )}
 
         <TeacherPracticeSheet target={practiceTarget} onClose={() => setPracticeTarget(null)} />
+        {unitCheck && (
+          <Suspense fallback={null}>
+            <UnitCheckSheet key={unitCheck.key} target={unitCheck} onClose={() => setUnitCheck(null)} />
+          </Suspense>
+        )}
       </div>
     </div>
   );

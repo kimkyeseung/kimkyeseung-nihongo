@@ -9,7 +9,7 @@
 
 import { toKana, toRomaji } from "wanakana";
 
-export type TeacherCommandId = "test" | "review" | "today";
+export type TeacherCommandId = "test" | "level" | "review" | "today";
 
 export interface TeacherCommand {
   id: TeacherCommandId;
@@ -25,9 +25,17 @@ export const TEACHER_COMMANDS: TeacherCommand[] = [
   {
     id: "test",
     name: "test",
-    aliases: ["테스트", "시험"],
+    aliases: ["테스트", "시험", "점검"],
     emoji: "📝",
-    description: "지금 수준과 최근 공부로 테스트 보기",
+    description: "지금 단원 점검하기",
+  },
+  {
+    // `/diagnostics`(Prompt API 자가진단)와 헷갈리지 않게 이름을 일부러 level로 했다.
+    id: "level",
+    name: "level",
+    aliases: ["레벨", "레벨테스트", "진단"],
+    emoji: "🎓",
+    description: "레벨 진단 받기(10~15분)",
   },
   {
     id: "review",
@@ -85,13 +93,28 @@ export function commandQuery(input: string): string | null {
   return normalizeName(rest.trim());
 }
 
+/**
+ * 이름을 앞에서부터 한 글자씩 늘려 일본어 모드로 쳤을 때 들어오는 글자들(`l`, `ぇ`, `ぇv`, `ぇゔぇ`, …).
+ * **위 두 비교만으로는 모자란다 (level을 더하다 실제로 걸렸다).** `/lev`는 `・ぇv`로 들어오는데, 로마자로
+ * 되돌리면 `ev`라 level이 아니고 완성된 가나 `ぇゔぇl`과도 앞부분이 다르다(`ゔ` ≠ `v`). 치는 도중의 모양을
+ * 그대로 만들어 두고 같은지 본다.
+ */
+function typingForms(command: TeacherCommand): string[] {
+  const out: string[] = [];
+  for (const name of [command.name, ...command.aliases].map(normalizeName)) {
+    for (let n = 1; n <= name.length; n++) out.push(toKana(name.slice(0, n), { IMEMode: "toHiragana" }));
+  }
+  return out;
+}
+
 /** 명령어 목록(입력창 위에 뜨는 것). 이름이나 별칭이 치는 중인 글자로 시작하는 것만. */
 export function matchCommands(input: string): TeacherCommand[] {
   const query = commandQuery(input);
   if (query === null) return [];
   const forms = queryForms(query);
-  return TEACHER_COMMANDS.filter((command) =>
-    nameForms(command).some((n) => forms.some((q) => n.startsWith(q)))
+  return TEACHER_COMMANDS.filter(
+    (command) =>
+      nameForms(command).some((n) => forms.some((q) => n.startsWith(q))) || typingForms(command).includes(query)
   );
 }
 

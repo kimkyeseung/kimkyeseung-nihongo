@@ -140,6 +140,9 @@ function CurriculumPage() {
         <p className="mt-6 text-gray-500">
           대문에서 시작 단계를 먼저 골라주세요. 그래야 오늘 할 공부를 정해드릴 수 있어요.
         </p>
+        <Link to="/level" className="mt-3 inline-block text-info underline underline-offset-2">
+          🎓 어느 단계인지 모르겠다면 레벨 진단 받기
+        </Link>
       </div>
     );
   }
@@ -199,7 +202,10 @@ function CurriculumPage() {
         ))}
       </div>
       <p className="mt-1 text-xs text-gray-400">
-        시작 단계보다 쉬운 단원은 로드맵에서 빠져요. 바꿔도 이미 표시한 진도는 그대로예요.
+        시작 단계보다 쉬운 단원은 로드맵에서 빠져요. 바꿔도 이미 표시한 진도는 그대로예요.{" "}
+        <Link to="/level" className="text-info underline underline-offset-2">
+          🎓 레벨 진단으로 정하기
+        </Link>
       </p>
 
       {CURRICULUM_LEVELS.filter((l) => byLevel.has(l)).map((levelId) => {

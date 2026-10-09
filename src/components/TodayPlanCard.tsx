@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import ProgressBar from "./ProgressBar";
@@ -6,6 +7,8 @@ import { buildDailyPlan, type PlanAction } from "../lib/dailyPlan";
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
+import { useLevelTestStore } from "../stores/levelTestStore";
+import { latestRecord, shouldSuggestRetest } from "../lib/levelTest/history";
 import type { CurriculumLevelId } from "../types/curriculum";
 
 /** 시작 단계를 고르는 칩. 급수 이름만으로는 어느 쪽인지 감이 안 와서 한 줄씩 붙였다. */
@@ -47,6 +50,16 @@ function LevelPicker() {
           </button>
         ))}
       </div>
+      {/* 어느 단계인지 모르는 사람이 아무거나 찍지 않게 — 코드가 내는 진단(LLM 없음)이라 AI가 안 되는 브라우저에서도 된다. */}
+      <Link
+        to="/level"
+        className="mt-3 flex items-center justify-between rounded-2xl bg-gray-50 px-3 py-2.5 text-sm text-gray-600 hover:bg-primary/10"
+      >
+        <span>🤔 잘 모르겠어요 → 10분 레벨 진단 받기</span>
+        <span aria-hidden className="text-gray-300">
+          ›
+        </span>
+      </Link>
     </section>
   );
 }
@@ -90,6 +103,9 @@ function TodayPlanCard() {
   const startLevel = useCurriculumStore((s) => s.startLevel);
   const result = useCurriculumPlan();
   const profile = useLearnerMemoryStore((s) => s.profile);
+  const lastDiagnosis = useLevelTestStore((s) => latestRecord(s.records));
+  // "다시 진단해볼까요?"는 90일 단위라 렌더마다 시계를 읽을 이유가 없다 — 카드가 뜰 때 한 번.
+  const [now] = useState(() => Date.now());
 
   if (!startLevel) return <LevelPicker />;
   // 커리큘럼(동적 import)과 기억(IndexedDB)을 아직 못 읽은 동안. 여기서 "할 일 없음"을
@@ -144,6 +160,12 @@ function TodayPlanCard() {
           <ActionRow key={action.id} action={action} />
         ))}
       </div>
+      {/* 마지막 진단이 90일 넘었으면 한 줄만 권한다 — 강요하지 않는다. */}
+      {shouldSuggestRetest(lastDiagnosis, now) && (
+        <Link to="/level" className="mt-3 block text-center text-xs text-info hover:underline">
+          🎓 마지막 레벨 진단이 꽤 지났어요. 다시 진단해볼까요?
+        </Link>
+      )}
     </motion.section>
   );
 }

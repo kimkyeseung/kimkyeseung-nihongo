@@ -13,6 +13,8 @@ import {
 } from "../lib/learnerMemoryDb";
 import { buildLearnerProfile, EMPTY_PROFILE, type LearnerProfile } from "../lib/learnerProfile";
 import { buildMemoryBlock, type TeacherCurriculumContext } from "../lib/teacherPrompts";
+import { latestRecord } from "../lib/levelTest/history";
+import { useLevelTestStore } from "./levelTestStore";
 import { buildCurriculumPlan } from "../lib/curriculumProgress";
 import { findLevel, findUnit, levelLabel, loadCurriculum } from "../lib/curriculum";
 import type { ExtractedFact } from "../lib/memoryExtraction";
@@ -90,7 +92,11 @@ function recompute(
   curriculum: TeacherCurriculumContext | null
 ) {
   const profile = buildLearnerProfile(events);
-  return { profile, promptMemory: buildMemoryBlock(profile, facts, curriculum) };
+  // 최근 레벨 진단은 persist 스토어(level-test)에 있다. 스냅샷을 만들 때 그때의 값을 읽는다 —
+  // 진단을 끝낸 화면이 refreshPromptMemory를 불러 반영한다(스냅샷은 명시적인 지점에서만 바뀐다).
+  const record = latestRecord(useLevelTestStore.getState().records);
+  const diagnosis = record ? { record, now: Date.now() } : null;
+  return { profile, promptMemory: buildMemoryBlock(profile, facts, curriculum, diagnosis) };
 }
 
 export const useLearnerMemoryStore = create<LearnerMemoryState>((set, get) => ({

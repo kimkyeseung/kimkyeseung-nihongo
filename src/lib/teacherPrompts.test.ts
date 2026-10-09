@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   TEACHER_ERROR_ANSWER,
   TEACHER_REFUSAL_ANSWER,
+  buildMemoryBlock,
   teacherHistoryTurns,
 } from "./teacherPrompts";
+import { EMPTY_PROFILE } from "./learnerProfile";
 
 // 새 세션에 다시 채울 앞선 대화(chatHistory.ts 참고). 여기서 새면 실패 안내문이 "선생님이 한 말"로
 // 들어가거나, 유출 가드가 버린 오염된 질문이 다음 세션에 되살아난다 — 화면에는 아무 표시도 없다.
@@ -46,5 +48,35 @@ describe("teacherHistoryTurns", () => {
     ]);
     expect(turns).toHaveLength(2);
     expect(turns[0].content).toContain("정상 질문");
+  });
+});
+
+describe("buildMemoryBlock — 레벨 진단 한 줄", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const NOW = new Date(2026, 9, 9, 12).getTime();
+  const profile = { ...EMPTY_PROFILE, levelGuess: "N5" as const };
+  const diagnosis = (daysAgo: number) => ({
+    record: {
+      takenAt: NOW - daysAgo * DAY,
+      overall: "N3" as const,
+      sections: { vocab: "N3" as const, grammar: "N3" as const },
+    },
+    now: NOW,
+  });
+
+  it("30일 안의 진단이 있으면 그 줄을 넣고 기록 추정 줄은 뺀다 — 두 줄이 다른 급수를 말하지 않게", () => {
+    const block = buildMemoryBlock(profile, [], null, diagnosis(3));
+    expect(block).toContain("레벨 진단(2026-10-06): 종합 N3");
+    expect(block).not.toContain("어휘 수준은 JLPT N5");
+  });
+
+  it("오래된 진단이면 둘 다 넣는다(기록 추정이 더 최근 근거다)", () => {
+    const block = buildMemoryBlock(profile, [], null, diagnosis(45));
+    expect(block).toContain("레벨 진단(");
+    expect(block).toContain("어휘 수준은 JLPT N5");
+  });
+
+  it("진단이 없으면 예전 그대로", () => {
+    expect(buildMemoryBlock(profile, [], null, null)).toContain("어휘 수준은 JLPT N5");
   });
 });

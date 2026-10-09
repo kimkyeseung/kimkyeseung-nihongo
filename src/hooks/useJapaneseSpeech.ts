@@ -1,136 +1,158 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { pickJapaneseVoice, pickSpeakerVoices, splitForSpeech } from "../lib/japaneseVoices";
 
-/**
- * macOS(Ventura+)가 기본으로 깔아두는 "캐릭터" 목소리들. ja-JP 목록의 맨 앞을 차지하는데
- * (예전 코드가 목록 첫 번째를 골라서 Eddy가 쓰이고 있었다) 과장된 연기 톤이라 발음 학습에는
- * 부적합하다. 이름만으로 거르므로 소문자로 비교한다.
- */
-const NOVELTY_VOICES = [
-  "eddy",
-  "flo",
-  "grandma",
-  "grandpa",
-  "reed",
-  "rocko",
-  "sandy",
-  "shelley",
-  "bells",
-  "boing",
-  "bubbles",
-  "jester",
-  "organ",
-  "superstar",
-  "trinoids",
-  "whisper",
-  "wobble",
-  "zarvox",
-  "bad news",
-  "good news",
-  "cellos",
-  "bahh",
-];
-
-/** 플랫폼별 "제대로 된" 일본어 음성 이름. 뒤로 갈수록 우선순위가 낮다. */
-const PREFERRED_VOICES = [
-  "o-ren", // macOS Siri 음성(가장 자연스럽다)
-  "hattori", // macOS Siri 음성
-  "google 日本語", // Chrome 기본 일본어 음성
-  "kyoko", // macOS 표준 일본어 음성
-  "otoya",
-  "nanami", // Windows/Edge
-  "ayumi",
-  "haruka",
-  "ichiro",
-  "keita",
-  "sayaka",
-];
-
-/** 이름에 붙어 있으면 같은 화자의 고품질(추가 다운로드) 버전이라는 표시. */
-const QUALITY_HINTS = ["premium", "enhanced", "neural", "natural", "siri"];
-
-function scoreVoice(voice: SpeechSynthesisVoice): number {
-  const name = voice.name.toLowerCase();
-
-  if (NOVELTY_VOICES.some((n) => name.startsWith(n))) return -100;
-
-  let score = 0;
-  const preferredIndex = PREFERRED_VOICES.findIndex((n) => name.includes(n));
-  if (preferredIndex >= 0) score += 50 - preferredIndex;
-  if (QUALITY_HINTS.some((hint) => name.includes(hint))) score += 20;
-  if (voice.lang === "ja-JP") score += 2;
-  if (voice.default) score += 1;
-  return score;
-}
-
-/**
- * 설치된 일본어 음성 중 가장 자연스러운 것을 고른다. 기기마다 목록도 순서도 달라서
- * "첫 번째"를 그냥 쓰면 안 된다 — macOS에서는 캐릭터 목소리(Eddy)가 첫 번째로 온다.
- */
-function pickJapaneseVoice(voices: SpeechSynthesisVoice[]) {
-  const japanese = voices.filter((v) => v.lang.toLowerCase().startsWith("ja"));
-  if (japanese.length === 0) return null;
-
-  return japanese.reduce((best, voice) => (scoreVoice(voice) > scoreVoice(best) ? voice : best));
-}
-
-/**
- * 긴 문장을 문장부호 단위로 끊는다. Chrome에는 긴 발화가 15초쯤에서 잘려버리는 버그가 있는데,
- * 문장 단위로 나눠 큐에 넣으면 그 버그를 피하면서 문장 사이 호흡도 자연스러워진다.
- */
-function splitForSpeech(text: string): string[] {
-  const sentences = text.match(/[^。．.！!？?\n]+[。．.！!？?]*\s*/g) ?? [text];
-  const chunks: string[] = [];
-
-  for (const sentence of sentences) {
-    const piece = sentence.trim();
-    if (!piece) continue;
-    const last = chunks[chunks.length - 1];
-    // 너무 잘게 쪼개면 오히려 뚝뚝 끊겨 들려서, 짧은 문장은 앞 조각에 붙인다.
-    if (last && last.length + piece.length <= 120) chunks[chunks.length - 1] = `${last} ${piece}`;
-    else chunks.push(piece);
-  }
-
-  return chunks.length > 0 ? chunks : [text];
-}
+// 어떤 음성을 고를지(캐릭터 목소리 거르기·선호 순서·A/B 화자)는 lib/japaneseVoices.ts에 있다.
 
 interface SpeakOptions {
   /** 1이 기본 속도. 기본값 0.95 — 1.0은 학습자가 따라가기 빠르고, 0.85는 늘어져 부자연스럽다. */
   rate?: number;
 }
 
+export type SpeechLine = { speaker?: "A" | "B"; text: string };
+
+interface SpeakLinesOptions {
+  rate: number;
+  /** 화자가 바뀔 때 쉬는 시간(ms). 같은 화자가 이어 말할 때는 짧게 쉰다. */
+  pauseMs?: number;
+  /** 몇 번째 줄을 읽기 시작했는지 — 화면에서 지금 누가 말하는지 보여줄 때 */
+  onLine?: (index: number) => void;
+  /** 끝까지 다 읽었을 때. 중간에 멈추면(stop·다른 발화) 불리지 않는다. */
+  onEnd?: () => void;
+}
+
+const SAME_SPEAKER_PAUSE_MS = 250;
+
 /** Web Speech API(SpeechSynthesis)로 일본어 문자를 읽어주는 훅. */
 export function useJapaneseSpeech() {
-  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  /** 진행 중인 `speakLines`의 번호 — 멈추거나 새로 읽으면 올려서 늦게 오는 onend를 버린다. */
+  const sequenceRef = useRef(0);
+  const timerRef = useRef<number | null>(null);
   const isSupported = typeof window !== "undefined" && "speechSynthesis" in window;
 
   useEffect(() => {
     if (!isSupported) return;
 
-    const loadVoice = () => {
-      voiceRef.current = pickJapaneseVoice(window.speechSynthesis.getVoices());
+    const loadVoices = () => {
+      voicesRef.current = window.speechSynthesis.getVoices();
     };
-    loadVoice();
+    loadVoices();
     // 일부 브라우저는 getVoices()가 비동기로 채워져 voiceschanged 이벤트가 필요하다
-    window.speechSynthesis.addEventListener("voiceschanged", loadVoice);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", loadVoice);
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+  }, [isSupported]);
+
+  const stop = useCallback(() => {
+    sequenceRef.current += 1;
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    if (isSupported) window.speechSynthesis.cancel();
   }, [isSupported]);
 
   const speak = useCallback(
     (text: string, { rate = 0.95 }: SpeakOptions = {}) => {
       if (!isSupported) return;
-      window.speechSynthesis.cancel(); // 이전 발화가 남아있으면 끊고 새로 재생
+      stop(); // 이전 발화가 남아있으면 끊고 새로 재생
 
+      const voice = pickJapaneseVoice(voicesRef.current);
       for (const chunk of splitForSpeech(text)) {
         const utterance = new SpeechSynthesisUtterance(chunk);
         utterance.lang = "ja-JP";
         utterance.rate = rate;
         utterance.pitch = 1;
-        if (voiceRef.current) utterance.voice = voiceRef.current;
+        if (voice) utterance.voice = voice;
         window.speechSynthesis.speak(utterance); // 여러 개를 넣으면 큐에 쌓여 순서대로 읽힌다
       }
     },
-    [isSupported]
+    [isSupported, stop]
   );
 
-  return { speak, isSupported };
+  /**
+   * 대사 여러 줄을 차례로 읽는다(청해). A/B 화자는 다른 목소리로(없으면 B만 음높이를 올려서),
+   * 화자가 바뀔 때는 잠깐 쉰다. **한 줄씩 onend를 기다려 다음 줄을 넣는다** — 큐에 한꺼번에 넣으면
+   * 줄 사이에 쉴 방법도, 지금 몇 번째 줄인지 알 방법도 없다.
+   */
+  const speakLines = useCallback(
+    (lines: SpeechLine[], { rate, pauseMs = 600, onLine, onEnd }: SpeakLinesOptions) => {
+      if (!isSupported || lines.length === 0) return;
+      stop();
+      const sequence = sequenceRef.current;
+      const speakers = pickSpeakerVoices(voicesRef.current);
+
+      const playLine = (index: number) => {
+        if (sequence !== sequenceRef.current) return;
+        if (index >= lines.length) {
+          onEnd?.();
+          return;
+        }
+        const line = lines[index];
+        const role = speakers?.[line.speaker ?? "A"];
+        onLine?.(index);
+        const chunks = splitForSpeech(line.text);
+        chunks.forEach((chunk, i) => {
+          const utterance = new SpeechSynthesisUtterance(chunk);
+          utterance.lang = "ja-JP";
+          utterance.rate = rate;
+          utterance.pitch = role?.pitch ?? 1;
+          if (role) utterance.voice = role.voice;
+          if (i === chunks.length - 1) {
+            const nextLine = lines[index + 1];
+            const changes = !!nextLine && (nextLine.speaker ?? "A") !== (line.speaker ?? "A");
+            utterance.onend = () => {
+              if (sequence !== sequenceRef.current) return;
+              timerRef.current = window.setTimeout(
+                () => playLine(index + 1),
+                changes ? pauseMs : SAME_SPEAKER_PAUSE_MS
+              );
+            };
+          }
+          window.speechSynthesis.speak(utterance);
+        });
+      };
+      playLine(0);
+    },
+    [isSupported, stop]
+  );
+
+  return { speak, speakLines, stop, isSupported };
+}
+
+/** 일본어 음성이 있는가 — "checking" 동안은 단정하지 말 것. */
+export type JapaneseVoiceStatus = "checking" | "available" | "unavailable";
+
+/** 목록이 비어 있어도 이만큼은 voiceschanged를 기다린다(Chrome은 처음엔 빈 목록을 준다). */
+const VOICE_WAIT_MS = 1500;
+
+/**
+ * 이 브라우저에 일본어 음성이 있는지. 레벨 진단이 **청해를 낼지** 정하는 데 쓴다 — 음성이 없으면
+ * 청해를 건너뛰고 "측정 안 함"으로 둔다(0점으로 치지 않는다).
+ * Chrome은 `getVoices()`가 처음에 빈 배열이고 `voiceschanged`로 채워진다. 그래서 바로 "없음"으로
+ * 정하지 않고 잠깐 기다린다.
+ */
+export function useJapaneseVoiceStatus(): JapaneseVoiceStatus {
+  const isSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+  const [status, setStatus] = useState<JapaneseVoiceStatus>(isSupported ? "checking" : "unavailable");
+
+  useEffect(() => {
+    if (!isSupported) return;
+    const check = () => {
+      if (pickSpeakerVoices(window.speechSynthesis.getVoices())) {
+        setStatus("available");
+        return true;
+      }
+      return false;
+    };
+    if (check()) return;
+    const onChange = () => void check();
+    window.speechSynthesis.addEventListener("voiceschanged", onChange);
+    const timer = window.setTimeout(() => {
+      if (!check()) setStatus("unavailable");
+    }, VOICE_WAIT_MS);
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", onChange);
+      window.clearTimeout(timer);
+    };
+  }, [isSupported]);
+
+  return status;
 }

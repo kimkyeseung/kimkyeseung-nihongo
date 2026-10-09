@@ -1,5 +1,9 @@
 import dictionaryData from "../data/dictionary.json";
 import type { WordEntry } from "../types/dictionary";
+import { koreanTokens } from "./koreanMeaning";
+
+// 뜻풀이 토막 자르기는 사전 데이터 없이 쓰는 곳(레벨 진단)이 있어 따로 뒀다 — 여기서 다시 내보낸다.
+export { koreanTokens };
 
 export const dictionary = dictionaryData as WordEntry[];
 
@@ -47,29 +51,6 @@ export function levelLabel(level: WordEntry["jlptLevel"]): string {
  */
 export function displayMeaning(entry: WordEntry): string {
   return entry.koreanMeaning?.join(", ") ?? entry.meaning;
-}
-
-/**
- * 한국어 뜻풀이를 검색에 쓸 토막으로 자른다.
- *
- * `"머리에) 이다, 얹다"`처럼 한 뜻풀이에 여러 말이 쉼표로 묶여 있어서, 통째로 `includes`만
- * 하면 **음절만 겹쳐도 걸린다** — "물"로 검색했을 때 "물러나다"·"결합물"·"물체"가 먼저 나오고
- * 정작 `水`가 안 보였다. 쉼표·세미콜론으로 자르고, 앞에 붙은 괄호 설명(`"(마시는) 물"`)은
- * 떼어낸 형태도 같이 후보로 둔다.
- */
-export function koreanTokens(koreanMeaning: string[]): string[] {
-  const tokens: string[] = [];
-  for (const meaning of koreanMeaning) {
-    for (const raw of meaning.split(/[,;]/)) {
-      const token = raw.trim();
-      if (!token) continue;
-      tokens.push(token);
-      // "(마시는) 물" → "물", "(겸양어) 먹다" → "먹다"
-      const stripped = token.replace(/^\([^)]*\)\s*/, "").trim();
-      if (stripped && stripped !== token) tokens.push(stripped);
-    }
-  }
-  return tokens;
 }
 
 /**

@@ -97,8 +97,8 @@ export function isPracticeWorthy(answer: string): boolean {
 // 문제 만들기
 
 /**
- * 문제 유형 설명·출력 형식·예시. "연습해보기"와 `/test`(levelTest.ts)가 같이 쓴다 — 파서가
- * 하나라서 형식도 하나여야 한다. **반드시 `\n유형:`으로 시작할 것**: 유출 검사 기준
+ * 문제 유형 설명·출력 형식·예시. "연습해보기"가 쓴다(예전엔 모델이 문제를 쓰던 `/test`도 같이 썼다 — 지금
+ * `/test`는 LLM 없는 단원 점검이다, unitCheck.ts). **반드시 `\n유형:`으로 시작할 것**: 유출 검사 기준
  * (`*_LEAK_REFERENCE`)이 그 자리에서 잘라 형식·예시를 뺀다.
  */
 export const PRACTICE_FORMAT = [
@@ -205,8 +205,9 @@ export const PRACTICE_LEAK_REFERENCE = [
 ].join("\n");
 
 /**
- * 문제 풀기 시트(`TeacherPracticeSheet`)에 넘기는 것. 출제 지시문과 프롬프트만 다르고 푸는 화면·
- * 채점·피드백은 같다 — 선생님 답변의 "연습해보기"(아래)와 `/test`(levelTest.ts) 둘이 쓴다.
+ * 문제 풀기 시트(`TeacherPracticeSheet`)에 넘기는 것. 지금은 선생님 답변의 "연습해보기"(아래) 하나만 쓴다
+ * (예전 `/test`가 지시문·문제 수·XP를 바꿔 끼우려고 일반화했던 모양이 남아 있다 — 다른 출제가 다시 생길
+ * 수 있어 그대로 뒀다).
  */
 export interface PracticeTarget {
   /** 만든 문제를 이 id로 기억해 둔다(닫았다 열어도 다시 만들지 않게) — XP도 이 id로 한 번. */
