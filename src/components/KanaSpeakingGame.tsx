@@ -157,6 +157,17 @@ function GameContent({
     };
   }, []);
 
+  // **닫는 순간 마이크를 놓는다.** 언마운트 cleanup만으로는 늦다 — AnimatePresence가 닫힘
+  // 애니메이션 동안 이 컴포넌트를 살려 두므로 그사이 인식기가 계속 듣고, 2초 시계·다음 판 타이머도
+  // 돌아서 마지막 판이면 닫은 게임에 완주 XP가 들어갈 수 있었다(가짜 인식기로 확인 — 닫은 직후에도
+  // 인식기가 살아 있었다). 탭이 숨겨져 애니메이션이 멈추면 그 "사이"가 한없이 길어진다.
+  function close() {
+    tokenRef.current += 1;
+    clearTimers();
+    stopRecognition();
+    onClose();
+  }
+
   function endRound(
     roundIndex: number,
     correct: boolean,
@@ -343,7 +354,7 @@ function GameContent({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={onClose}
+      onClick={close}
     >
       <motion.div
         className="max-h-[85svh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-6 sm:rounded-3xl"
@@ -354,7 +365,7 @@ function GameContent({
       >
         <div className="flex items-start justify-between">
           <h3 className="text-lg font-bold text-primary">🎤 2초 발음 게임</h3>
-          <button onClick={onClose} className="text-2xl leading-none text-gray-400" aria-label="닫기">
+          <button onClick={close} className="text-2xl leading-none text-gray-400" aria-label="닫기">
             ×
           </button>
         </div>
@@ -518,7 +529,7 @@ function GameContent({
             )}
 
             <div className="mt-5 flex w-full gap-2">
-              <button onClick={onClose} className="flex-1 rounded-2xl border-2 border-gray-100 py-3 text-gray-500">
+              <button onClick={close} className="flex-1 rounded-2xl border-2 border-gray-100 py-3 text-gray-500">
                 닫기
               </button>
               <button
