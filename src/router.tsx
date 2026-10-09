@@ -24,6 +24,8 @@ const LevelTestPage = lazy(() => import("./pages/LevelTestPage"));
 const AboutPage = lazy(() => import("./pages/AboutPage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const PromptApiDiagnosticsPage = lazy(() => import("./pages/PromptApiDiagnosticsPage"));
+// 시험 화면(디버그 전용 — 페이지 안에서 막는다). 어디에서도 링크하지 않는다.
+const AsrLabPage = lazy(() => import("./pages/AsrLabPage"));
 
 /**
  * 옛 주소를 새 주소로 넘긴다. `replace`라 뒤로 가기가 이 리다이렉트로 되돌아오지 않는다.
@@ -61,6 +63,7 @@ export const router = createBrowserRouter([
       // 헤더 아이콘 자리는 이미 둘이라(ⓘ·🧠) /about 안에서 링크로 간다.
       { path: "privacy", element: <PrivacyPage /> },
       { path: "diagnostics", element: <PromptApiDiagnosticsPage /> },
+      { path: "lab/asr", element: <AsrLabPage /> },
     ],
   },
 ]);
