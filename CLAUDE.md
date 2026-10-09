@@ -250,7 +250,8 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
                      useJapaneseInput(wanakana 입력 + 사전 자동완성),
                      useScriptInput(입력 문자 전환), useWordSuggestions(사전 자동완성 — 위 둘이 공유),
                      useWordLink(단어 상세로 가는 링크 — 단어를 누르는 화면은 전부 이걸 쓴다),
-                     useDebouncedValue, useAssetPreload
+                     useDebouncedValue, useAssetPreload,
+                     useMediaQuery(넓은 화면에서 시트 대신 패널을 그릴지 — 오십음도)
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, kanaWords.ts,
                      posTags.ts, sentenceWords.ts, srs.ts) +
                      diff.ts(문자 단위 LCS diff) +
@@ -1565,6 +1566,15 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
   gap 6px). 예전엔 칸 최소폭 3.5rem + 레이블 2rem + gap 8px라 375px에서 352px > 343px가 되어
   마지막 열이 9px 잘렸다. 지금은 375px에서 칸 58px, 320px에서도 47px로 안 넘친다(직접 잼).
   칸에 최소폭을 다시 주거나 열을 늘릴 땐 375px에서 `main.scrollWidth > clientWidth`를 재볼 것.
+- **넓은 화면(lg, 1024px 이상)은 "표 + 상세 패널" 2단이다**("PC에서 너무 휑하다"는 보고). 모바일 화면을
+  그대로 늘리면 표가 왼쪽 400px대에 붙고 게임 버튼만 1000px 넘게 늘어났다. 지금은 내용 폭을 `max-w-6xl`로
+  묶고, 칸 최대폭을 6.5rem·글자를 `text-4xl`로 키우고, 오른쪽에 sticky 패널(글자 상세 + "눌러 본 글자 n/m" +
+  발음 게임 카드)을 둔다. 칸에는 패널에 뜬 글자 테두리와 눌러 본 글자 점(`kana-studied`)이 붙는다.
+  - **넓은 화면에서는 바텀시트를 띄우지 않는다** — 누르면 패널이 바뀐다(모달이 없어 연달아 눌러볼 수 있다).
+    그릴지 말지를 정해야 해서 CSS가 아니라 `useMediaQuery(WIDE_SCREEN_QUERY)`로 가른다. 상세 내용은
+    `KanaDetail` 하나를 시트와 패널이 같이 쓴다 — 대표 단어 로직을 두 벌 만들지 말 것.
+  - 패널은 비지 않는다: 고른 글자가 지금 표에 없으면(탭을 바꿨다) 표의 첫 글자를 보여준다.
+  - **좁은 화면은 예전 모양 그대로다**(점·테두리도 넓은 화면 전용). 바꿀 땐 375px도 같이 볼 것.
 
 ## 오십음도 2초 발음 게임 (`KanaSpeakingGame`) 구현 노트
 - 오십음도의 🎤 버튼으로 연다. **지금 보고 있는 표(모드 × 탭)**에서 10문제를 섞어 내고, 글자가
