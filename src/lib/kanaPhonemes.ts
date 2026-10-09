@@ -113,3 +113,151 @@ export function decodeCtc(ids: ArrayLike<number>, vocab: readonly string[]): str
   return out;
 }
 const SILENT = new Set(["PAD", "pau", "sil", "SOS", "EOS", "UNK"]);
+
+// ─── 확률 비교 채점(GOP) ──────────────────────────────────────────────────────────────
+//
+// **위의 `judgePhonemes`(가장 그럴듯한 소리 하나만 보기)는 게임에 쓰기엔 빡빡했다.** 실제 목소리 54글자(바르게
+// 읽었다고 확인받음)에서 22%를 틀렸다고 했다 — 모델이 く와 ふ 사이에서 망설이면 ふ 하나만 남기 때문이다. 그래서
+// 모델 출력(프레임별 확률)에서 **목표 글자의 확률을 직접 계산**해(CTC 전방 알고리즘) 모든 가나와 견준다.
+// 같은 녹음으로 잰 결과(오프라인, `ALIGN_MARGIN`별):
+//   여유 0 → 받아들임 78% / 다른 글자로 물었을 때 통과 0.3%
+//   여유 3 → 87% / 1.4%    여유 4 → 89% / 2.1%    여유 8 → 94% / 12.6%(너무 후하다)
+// 잘못 읽은 글자(ざ를 다른 글자로)는 모든 여유에서 걸렀다.
+
+/** 목표 글자의 로그 확률이 1등보다 이만큼(nats) 낮아도 받아들인다. 위 표의 근거로 4. */
+export const ALIGN_MARGIN = 4;
+
+/** 공백처럼 다루는 토큰(CTC 공백 + 쉼). 녹음 앞뒤의 무음이 이걸로 흡수된다. */
+const BLANK_TOKENS = ["PAD", "pau", "sil"];
+
+/** 채점 후보 — 오십음도에서 소리로 낼 수 있는 모든 칸(요음·외래어 표기 포함). 부르는 쪽이 한 번 만들어 둔다. */
+export function speakableKanaPhonemes(cells: readonly { hiragana: string; speech?: string }[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const c of cells) {
+    if (c.speech) continue;
+    const p = kanaToPhonemes(c.hiragana);
+    if (p) out.set(c.hiragana, p);
+  }
+  return out;
+}
+
+function hasSpeech(logits: Float32Array, frames: number, classes: number, blankIds: readonly number[]): boolean {
+  for (let t = 0; t < frames; t++) {
+    let best = 0;
+    for (let c = 1; c < classes; c++) if (logits[t * classes + c] > logits[t * classes + best]) best = c;
+    if (!blankIds.includes(best)) return true;
+  }
+  return false;
+}
+
+/** 프레임별 로그 확률(log-softmax)과 공백 로그 확률. */
+function logProbs(logits: Float32Array, frames: number, classes: number, blankIds: readonly number[]) {
+  const lp = new Float64Array(frames * classes);
+  const blank = new Float64Array(frames);
+  for (let t = 0; t < frames; t++) {
+    let max = -Infinity;
+    for (let c = 0; c < classes; c++) max = Math.max(max, logits[t * classes + c]);
+    let sum = 0;
+    for (let c = 0; c < classes; c++) sum += Math.exp(logits[t * classes + c] - max);
+    const lse = max + Math.log(sum);
+    let b = 0;
+    for (let c = 0; c < classes; c++) lp[t * classes + c] = logits[t * classes + c] - lse;
+    for (const id of blankIds) b += Math.exp(lp[t * classes + id]);
+    blank[t] = Math.log(b);
+  }
+  return { lp, blank };
+}
+
+function logAdd(a: number, b: number): number {
+  if (a === -Infinity) return b;
+  if (b === -Infinity) return a;
+  return Math.max(a, b) + Math.log1p(Math.exp(-Math.abs(a - b)));
+}
+
+/** 표준 CTC 전방 알고리즘 — `ids` 순서의 토큰을 낼 로그 확률(모든 정렬의 합). */
+export function ctcLogScore(
+  lp: Float64Array,
+  blank: Float64Array,
+  frames: number,
+  classes: number,
+  ids: readonly number[]
+): number {
+  const S = 2 * ids.length + 1;
+  let a = new Float64Array(S).fill(-Infinity);
+  a[0] = blank[0];
+  a[1] = lp[ids[0]];
+  for (let t = 1; t < frames; t++) {
+    const n = new Float64Array(S).fill(-Infinity);
+    for (let s = 0; s < S; s++) {
+      let v = logAdd(a[s], s >= 1 ? a[s - 1] : -Infinity);
+      if (s % 2 === 1) {
+        const k = ids[(s - 1) / 2];
+        if (s >= 3 && ids[(s - 3) / 2] !== k) v = logAdd(v, a[s - 2]);
+        n[s] = v + lp[t * classes + k];
+      } else {
+        n[s] = v + blank[t];
+      }
+    }
+    a = n;
+  }
+  return logAdd(a[S - 1], a[S - 2]);
+}
+
+export type AlignmentJudgement = {
+  judgement: PhonemeJudgement;
+  /** 가장 그럴듯했던 글자(후보 중 1등). "「ふ」처럼 들렸어요"에 쓴다. */
+  heardAs: string | null;
+};
+
+/**
+ * 모델 출력(logits, frames×classes)으로 `kana`를 채점한다.
+ * - 목표 글자가 1등과 `margin` 안이면 정확.
+ * - 아니면 탁점·반탁점 변형 중 하나가 1등과 `margin` 안이면 거의 맞음.
+ * 길게 끈 꼬리(같은 모음·ん)를 붙인 형태까지 본다 — 모든 후보에 똑같이.
+ */
+export function judgeByAlignment(
+  logits: Float32Array,
+  frames: number,
+  classes: number,
+  vocab: readonly string[],
+  kana: string,
+  candidates: ReadonlyMap<string, readonly string[]>,
+  margin = ALIGN_MARGIN
+): AlignmentJudgement {
+  const idOf = new Map(vocab.map((tok, i) => [tok, i]));
+  const blankIds = BLANK_TOKENS.map((t) => idOf.get(t)).filter((i): i is number => i !== undefined);
+  if (frames === 0 || !candidates.has(kana)) return { judgement: "wrong", heardAs: null };
+  // **목소리가 없는 녹음은 판정하지 않는다.** 모든 후보가 똑같이 있을 법하지 않으면 목표 글자도 "1등과 여유 안"에
+  // 들어와 무음이 정확이 됐다(테스트로 잡았다) — 기침 하나에 말 시작 감지가 걸리면 그대로 통과한다. 프레임 중
+  // 하나라도 공백이 아닌 토큰이 1등이어야 소리가 있었던 것으로 본다.
+  if (!hasSpeech(logits, frames, classes, blankIds)) return { judgement: "wrong", heardAs: null };
+  const { lp, blank } = logProbs(logits, frames, classes, blankIds);
+
+  const score = (phonemes: readonly string[]): number => {
+    const last = phonemes[phonemes.length - 1];
+    const forms = [[...phonemes], [...phonemes, "N"]];
+    if ("aiueo".includes(last)) forms.push([...phonemes, last], [...phonemes, last, "N"]);
+    let best = -Infinity;
+    for (const f of forms) {
+      const ids = f.map((p) => idOf.get(p));
+      if (ids.some((i) => i === undefined)) continue;
+      best = Math.max(best, ctcLogScore(lp, blank, frames, classes, ids as number[]));
+    }
+    return best;
+  };
+
+  const scores = new Map<string, number>();
+  let top = -Infinity;
+  let heardAs: string | null = null;
+  for (const [k, p] of candidates) {
+    const s = score(p);
+    scores.set(k, s);
+    if (s > top) {
+      top = s;
+      heardAs = k;
+    }
+  }
+  if ((scores.get(kana) ?? -Infinity) >= top - margin) return { judgement: "exact", heardAs };
+  const near = voicingVariants(kana).some((v) => (scores.get(v) ?? -Infinity) >= top - margin);
+  return { judgement: near ? "near" : "wrong", heardAs };
+}
