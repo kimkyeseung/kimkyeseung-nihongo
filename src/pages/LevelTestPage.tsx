@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ChoiceQuestion from "../components/ChoiceQuestion";
+import LevelTestComment from "../components/LevelTestComment";
 import ListeningPlayer from "../components/ListeningPlayer";
 import { useJapaneseVoiceStatus } from "../hooks/useJapaneseSpeech";
 import LoadingMascot from "../components/LoadingMascot";
@@ -386,6 +387,7 @@ function StartFromHere({ overall }: { overall: LevelTestRecord["overall"] }) {
 function ResultView({ run, onRestart }: { run: LevelTestRun; onRestart: () => void }) {
   const navigate = useNavigate();
   const requestQuestion = useTeacherChatStore((s) => s.requestQuestion);
+  const profile = useLevelTestSession((s) => s.profile);
   const sections = runSections(run);
   const record = recordFromSections(sections, run.finishedAt ?? run.startedAt);
   const overall = overallLevel(sections);
@@ -432,6 +434,8 @@ function ResultView({ run, onRestart }: { run: LevelTestRun; onRestart: () => vo
           );
         })}
       </ul>
+
+      <LevelTestComment sections={sections} overall={overall} profile={profile} takenAt={record.takenAt} />
 
       {unsure.length > 0 && (
         <p className="rounded-2xl bg-warning/10 px-4 py-3 text-sm text-gray-600">

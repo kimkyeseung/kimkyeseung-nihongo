@@ -402,13 +402,21 @@ export const useDebugMode = create<{
 export const useLevelTestSession = create<{
   run: LevelTestRun | null;
   profile: LevelTestProfile;
+  /**
+   * 결과의 "선생님 한마디". 어느 진단의 것인지(`takenAt` = run.finishedAt)와 함께 둔다 — 결과 화면에 다시
+   * 들어올 때마다 모델을 또 부르지 않게. `ai`는 모델이 쓴 것, `fallback`은 코드가 쓴 것.
+   */
+  comment: { takenAt: number; text: string; source: "ai" | "fallback" } | null;
   setRun: (run: LevelTestRun | null) => void;
   setProfile: (profile: LevelTestProfile) => void;
+  setComment: (comment: { takenAt: number; text: string; source: "ai" | "fallback" }) => void;
   reset: () => void;
 }>((set) => ({
   run: null,
   profile: { purpose: null, exam: null },
+  comment: null,
   setRun: (run) => set({ run }),
   setProfile: (profile) => set({ profile }),
-  reset: () => set({ run: null, profile: { purpose: null, exam: null } }),
+  setComment: (comment) => set({ comment }),
+  reset: () => set({ run: null, profile: { purpose: null, exam: null }, comment: null }),
 }));
