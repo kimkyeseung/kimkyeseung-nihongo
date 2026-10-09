@@ -42,11 +42,18 @@ describe("judgePhonemes — 실제 녹음에서 나온 모양들", () => {
     expect(judgePhonemes(p("k a"), "が")).toBe("near");
     expect(judgePhonemes(p("p u"), "ぶ")).toBe("near");
     expect(judgePhonemes(p("f u"), "ぷ")).toBe("near");
+    expect(judgePhonemes(p("ch i i"), "ぢ")).toBe("near"); // 실제 녹음
+    expect(judgePhonemes(p("t a"), "だ")).toBe("near");
+    expect(judgePhonemes(p("h o o"), "ぼ")).toBe("near");
+    expect(judgePhonemes(p("b u b u p u"), "ぶ")).toBe("near"); // 세 번 중 하나만 변형
   });
 
   it("다른 행이면 틀림 — に를 り로, く를 ふ로", () => {
     expect(judgePhonemes(p("r i i"), "に")).toBe("wrong");
     expect(judgePhonemes(p("f u"), "く")).toBe("wrong");
+    expect(judgePhonemes(p("ch i i"), "ざ")).toBe("wrong"); // ざ를 ち로 — 실제 녹음, 다른 행
+    expect(judgePhonemes(p("b u"), "む")).toBe("wrong");
+    expect(judgePhonemes(p("ch i"), "し")).toBe("wrong");
     expect(judgePhonemes([], "あ")).toBe("wrong");
   });
 

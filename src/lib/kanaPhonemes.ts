@@ -44,42 +44,58 @@ function normalize(heard: readonly string[]): string[] {
   return heard.map((p) => (p === "I" ? "i" : p === "U" ? "u" : p)).filter((p) => p !== "cl");
 }
 
-/** 탁점·반탁점을 무시한 자음(か·が, は·ば·ぱ·ふ, さ·ざ, し·じ, た·だ, ち·ぢ). "거의 맞음"의 기준. */
-const SKELETON: Record<string, string> = {
-  g: "k", gy: "ky", z: "s", j: "s", sh: "s", d: "t", dy: "ty", ch: "t", ts: "t",
-  b: "h", p: "h", f: "h", by: "hy", py: "hy", fy: "hy", v: "h",
-};
-const skeleton = (ps: readonly string[]) => ps.map((p) => SKELETON[p] ?? p);
+/**
+ * 탁점·반탁점만 다른 글자들(か→が, は→ば·ぱ, ぢ→ち). "거의 맞음"의 기준이고 `kanaPronunciation.ts`의
+ * `skeleton`과 같은 규칙이다. 예전엔 자음 표(ch→t, j→s)로 묶었더니 ぢ(j i)를 `ch i`(=ち)로 말한 것이
+ * ❌가 됐다 — 실제 녹음에서 걸렸다. 글자에서 바로 만들면 표가 어긋날 일이 없다.
+ */
+function voicingVariants(kana: string): string[] {
+  const [head, ...rest] = [...kana];
+  const base = head.normalize("NFD").replace(/[\u3099\u309a]/g, "");
+  return [base, base + "\u3099", base + "\u309a"]
+    .map((c) => c.normalize("NFC"))
+    .filter((c) => c.length === 1 && c !== head)
+    .map((c) => c + rest.join(""));
+}
 
 const TAIL = new Set(["a", "i", "u", "e", "o", "N"]);
 
-/** 목표 음절이 1번 이상(되풀이 포함) 나오고, 나머지가 길게 끈 꼬리 두 개 이하면 맞다. */
-function matches(heard: readonly string[], goal: readonly string[]): boolean {
-  if (heard.length === 0) return false;
+/**
+ * 들린 음소를 음절로 나눠 본다: 각 음절이 `goals` 중 하나와 같고, 그 사이·뒤에 길게 끈 꼬리(모음·ん)가
+ * 음절당 두 개까지면 통과. 통과하면 쓰인 goal의 번호들을 돌려준다(0이 정답, 나머지는 탁점 변형).
+ */
+function matchSyllables(heard: readonly string[], goals: readonly (readonly string[])[]): number[] | null {
+  if (heard.length === 0) return null;
+  const used: number[] = [];
   let i = 0;
-  let hits = 0;
   let extra = 0;
   while (i < heard.length) {
-    if (goal.every((g, k) => heard[i + k] === g)) {
-      hits += 1;
-      i += goal.length;
-    } else if (hits > 0 && TAIL.has(heard[i])) {
+    const g = goals.findIndex((goal) => goal.every((p, k) => heard[i + k] === p));
+    if (g >= 0) {
+      used.push(g);
+      i += goals[g].length;
+    } else if (used.length > 0 && TAIL.has(heard[i])) {
       extra += 1;
       i += 1;
     } else {
-      return false;
+      return null;
     }
   }
-  return hits > 0 && extra <= 2 * hits;
+  return used.length > 0 && extra <= 2 * used.length ? used : null;
 }
 
 export function judgePhonemes(heard: readonly string[], kana: string): PhonemeJudgement {
   const goal = kanaToPhonemes(kana);
   if (!goal) return "wrong";
   const h = normalize(heard);
-  if (matches(h, goal)) return "exact";
-  if (matches(skeleton(h), skeleton(goal))) return "near";
-  return "wrong";
+  // 탁점 변형이 정답과 같은 음소면(ぢ와 じ는 둘 다 j i) 변형으로 치지 않는다.
+  const variants = voicingVariants(kana)
+    .map(kanaToPhonemes)
+    .filter((ps): ps is string[] => ps !== null && ps.join(" ") !== goal.join(" "));
+  const used = matchSyllables(h, [goal, ...variants]);
+  if (!used) return "wrong";
+  // 전부 정답이면 정확, 탁점 변형이 하나라도 섞였으면(か か が도) 거의 맞음.
+  return used.every((g) => g === 0) ? "exact" : "near";
 }
 
 /** CTC 출력(프레임별 최댓값 id)을 음소 목록으로 — 연속된 같은 id를 합치고 공백·쉼 토큰을 뺀다. */
