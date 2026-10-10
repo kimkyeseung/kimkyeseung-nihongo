@@ -8,6 +8,7 @@ import { useAppearance, useDebugMode } from "./stores/pageStateStore";
 import { parseDebugQuery, stripDebugQuery } from "./lib/debugMode";
 import { followSystemTheme } from "./lib/theme";
 import { trackAppViewport } from "./lib/appViewport";
+import { scheduleKanaModelAutoDownload } from "./lib/kanaModelController";
 
 function App() {
   // 기억은 IndexedDB에 있어 읽는 데 한 박자 걸린다. 화면에 들어간 뒤에 읽기 시작하면
@@ -40,6 +41,9 @@ function App() {
   // 모바일 키보드가 올라오면 앱 높이를 보이는 영역에 맞춘다(appViewport.ts). 모달은 대문에서도 뜨므로
   // Layout이 아니라 여기다.
   useEffect(() => trackAppViewport(), []);
+  // 발음 게임의 기기 안 판정 모델(189MB)을 앱이 뜬 뒤 백그라운드에서 조용히 받는다(kanaModelController 주석).
+  // 대문(`/`)으로 들어와도 다른 주소로 바로 들어와도 받도록 Layout이 아니라 여기서 한다.
+  useEffect(() => scheduleKanaModelAutoDownload(), []);
 
   return (
     <>

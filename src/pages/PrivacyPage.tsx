@@ -87,11 +87,12 @@ function PrivacyPage() {
 
       <Section title="기능 때문에 외부로 가는 요청">
         <p>
-          <b className="font-normal text-gray-700">오십음도 발음 게임</b> — 발음 판정 모델(약 190MB)을
-          내려받았으면 판정을 기기 안에서 하고 목소리는 어디로도 보내지 않습니다. 모델 파일은 Hugging Face에서,
-          실행 엔진(ONNX Runtime)은 jsDelivr에서 받습니다. 모델이 없으면 브라우저의 음성 인식을 쓰는데,
-          Chrome은 이를 기기에서 처리하지 않고 목소리를 Google 서버로 보냅니다. 게임을 시작하지 않으면
-          마이크를 쓰지 않습니다.
+          <b className="font-normal text-gray-700">오십음도 발음 게임</b> — 발음 판정은 기기 안에서 하고 목소리는
+          어디로도 보내지 않습니다. 이를 위해 사이트를 열면 잠시 뒤 발음 판정 모델(약 190MB)을 Hugging Face에서
+          백그라운드로 한 번 내려받아 브라우저 저장소에 둡니다(데이터 절약 모드나 모바일 데이터 연결로 알려진 경우는
+          받지 않습니다). 실행 엔진(ONNX Runtime)은 jsDelivr에서 받습니다. 모델을 아직 받지 못했으면 브라우저의 음성
+          인식을 쓰는데, Chrome은 이를 기기에서 처리하지 않고 목소리를 Google 서버로 보냅니다. 게임을 시작하지
+          않으면 마이크를 쓰지 않습니다.
         </p>
         <p>
           <b className="font-normal text-gray-700">AI 기능</b> — 회화·작문·선생님의 AI는 기기 안에서

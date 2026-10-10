@@ -7,9 +7,9 @@ import { isOpfsSupported } from "./gemmaModel";
  * 그래서 일본어 음소 인식 모델(prj-beatrice/japanese-hubert-base-phoneme-ctc-v3, Apache-2.0)을 ONNX(fp16)로
  * 바꿔 브라우저에서 돌린다. 목소리가 기기를 벗어나지 않는다.
  *
- * Gemma(`gemmaModel.ts`)와 같은 규칙을 따른다: **자동으로 받지 않는다**(버튼이 곧 동의), 받기 전에 저장
- * 공간을 보고 지속 저장을 요청한다, 받다 만 파일은 `.part`로 쓰다가 다 받은 뒤에만 이름을 붙인다, 이름 붙이기는
- * `move(dir, name)` 2-인자 형태(WebKit). 다만 189MB라 **이어받기는 하지 않는다** — 끊기면 처음부터 다시 받는다.
+ * **Gemma와 달리 앱이 백그라운드에서 조용히 받는다**(사용자 결정 — 조건은 `kanaModelController.ts`). 받다 만 파일은
+ * `.part`로 쓰다가 다 받은 뒤에만 이름을 붙이고, 이름 붙이기는 `move(dir, name)` 2-인자 형태(WebKit)다.
+ * 189MB라 **이어받기는 하지 않는다** — 끊기면 다음 방문 때 처음부터 다시 받는다.
  * Gemma의 이어받기 코드는 그 파일 하나에 맞춰져 있어 일반화하려면 2GB 경로를 건드려야 했다.
  */
 

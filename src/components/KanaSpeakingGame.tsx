@@ -3,14 +3,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import SpeakButton from "./SpeakButton";
 import { toKatakana } from "wanakana";
 import { GOJUON_SECTIONS } from "../data/gojuon";
-import { formatBytes } from "../lib/gemmaModel";
-import { getCachedKanaModel, KANA_MODEL } from "../lib/kanaModel";
-import {
-  cancelKanaModelDownload,
-  ensureKanaModelChecked,
-  removeKanaModel,
-  startKanaModelDownload,
-} from "../lib/kanaModelController";
+import { getCachedKanaModel } from "../lib/kanaModel";
+import { ensureKanaModelChecked } from "../lib/kanaModelController";
 import { judgeByAlignment, speakableKanaPhonemes } from "../lib/kanaPhonemes";
 import { judgeKana, pickRounds } from "../lib/kanaPronunciation";
 import { loadPhonemeModel, type PhonemeModel } from "../lib/phonemeRecognizer";
@@ -33,10 +27,11 @@ import { useDebugMode } from "../stores/pageStateStore";
 
 /**
  * 오십음도 "2초 발음 게임". 글자가 뜨면 2초 안에 소리 내 읽는다. 채점은 둘 중 하나다:
- * - **기기 안 판정(모델을 받았을 때)** — 직접 녹음해(`voiceCapture.ts`) 음소 인식 모델로 판정한다
- *   (`kanaPhonemes.ts`의 `judgeByAlignment`). 목소리가 기기를 벗어나지 않고 브라우저를 가리지 않는다.
- * - **브라우저 음성 인식(모델이 없을 때)** — Web Speech API. 채점 규칙은 `kanaPronunciation.ts`.
- *   가나 한 글자를 잘 못 받아 적는다(Chrome은 결과 없이 끝, 웨일은 빈 결과) — 그래서 모델 받기를 권한다.
+ * - **기기 안 판정(기본)** — 직접 녹음해(`voiceCapture.ts`) 음소 인식 모델로 판정한다
+ *   (`kanaPhonemes.ts`의 `judgeByAlignment`). 모델은 앱이 백그라운드에서 조용히 받아 둔다(`kanaModelController`) —
+ *   화면에 받기·진행률을 보이지 않는다(사용자 결정).
+ * - **브라우저 음성 인식(모델이 아직 없을 때)** — Web Speech API. 채점 규칙은 `kanaPronunciation.ts`.
+ *   가나 한 글자를 잘 못 받아 적는다(Chrome은 결과 없이 끝, 웨일은 빈 결과).
  *
  * **2초는 "말하기 시작"까지다.** 인식 결과는 말이 끝나고도 수백 ms 뒤에 오고(Chrome은 서버를
  * 한 번 다녀온다) 그 지연은 학습자 탓이 아니다. 그래서 2초 안에 목소리가 잡혔으면 결과를
@@ -178,9 +173,7 @@ function GameContent({
 
   const supported = getSpeechRecognition() !== null;
   const modelStatus = useKanaModelStore((s) => s.status);
-  const modelReceived = useKanaModelStore((s) => s.receivedBytes);
-  const modelError = useKanaModelStore((s) => s.error);
-  useEffect(() => ensureKanaModelChecked(), []);
+  useEffect(() => void ensureKanaModelChecked(), []);
   // 판을 시작할 때 정한다 — 게임 도중 모델 받기가 끝나도 엔진을 바꾸지 않는다.
   const engineRef = useRef<"model" | "browser">("browser");
   const phonemeModelRef = useRef<PhonemeModel | null>(null);
@@ -584,9 +577,6 @@ function GameContent({
               <li>🎯 {label}에서 {total}문제가 나와요.</li>
               <li>🤫 조용한 곳에서 한 글자만 또렷하게 말하면 잘 알아들어요.</li>
             </ul>
-            {modelStatus !== "unsupported" && modelStatus !== "checking" && (
-              <KanaModelCard status={modelStatus} received={modelReceived} error={modelError} />
-            )}
             <p className="mt-3 text-xs text-gray-400">
               {modelStatus === "installed"
                 ? "발음 판정은 이 기기 안에서 해요. 목소리는 어디로도 보내지지 않아요."
@@ -604,7 +594,9 @@ function GameContent({
             ) : (
               <p className="mt-5 rounded-xl bg-warning/10 p-3 text-sm text-warning">
                 이 브라우저는 음성 인식을 지원하지 않아요.{" "}
-                {modelStatus === "unsupported" ? "Chrome이나 Safari에서 해보세요." : "위의 발음 판정 모델을 받으면 할 수 있어요."}
+                {modelStatus === "unsupported"
+                  ? "Chrome이나 Safari에서 해보세요."
+                  : "발음 판정을 준비하고 있어요. 잠시 뒤에 다시 열어 주세요."}
               </p>
             )}
           </div>
@@ -772,67 +764,6 @@ function GameContent({
         )}
       </motion.div>
     </motion.div>
-  );
-}
-
-/**
- * 기기 안 발음 판정 모델 받기. Gemma와 같은 규칙 — 자동으로 받지 않고 버튼이 곧 동의다. 받기는
- * `kanaModelController`(모듈)가 들고 있어서 시트를 닫아도 계속된다.
- */
-function KanaModelCard({
-  status,
-  received,
-  error,
-}: {
-  status: "not-installed" | "downloading" | "installed" | "error";
-  received: number;
-  error: string | null;
-}) {
-  if (status === "installed") {
-    return (
-      <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-info/10 p-3 text-sm text-gray-700">
-        <span>🎧 기기 안 발음 판정을 써요</span>
-        <button onClick={removeKanaModel} className="text-xs text-gray-400 underline">
-          모델 지우기
-        </button>
-      </div>
-    );
-  }
-  if (status === "downloading") {
-    const ratio = Math.min(1, received / KANA_MODEL.bytes);
-    return (
-      <div className="mt-3 rounded-2xl bg-info/10 p-3 text-sm text-gray-700">
-        <div className="flex items-center justify-between">
-          <span>🎧 발음 판정 모델 받는 중… {Math.round(ratio * 100)}%</span>
-          <button onClick={cancelKanaModelDownload} className="text-xs text-gray-400 underline">
-            취소
-          </button>
-        </div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
-          <div className="h-full rounded-full bg-info" style={{ width: `${ratio * 100}%` }} />
-        </div>
-        <p className="mt-1 text-xs text-gray-400">
-          {formatBytes(received)} / {formatBytes(KANA_MODEL.bytes)} · 창을 닫아도 계속 받아요
-        </p>
-      </div>
-    );
-  }
-  return (
-    <div className="mt-3 rounded-2xl bg-info/10 p-3 text-sm text-gray-700">
-      <p className="font-bold">🎧 더 정확한 기기 안 발음 판정</p>
-      <ul className="mt-1 list-inside list-disc text-xs text-gray-500">
-        <li>가나 한 글자도 잘 알아들어요(브라우저 음성 인식은 한 글자에 약해요)</li>
-        <li>목소리가 기기 밖으로 나가지 않아요</li>
-        <li>한 번 받으면 다시 받지 않아요 · Wi-Fi에서 받기를 권해요</li>
-      </ul>
-      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
-      <button
-        onClick={startKanaModelDownload}
-        className="mt-2 w-full rounded-xl bg-info py-2 font-bold text-white"
-      >
-        받기 ({formatBytes(KANA_MODEL.bytes)})
-      </button>
-    </div>
   );
 }
 

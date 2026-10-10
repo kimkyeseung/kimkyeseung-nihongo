@@ -11,9 +11,8 @@ export type KanaModelStatus =
   | "error";
 
 /**
- * 발음 판정 모델 다운로드 상태. Gemma(`gemmaDownloadStore`)와 같은 이유로 **React 밖**의 모듈
- * (`kanaModelController.ts`)이 다운로드를 들고 있고 화면은 이걸 구독한다 — 게임 시트를 닫거나 탭을 옮겨도
- * 받기가 끊기지 않는다. persist하지 않는다(받은 파일은 OPFS에 있다).
+ * 발음 판정 모델 상태. 받기는 **React 밖**의 모듈(`kanaModelController.ts`)이 앱 시작 뒤 백그라운드에서 하고,
+ * 게임은 `installed`인지만 본다(받는 중이라는 사실은 화면에 알리지 않는다). persist하지 않는다(파일은 OPFS에 있다).
  */
 export const useKanaModelStore = create<{
   status: KanaModelStatus;

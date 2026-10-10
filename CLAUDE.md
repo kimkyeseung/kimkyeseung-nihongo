@@ -572,7 +572,8 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   `gemmaEngine.ts`의 `LITERT_WASM_PATH`에 경로를 넣으면 된다. 저장소 무게 vs 외부 CDN 의존의
   트레이드오프라 아직 CDN 기본값을 쓰고 있다.
 - 2GB짜리라 **절대 자동으로 받지 않는다** — 대문에서 버튼을 누르는 것이 곧 동의다. 새로 큰
-  애셋을 받는 기능을 추가할 때도 이 규칙을 따를 것.
+  애셋을 받는 기능을 추가할 때도 이 규칙을 따를 것. **예외는 발음 판정 모델(189MB) 하나**다 — 사용자 결정으로
+  백그라운드에서 조용히 받는다("기기 안 발음 판정" 절의 조건 참고).
 - **Gemma 경로는 Chrome 전용이 아니다.** WebGPU는 2026년 1월에 Baseline이 됐고(Safari 26,
   Firefox 141+ Windows / 145+ macOS ARM), 이 앱이 쓰는 OPFS API도 전부 있다 — `getDirectory`
   (Safari 15.2+/FF 111+), `createWritable`(Safari 26+/FF 111+), `FileSystemFileHandle.move()`
@@ -1650,8 +1651,13 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
 - `voiceCapture`는 처음 300ms로 소음을 재고 `onListening`을 부른다. **게임은 그때 글자를 보여주고 2초 시계를
   돌린다** — 측정 중에 읽기 시작하면 그 목소리가 소음으로 잡힌다. 말 시작 전 300ms를 남긴다(첫 자음이 잘리면 か가
   は로 들린다). 마이크와 모델은 게임을 열 때 한 번만 열고, 닫으면 놓는다.
-- 받기는 Gemma와 같은 규칙(자동으로 안 받음·저장 공간 확인·지속 저장 요청·`.part` → `move(dir, name)`)이지만
-  **이어받기는 없다**(189MB). 다운로드는 모듈(`kanaModelController`)이 들고 있어 시트를 닫아도 계속된다.
+- **받기는 자동이고 화면에 보이지 않는다(사용자 결정 — "사용자는 알지 못하도록").** 기기 안 판정이 기본이다.
+  `App.tsx`가 `scheduleKanaModelAutoDownload()`를 부르면 8초 뒤 브라우저가 한가할 때 받는다(대문 프리로드와 안
+  겹치게, 대문이 아닌 주소로 들어와도 받게). 게임에는 받기 카드·진행률이 없고, 모델이 준비됐으면 기기 안 판정,
+  아니면 브라우저 음성 인식을 쓴다. 지키는 조건: **`saveData`·모바일 데이터(`connection.type === "cellular"`)면
+  받지 않는다**(사용자 모르게 요금제를 쓰면 안 된다 — iOS는 연결 종류를 안 알려 줘서 받는다), 저장 공간이 모자라면
+  건너뛴다, **지속 저장 요청·화면 켜짐 유지는 하지 않는다**(Firefox는 persist에 권한 창을 띄운다), 실패하면 조용히
+  그만두고 다음 방문 때 처음부터(이어받기 없음). 화면엔 안 보여도 **`/privacy`에는 적는다**(외부 요청이다).
 - **모델은 Hugging Face `kyeseung/japanese-hubert-base-phoneme-ctc-v3-onnx`에 있다**(`kanaModel.ts`의 `PUBLISHED_URL`
   — 공개·CORS·Range 확인, SHA-256이 시험한 파일과 같다). 비우면 이 기능이 숨는다. 올린 묶음(모델·어휘·모델 카드·
   변환 스크립트)은 저장소 밖 `lab-models/hf-upload/`. 시험장 `/lab/asr`는 개발 서버가 `lab-models/`(gitignore)를
