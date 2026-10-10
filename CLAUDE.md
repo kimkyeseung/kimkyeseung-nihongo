@@ -1652,10 +1652,11 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
   は로 들린다). 마이크와 모델은 게임을 열 때 한 번만 열고, 닫으면 놓는다.
 - 받기는 Gemma와 같은 규칙(자동으로 안 받음·저장 공간 확인·지속 저장 요청·`.part` → `move(dir, name)`)이지만
   **이어받기는 없다**(189MB). 다운로드는 모듈(`kanaModelController`)이 들고 있어 시트를 닫아도 계속된다.
-- **모델 주소(`kanaModel.ts`의 `PUBLISHED_URL`)가 비어 있으면 배포 빌드에서 이 기능이 숨는다.** 개발 서버는 저장소
-  밖 `lab-models/`(gitignore)를 `/lab-models/*`로 내보낸다(vite.config.ts의 `labModels` — 빌드에 안 들어간다).
-  올릴 묶음(모델·어휘·모델 카드·변환 스크립트)은 `lab-models/hf-upload/`. 모델 파일을 바꾸면 `KANA_MODEL.bytes`와
-  `PHONEME_VOCAB`도 같이 바꿀 것.
+- **모델은 Hugging Face `kyeseung/japanese-hubert-base-phoneme-ctc-v3-onnx`에 있다**(`kanaModel.ts`의 `PUBLISHED_URL`
+  — 공개·CORS·Range 확인, SHA-256이 시험한 파일과 같다). 비우면 이 기능이 숨는다. 올린 묶음(모델·어휘·모델 카드·
+  변환 스크립트)은 저장소 밖 `lab-models/hf-upload/`. 시험장 `/lab/asr`는 개발 서버가 `lab-models/`(gitignore)를
+  `/lab-models/*`로 내보내는 파일을 쓴다(vite.config.ts의 `labModels` — 빌드에 안 들어간다). 모델 파일을 바꾸면
+  `KANA_MODEL.bytes`와 `PHONEME_VOCAB`도 같이 바꾸고 다시 올릴 것.
 - onnxruntime-web은 **실행 코드까지 jsDelivr에서** 받는다 — npm 패키지를 import하면 26.8MB WASM이 배포물에 들어가
   PWA 프리캐시 한도에 걸려 빌드가 실패했다(패키지는 devDependency, 타입 전용).
 - 시험장 `/lab/asr`(디버그 전용, 링크 없음)에서 녹음·브라우저 안 판정·녹음 파일 내보내기/불러오기를 할 수 있다.

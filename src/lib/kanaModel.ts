@@ -14,14 +14,15 @@ import { isOpfsSupported } from "./gemmaModel";
  */
 
 /**
- * 모델 파일 주소. **Hugging Face에 올린 뒤 채울 것** — 비어 있으면 배포 빌드에서는 기능이 숨는다(게임은 브라우저
- * 음성 인식으로만 돈다). 개발 서버에서는 저장소 밖 `lab-models/`를 쓴다(vite.config.ts의 `labModels`).
+ * 모델 파일 주소(Hugging Face — 공개·CORS 허용·Range 지원 확인). 비우면 배포 빌드에서는 기능이 숨는다(게임은 브라우저
+ * 음성 인식으로만 돈다). 올릴 묶음은 저장소 밖 `lab-models/hf-upload/`에 있다.
  */
-const PUBLISHED_URL = "";
+const PUBLISHED_URL: string =
+  "https://huggingface.co/kyeseung/japanese-hubert-base-phoneme-ctc-v3-onnx/resolve/main/model_fp16.onnx";
 
 export const KANA_MODEL = {
   label: "일본어 발음 판정 모델",
-  url: PUBLISHED_URL || (import.meta.env.DEV ? "/lab-models/hubert-phoneme-v3/model_fp16.onnx" : ""),
+  url: PUBLISHED_URL,
   /** 실제 크기. 진행률과 받은 파일 검증에 함께 쓴다. 파일을 바꾸면 같이 바꿀 것. */
   bytes: 189_110_821,
   opfsName: "kana-phoneme-hubert-v3-fp16.onnx",
