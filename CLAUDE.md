@@ -250,7 +250,8 @@ src/hooks/         AI: useAiModel(페이지가 쓰는 유일한 창구) · useLa
                      useJapaneseInput(wanakana 입력 + 사전 자동완성),
                      useScriptInput(입력 문자 전환), useWordSuggestions(사전 자동완성 — 위 둘이 공유),
                      useWordLink(단어 상세로 가는 링크 — 단어를 누르는 화면은 전부 이걸 쓴다),
-                     useDebouncedValue, useAssetPreload
+                     useDebouncedValue, useAssetPreload,
+                     useMediaQuery(넓은 화면에서 시트 대신 패널을 그릴지 — 오십음도)
 src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictionary.ts, kanaWords.ts,
                      posTags.ts, sentenceWords.ts, srs.ts) +
                      diff.ts(문자 단위 LCS diff) +
@@ -300,7 +301,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      wordLink.test.ts ·
                      memoryExtraction.test.ts · curriculumProgress.test.ts · dailyPlan.test.ts ·
                      localDate.test.ts · sentenceWords.test.ts · wordExamples.test.ts ·
-                     grammarPatterns.test.ts · kanaPronunciation.test.ts · srs.test.ts ·
+                     grammarPatterns.test.ts · kanaPronunciation.test.ts · speechRecognition.test.ts · kanaPhonemes.test.ts · srs.test.ts ·
                      teacherPractice.test.ts · backup.test.ts · verbConjugation.test.ts ·
                      conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
                      sentenceReview.test.ts · kanjiWriting.test.ts · studyCalendar.test.ts ·
@@ -571,7 +572,8 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   `gemmaEngine.ts`의 `LITERT_WASM_PATH`에 경로를 넣으면 된다. 저장소 무게 vs 외부 CDN 의존의
   트레이드오프라 아직 CDN 기본값을 쓰고 있다.
 - 2GB짜리라 **절대 자동으로 받지 않는다** — 대문에서 버튼을 누르는 것이 곧 동의다. 새로 큰
-  애셋을 받는 기능을 추가할 때도 이 규칙을 따를 것.
+  애셋을 받는 기능을 추가할 때도 이 규칙을 따를 것. **예외는 발음 판정 모델(189MB) 하나**다 — 사용자 결정으로
+  백그라운드에서 조용히 받는다("기기 안 발음 판정" 절의 조건 참고).
 - **Gemma 경로는 Chrome 전용이 아니다.** WebGPU는 2026년 1월에 Baseline이 됐고(Safari 26,
   Firefox 141+ Windows / 145+ macOS ARM), 이 앱이 쓰는 OPFS API도 전부 있다 — `getDirectory`
   (Safari 15.2+/FF 111+), `createWritable`(Safari 26+/FF 111+), `FileSystemFileHandle.move()`
@@ -1565,6 +1567,15 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
   gap 6px). 예전엔 칸 최소폭 3.5rem + 레이블 2rem + gap 8px라 375px에서 352px > 343px가 되어
   마지막 열이 9px 잘렸다. 지금은 375px에서 칸 58px, 320px에서도 47px로 안 넘친다(직접 잼).
   칸에 최소폭을 다시 주거나 열을 늘릴 땐 375px에서 `main.scrollWidth > clientWidth`를 재볼 것.
+- **넓은 화면(lg, 1024px 이상)은 "표 + 상세 패널" 2단이다**("PC에서 너무 휑하다"는 보고). 모바일 화면을
+  그대로 늘리면 표가 왼쪽 400px대에 붙고 게임 버튼만 1000px 넘게 늘어났다. 지금은 내용 폭을 `max-w-6xl`로
+  묶고, 칸 최대폭을 6.5rem·글자를 `text-4xl`로 키우고, 오른쪽에 sticky 패널(글자 상세 + "눌러 본 글자 n/m" +
+  발음 게임 카드)을 둔다. 칸에는 패널에 뜬 글자 테두리와 눌러 본 글자 점(`kana-studied`)이 붙는다.
+  - **넓은 화면에서는 바텀시트를 띄우지 않는다** — 누르면 패널이 바뀐다(모달이 없어 연달아 눌러볼 수 있다).
+    그릴지 말지를 정해야 해서 CSS가 아니라 `useMediaQuery(WIDE_SCREEN_QUERY)`로 가른다. 상세 내용은
+    `KanaDetail` 하나를 시트와 패널이 같이 쓴다 — 대표 단어 로직을 두 벌 만들지 말 것.
+  - 패널은 비지 않는다: 고른 글자가 지금 표에 없으면(탭을 바꿨다) 표의 첫 글자를 보여준다.
+  - **좁은 화면은 예전 모양 그대로다**(점·테두리도 넓은 화면 전용). 바꿀 땐 375px도 같이 볼 것.
 
 ## 오십음도 2초 발음 게임 (`KanaSpeakingGame`) 구현 노트
 - 오십음도의 🎤 버튼으로 연다. **지금 보고 있는 표(모드 × 탭)**에서 10문제를 섞어 내고, 글자가
@@ -1606,13 +1617,57 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
 - **정답 듣기(TTS)와 마이크가 부딪힌다.** 정답 발음을 틀어 둔 채 다음 판으로 넘어가면 마이크가
   그 소리를 듣고 "맞았다"고 한다 — 판을 시작할 때 `speechSynthesis.cancel()`부터 부른다.
 - 판마다 인식기를 새로 만들고(`continuous: false`), 늦게 도착하는 이벤트는 **토큰**으로 버린다.
-  시트를 닫으면(언마운트) 반드시 `abort()` — 안 하면 탭에 녹음 표시가 남는다.
-- XP는 **완주에 한 번**(`kanaSpeakingCompleted`, 한자 퀴즈와 같은 규칙). 맞힌 글자는
+  시트를 닫으면(언마운트) 반드시 `abort()` — 안 하면 탭에 녹음 표시가 남는다. **닫기를 누른 순간에도
+  멈춘다**(`close()`) — 언마운트는 닫힘 애니메이션이 끝난 뒤라 그사이 인식기·타이머가 돌아, 닫은 게임에
+  완주 XP가 들어갈 수 있었다.
+- XP는 **게임을 연 뒤 첫 완주 한 번**(`kanaSpeakingCompleted`, 동사 활용 연습과 같은 규칙). 아무 말 없이
+  "다음"만 눌러도 완주가 되므로 "다시 하기"마다 주면 긁어갈 수 있었다. "다시 하기"는 안쪽만 리마운트하니
+  표시는 바깥(`KanaSpeakingGame`)이 들고 닫으면 비운다. 맞힌 글자는
   `kana-studied`를 남긴다(처음 한 번만 — Pre-N5 진도가 된다. XP는 따로 안 준다).
+- **인식기는 목소리를 잡고도 빈 글자(`transcript: ""`)의 최종 결과를 보낸다 (실제 마이크로 보고받았다).**
+  예전엔 그걸 "무언가 들렸는데 틀렸다"로 읽어 「」로 들렸어요 → ❌ 아쉬워요가 됐다 — 맞게 말해도 입력이
+  안 된 것처럼 보였다. 지금은 `transcriptsOf`가 빈 글자를 후보에서 빼고, 게임은 "🙉 못 알아들었어요"로
+  구분해 한 번 더 듣는다(목소리가 잡혔으면 — `speechstart` 또는 빈 최종 결과). **왜 빈 결과가 오는지는 아직
+  모른다** — `?debug=1`이면 시트 아래에 UA와 인식 이벤트 원문(대안·confidence 포함)이 남으니 그걸로 볼 것.
+- **모델을 받았으면 판정은 기기 안에서 한다** — "기기 안 발음 판정" 절. 아래 내용은 브라우저 음성 인식 경로다.
 - **실제 마이크로는 아직 확인 못 했다.** 헤드리스 브라우저에서 권한 거부 경로는 진짜 API로,
   나머지(정답·시간 초과·오답·늦게 말하기)는 이벤트 순서를 흉내 낸 가짜 인식기로 확인했다.
   남은 확인거리: **짧은 한 글자를 실제 인식기가 얼마나 잘 받아 적는지**(특히 Android Chrome),
   2.5초 유예가 충분한지, "거의 맞음"이 너무 후한지(탁음을 구분 못 하는 학습자도 통과시킨다).
+
+## 기기 안 발음 판정 (`kanaModel.ts` / `kanaPhonemes.ts` / `voiceCapture.ts`) 구현 노트
+- 브라우저 음성 인식은 가나 한 글자를 못 받아 적는다(Chrome은 결과 없이 `end`, 웨일은 빈 결과 — 발음 게임 절).
+  그래서 **모델을 받았으면** 발음 게임이 직접 판정한다: 말 시작·끝은 소리 크기로 직접 자르고(`voiceCapture.ts`),
+  음소 CTC 모델(prj-beatrice/japanese-hubert-base-phoneme-ctc-v3, Apache-2.0 — ONNX·fp16으로 직접 변환, 189MB)을
+  onnxruntime-web(WebGPU, 안 되면 WASM)으로 돌린다. 모델이 없으면 예전처럼 브라우저 음성 인식이다.
+- **채점은 확률 비교(`judgeByAlignment`)다 — 가장 그럴듯한 소리 하나만 보지 말 것.** 실제 목소리 54글자(바르게
+  읽었다고 확인받음)에서 그리디 디코딩은 22%를 틀렸다고 했다(모델이 く/ふ에서 망설이면 ふ만 남는다). 지금은 CTC
+  전방 알고리즘으로 목표 글자의 로그 확률을 모든 가나와 견줘 1등과 `ALIGN_MARGIN`(4) 안이면 통과 — 받아들임 89%,
+  다른 글자로 물었을 때 통과 2.1%, 잘못 읽은 글자(ざ)는 걸렀다. 근거 표는 `kanaPhonemes.ts`에 있다. **여유를 올리면
+  아무 말이나 통과한다**(8이면 12.6%). "거의 맞음"은 탁점·반탁점을 붙이거나 뗀 **글자**로 판정한다(자음 표로
+  묶었더니 ぢ를 ち로 말한 것이 ❌였다).
+- **무음 녹음은 판정하지 않는다**(`hasSpeech`) — 모든 후보가 똑같이 낮으면 목표 글자도 여유 안에 들어와 기침 하나가
+  정답이 됐다(테스트로 잡았다).
+- `voiceCapture`는 처음 300ms로 소음을 재고 `onListening`을 부른다. **게임은 그때 글자를 보여주고 2초 시계를
+  돌린다** — 측정 중에 읽기 시작하면 그 목소리가 소음으로 잡힌다. 말 시작 전 300ms를 남긴다(첫 자음이 잘리면 か가
+  は로 들린다). 마이크와 모델은 게임을 열 때 한 번만 열고, 닫으면 놓는다.
+- **받기는 자동이고 화면에 보이지 않는다(사용자 결정 — "사용자는 알지 못하도록").** 기기 안 판정이 기본이다.
+  `App.tsx`가 `scheduleKanaModelAutoDownload()`를 부르면 8초 뒤 브라우저가 한가할 때 받는다(대문 프리로드와 안
+  겹치게, 대문이 아닌 주소로 들어와도 받게). 게임에는 받기 카드·진행률이 없고, 모델이 준비됐으면 기기 안 판정,
+  아니면 브라우저 음성 인식을 쓴다. 지키는 조건: **`saveData`·모바일 데이터(`connection.type === "cellular"`)면
+  받지 않는다**(사용자 모르게 요금제를 쓰면 안 된다 — iOS는 연결 종류를 안 알려 줘서 받는다), 저장 공간이 모자라면
+  건너뛴다, **지속 저장 요청·화면 켜짐 유지는 하지 않는다**(Firefox는 persist에 권한 창을 띄운다), 실패하면 조용히
+  그만두고 다음 방문 때 처음부터(이어받기 없음). 화면엔 안 보여도 **`/privacy`에는 적는다**(외부 요청이다).
+- **모델은 Hugging Face `kyeseung/japanese-hubert-base-phoneme-ctc-v3-onnx`에 있다**(`kanaModel.ts`의 `PUBLISHED_URL`
+  — 공개·CORS·Range 확인, SHA-256이 시험한 파일과 같다). 비우면 이 기능이 숨는다. 올린 묶음(모델·어휘·모델 카드·
+  변환 스크립트)은 저장소 밖 `lab-models/hf-upload/`. 시험장 `/lab/asr`는 개발 서버가 `lab-models/`(gitignore)를
+  `/lab-models/*`로 내보내는 파일을 쓴다(vite.config.ts의 `labModels` — 빌드에 안 들어간다). 모델 파일을 바꾸면
+  `KANA_MODEL.bytes`와 `PHONEME_VOCAB`도 같이 바꾸고 다시 올릴 것.
+- onnxruntime-web은 **실행 코드까지 jsDelivr에서** 받는다 — npm 패키지를 import하면 26.8MB WASM이 배포물에 들어가
+  PWA 프리캐시 한도에 걸려 빌드가 실패했다(패키지는 devDependency, 타입 전용).
+- 시험장 `/lab/asr`(디버그 전용, 링크 없음)에서 녹음·브라우저 안 판정·녹음 파일 내보내기/불러오기를 할 수 있다.
+  macOS `say`의 합성 음성은 한 글자를 이상하게 읽어서 시험 재료로 못 쓴다.
+- 남은 확인거리: 여러 사람·Chrome·모바일 실기기, 모바일 WASM 속도, 이 목소리에서 끝까지 안 되는 く·お·ぽ·ぜ.
 
 ## 발음 재생(TTS) 구현 노트
 - 문장/단어 끝의 🔊 버튼은 전부 `SpeakButton` 하나다(내부에서 `useJapaneseSpeech` 사용).

@@ -20,6 +20,8 @@ export interface KanaSpeechRecognition extends EventTarget {
   onaudiostart: ((ev: Event) => void) | null;
   onspeechstart: ((ev: Event) => void) | null;
   onresult: ((ev: SpeechRecognitionEvent) => void) | null;
+  /** 최종 결과가 신뢰도 기준에 못 미쳤다(짧은 한 글자에서 잘 난다). 옛 엔진에는 없을 수 있다. */
+  onnomatch?: ((ev: Event) => void) | null;
   onerror: ((ev: SpeechRecognitionErrorEvent) => void) | null;
   onend: ((ev: Event) => void) | null;
 }
@@ -36,14 +38,59 @@ export function getSpeechRecognition(): RecognitionConstructor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-/** 인식 이벤트에서 지금까지 들린 후보를 전부(interim 포함, 대안 전부) 꺼낸다. */
-export function transcriptsOf(event: SpeechRecognitionEvent): { texts: string[]; isFinal: boolean } {
+/**
+ * 기기 안 인식(`processLocally`)으로 ja-JP를 쓸 수 있는지 — Chrome의 새 API(`available`). 없거나 실패하면
+ * null. 지금은 디버그 기록에만 남긴다(쓸지 말지는 실제 기기 결과를 보고 정한다).
+ */
+export async function onDeviceAvailability(): Promise<string | null> {
+  const Recognition = getSpeechRecognition() as unknown as {
+    available?: (opts: { langs: string[]; processLocally: boolean }) => Promise<string>;
+  } | null;
+  if (!Recognition?.available) return null;
+  try {
+    return await Recognition.available({ langs: ["ja-JP"], processLocally: true });
+  } catch (e) {
+    return `error: ${(e as Error).message}`;
+  }
+}
+
+/** `transcriptsOf`가 읽는 만큼만 — 테스트에서 가짜 이벤트를 만들 수 있게. */
+export type RecognitionResultsLike = {
+  results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }>;
+};
+
+/**
+ * 인식 이벤트에서 지금까지 들린 후보를 전부(interim 포함, 대안 전부) 꺼낸다.
+ *
+ * **빈 글자는 후보가 아니다 (실제 마이크로 겪었다).** 인식기는 목소리는 잡았는데 받아 적지 못하면
+ * `transcript: ""`인 최종 결과를 보낸다. 그걸 후보로 두면 "무언가 들렸는데 틀렸다"가 되어 화면에
+ * 「」로 들렸어요 → ❌ 아쉬워요가 떴다. 그래서 빼고, 이런 결과였는지는 `isFinal`과 빈 `texts`로 안다.
+ */
+export function transcriptsOf(event: RecognitionResultsLike): { texts: string[]; isFinal: boolean } {
   const texts: string[] = [];
   let isFinal = false;
   for (let i = 0; i < event.results.length; i++) {
     const result = event.results[i];
     if (result.isFinal) isFinal = true;
-    for (let j = 0; j < result.length; j++) texts.push(result[j].transcript);
+    for (let j = 0; j < result.length; j++) {
+      const text = result[j].transcript;
+      if (text.trim()) texts.push(text);
+    }
   }
   return { texts, isFinal };
+}
+
+/** 디버그 모드에서 남기는 인식 이벤트 한 줄 — 실제 인식기가 무엇을 보냈는지 그대로 본다. */
+export function describeRecognitionEvent(event: RecognitionResultsLike): string {
+  const parts: string[] = [];
+  for (let i = 0; i < event.results.length; i++) {
+    const result = event.results[i];
+    const alts: string[] = [];
+    for (let j = 0; j < result.length; j++) {
+      const alt = result[j] as { transcript: string; confidence?: number };
+      alts.push(`${JSON.stringify(alt.transcript)}${alt.confidence != null ? `(${alt.confidence.toFixed(2)})` : ""}`);
+    }
+    parts.push(`${result.isFinal ? "final" : "interim"} [${alts.join(", ")}]`);
+  }
+  return parts.join(" · ") || "(결과 없음)";
 }
