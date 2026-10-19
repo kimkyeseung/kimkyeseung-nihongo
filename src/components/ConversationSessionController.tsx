@@ -7,6 +7,8 @@ import { useConversationSessionStore } from "../stores/conversationSessionStore"
 import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import {
+  CONVERSATION_ERROR_REPLY,
+  CONVERSATION_REFUSAL_REPLY,
   GRAMMAR_CORRECTION_REFUSAL,
   GRAMMAR_CORRECTION_SYSTEM_PROMPT,
   OPENING_TRIGGER,
@@ -15,14 +17,12 @@ import {
   buildGrammarCorrectionUserPrompt,
   buildSystemPrompt,
   buildTranslationUserPrompt,
+  conversationHistoryTurns,
   type Level,
   type Scenario,
 } from "../lib/conversationPrompts";
 import { looksLikePromptLeak } from "../lib/promptSafety";
 import PromptApiTroubleshootDialog from "./PromptApiTroubleshootDialog";
-
-/** 지시문을 읊기 시작한 응답을 대체하는 말 — 역할을 유지한 채 거절한다. */
-const ROLE_REFUSAL_REPLY = "ごめんなさい、それはお答えできません。";
 
 /**
  * 회화 페이지(/conversation)는 라우트를 벗어나면 unmount되므로, 세션/스트리밍 로직을 그
@@ -44,7 +44,12 @@ function ConversationSessionController() {
     () => (scenario && level ? buildSystemPrompt(scenario, level, userName || undefined) : ""),
     [scenario, level, userName]
   );
-  const chatModel = useAiModel(systemPrompt);
+  // 세션을 새로 만들 때(유출 가드 reset·GPU 유실·창 넘침) 화면의 대화로 맥락을 다시 채운다.
+  const getHistory = useCallback(
+    () => conversationHistoryTurns(useConversationSessionStore.getState().messages),
+    []
+  );
+  const chatModel = useAiModel(systemPrompt, { history: getHistory });
   const correctionModel = useAiModel(GRAMMAR_CORRECTION_SYSTEM_PROMPT);
   const translationModel = useAiModel(TRANSLATION_SYSTEM_PROMPT);
 
@@ -66,7 +71,7 @@ function ConversationSessionController() {
           acc += chunk;
           // 지시문을 읊기 시작하면 거기서 끊고 역할을 유지한 거절로 바꾼다(promptSafety.ts 참고).
           const leaked = looksLikePromptLeak(acc, systemPrompt);
-          const snapshot = leaked ? ROLE_REFUSAL_REPLY : acc;
+          const snapshot = leaked ? CONVERSATION_REFUSAL_REPLY : acc;
           useConversationSessionStore.setState((s) => ({
             messages: s.messages.map((msg) => (msg.id === assistantMsgId ? { ...msg, text: snapshot } : msg)),
           }));
@@ -79,7 +84,7 @@ function ConversationSessionController() {
       } catch (err) {
         useConversationSessionStore.setState((s) => ({
           messages: s.messages.map((msg) =>
-            msg.id === assistantMsgId ? { ...msg, text: "(응답 생성 중 오류가 발생했습니다)" } : msg
+            msg.id === assistantMsgId ? { ...msg, text: CONVERSATION_ERROR_REPLY } : msg
           ),
         }));
         reportError(err);
@@ -131,12 +136,16 @@ function ConversationSessionController() {
     [streamAssistantReply, correctionModel, recordProgress, reportError]
   );
 
+  const { resetSession: resetChatSession } = chatModel;
   const startConversation = useCallback((s: Scenario, l: Level) => {
     hasSentOpeningRef.current = false;
+    // 같은 시나리오·레벨로 다시 시작하면 시스템 프롬프트가 그대로라 세션이 안 바뀐다 — 지난 대화를
+    // 상대가 기억한 채 "처음 만난" 척하지 않도록 직접 버린다.
+    resetChatSession();
     // "마지막에 공부한 것"에 회화도 들어가야 선생님이 맥락을 이어받는다.
     recordStudyEvent({ type: "conversation-practice", subject: s.label, detail: l.label });
     useConversationSessionStore.setState({ scenario: s, level: l, messages: [] });
-  }, []);
+  }, [resetChatSession]);
 
   const resetConversation = useCallback(() => {
     useConversationSessionStore.setState({ scenario: null, level: null, messages: [] });

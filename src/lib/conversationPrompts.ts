@@ -1,3 +1,4 @@
+import type { ChatTurn } from "./chatHistory";
 import { REFUSE_PROMPT_DISCLOSURE, sanitizeInlineValue, wrapStudentText } from "./promptSafety";
 
 export interface Scenario {
@@ -65,6 +66,40 @@ export function buildSystemPrompt(scenario: Scenario, level: Level, userName?: s
 // 첫 인사가 한국어로 나오는 버그가 있었다 — 트리거 문장 자체를 일본어로 써서 고쳤다.
 export const OPENING_TRIGGER =
   "(会話を始めてください。上記の状況に合う自然な最初の挨拶やセリフを、必ず日本語だけで一つ言ってください。)";
+
+/** 지시문을 읊기 시작한 응답을 대체하는 말 — 역할을 유지한 채 거절한다. */
+export const CONVERSATION_REFUSAL_REPLY = "ごめんなさい、それはお答えできません。";
+
+/** 응답 도중 실패했을 때 말풍선에만 보여주는 문구. 모델이 한 말이 아니다. */
+export const CONVERSATION_ERROR_REPLY = "(응답 생성 중 오류가 발생했습니다)";
+
+/**
+ * 회화 세션을 **새로 만들 때** 다시 채울 앞선 대화(chatHistory.ts 머리 주석 참고 — 선생님의
+ * teacherHistoryTurns와 같은 역할). 예전엔 회화만 이게 없어서, 유출 가드가 세션을 버리거나 모바일
+ * GPU 유실·창 넘침으로 세션이 새로 만들어지면 상대가 방금까지 한 대화를 통째로 잊었다.
+ *
+ * - 맨 앞 AI 대사(먼저 말 걸기)는 화면에 학습자 말이 없다 — 실제로 보낸 `OPENING_TRIGGER`와 짝짓는다.
+ * - 학습자 말은 처음 보낼 때처럼 그대로 넣는다(회화는 학습자 문장을 감싸지 않고 보낸다).
+ * - 빈 답(지금 받는 중)·실패 안내문·거절 대사로 끝난 쌍은 뺀다 — 거절은 유출 가드가 버린 턴이다.
+ */
+export function conversationHistoryTurns(
+  messages: readonly { role: "user" | "assistant"; text: string }[]
+): ChatTurn[] {
+  const turns: ChatTurn[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg.role !== "assistant") continue;
+    const prev = i > 0 ? messages[i - 1] : null;
+    let question: string;
+    if (prev?.role === "user") question = prev.text;
+    else if (i === 0) question = OPENING_TRIGGER;
+    else continue;
+    const text = msg.text.trim();
+    if (!text || text === CONVERSATION_ERROR_REPLY || text === CONVERSATION_REFUSAL_REPLY) continue;
+    turns.push({ role: "user", content: question }, { role: "assistant", content: msg.text });
+  }
+  return turns;
+}
 
 // 문법 교정은 고정 지시문(시스템 프롬프트)과 학습자 입력(매 턴 prompt())을 분리한다 —
 // 지시문+데이터를 한 문자열로 합치면 학습자 문장에 섞인 지시문을 모델이 명령으로 착각하기

@@ -82,8 +82,8 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     명령어로 먹혀 사라지거나 일본어 모드로 치는 도중에 목록이 끊기고(`/lev` → `・ぇv`, 실제로 걸렸다), 점검이
     엉뚱한 단원을 묻거나 통과 기준이 새서 못 익힌 단원이 완료로 넘어간다.
 
-  - 선생님 앞선 대화 다시 채우기(`chatHistory`의 `fitHistory`/`historyBudget`, `teacherPrompts`의
-    `teacherHistoryTurns`) — 적게 넣으면 이어지는 질문에 맥락 없이 답하고, 실패 안내문·거절된 질문이
+  - 선생님·회화 앞선 대화 다시 채우기(`chatHistory`의 `fitHistory`/`historyBudget`, `teacherPrompts`의
+    `teacherHistoryTurns`·`followUpContext`, `conversationPrompts`의 `conversationHistoryTurns`) — 적게 넣으면 이어지는 질문에 맥락 없이 답하고, 실패 안내문·거절된 질문이
     섞이면 "선생님이 한 말"이 되거나 유출 가드가 버린 턴이 되살아난다. 화면은 멀쩡하다.
 
   - 디버그 모드 질의·대화 내보내기(`debugMode`의 `parseDebugQuery`/`buildTeacherChatExport`) — 빈 값(`?debug=`)이
@@ -1151,6 +1151,17 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
     되살리지 않으려고). 앞선 질문도 처음처럼 `buildTeacherUserPrompt`로 감싼다.
   - 오늘 대화를 지우거나 자정을 넘기면 세션을 버린다 — 화면에 없는 대화를 선생님이 기억하면 안 된다.
   - **실제 모델로는 아직 확인하지 못했다** — 특히 Gemma에서 preface가 길 때 첫 응답까지 걸리는 시간.
+  - **맥락이 세션에 있어도 작은 모델은 놓친다**("이전 질문을 보긴 하냐"는 보고). 두 가지를 더했다:
+    ① 질문 감싸기(`wrapStudentQuestion`)에 "앞선 대화를 이어서 답하라 — 「그거」「이 문장」「바꾸면」은 바로
+    앞을 가리킨다"를 넣었다. "이 블록 안의 질문에 답하라"만 있으면 매 질문을 단독으로 읽는다.
+    ② 앞을 가리키는 **짧은 한국어 질문**(`isFollowUpQuestion` — 40자 이하·일본어 없음·「그거/바꾸면/
+    부정형/왜…」)이면 직전 질문과 답변의 첫 예문을 **같은 구분자 블록 안에** `[앞 질문]`·`[앞 예문]`·
+    `[지금 질문]`으로 같이 보낸다(`followUpContext`). 직전 질문도 학습자 글이라 블록 밖에 두면 인젝션
+    통로가 된다. 이 맥락은 지금 보내는 질문에만 붙고, 다시 채우는 히스토리에는 안 붙는다.
+  - **회화도 같은 방식으로 다시 채운다**(`conversationHistoryTurns`). 예전엔 회화만 빠져서 유출 가드
+    reset·GPU 유실 뒤 상대가 대화를 잊었다. 먼저 건 인사는 실제로 보낸 `OPENING_TRIGGER`와 짝짓는다.
+    같은 시나리오·레벨로 "다시 선택"하면 시스템 프롬프트가 같아 세션이 남았으므로 `startConversation`이
+    직접 버린다.
 - **다른 화면에서 대신 질문 보내기**: `AskTeacherButton`이 `teacherChatStore.requestQuestion()`에
   질문을 넣고 `/teacher`로 이동하면, TeacherPage가 마운트되면서 `consumePendingQuestion()`으로
   꺼내 바로 물어본다. **꺼내는 즉시 store를 비우는 게 중요하다** — StrictMode에서 effect가 두 번
