@@ -1,4 +1,6 @@
 import { motion, useMotionValue, useTransform } from "framer-motion";
+import { Link } from "react-router-dom";
+import { useWordLink } from "../hooks/useWordLink";
 import type { WordEntry } from "../types/dictionary";
 import { displayMeaning, levelLabel } from "../lib/dictionary";
 
@@ -41,6 +43,7 @@ function WordbookCard({
   const knowOpacity = useTransform(x, [20, 120], [0, 1]);
   const unknownOpacity = useTransform(x, [-120, -20], [1, 0]);
   const showBack = isTop && revealed;
+  const wordLink = useWordLink();
 
   return (
     <motion.div
@@ -86,16 +89,30 @@ function WordbookCard({
             {entry.reading !== entry.word && (
               <p className="mt-2 font-ja text-xl text-gray-500">{entry.reading}</p>
             )}
-            <p className="mt-3 text-gray-600">{displayMeaning(entry)}</p>
+            {/* 긴 뜻풀이가 카드(h-72) 밖으로 넘치지 않게 자른다 — 전체는 "단어 상세"에서 본다. */}
+            <p className="mt-3 line-clamp-3 text-gray-600">{displayMeaning(entry)}</p>
           </>
         ) : (
           <p className="mt-4 text-sm text-gray-300">읽기와 뜻을 떠올려 본 뒤 탭하세요</p>
         )}
       </div>
 
-      <p className="text-center text-xs text-gray-300">
-        {showBack ? "← 모르겠어요 · 알아요 →" : "탭해서 뒤집기 · 바로 넘겨도 돼요"}
-      </p>
+      {showBack ? (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-300">← 모르겠어요 · 알아요 →</p>
+          {/* 링크에서 누른 채 끌면 카드 드래그가 시작되어, 놓을 때 이동과 스와이프가 겹친다.
+              링크 위에서는 드래그를 시작하지 않는다. 돌아오면 복습 세션은 store에 그대로 있다. */}
+          <Link
+            {...wordLink(entry.id)}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="shrink-0 rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-600"
+          >
+            단어 상세 →
+          </Link>
+        </div>
+      ) : (
+        <p className="text-center text-xs text-gray-300">탭해서 뒤집기 · 바로 넘겨도 돼요</p>
+      )}
     </motion.div>
   );
 }

@@ -65,21 +65,26 @@ interface WordbookView {
   tab: "word" | "sentence";
   mode: "review" | "list";
   activeGroup: string;
+  /** 후리가나(문장의 ruby·단어 목록의 읽기). 끄면 읽기를 스스로 떠올려 보는 연습이 된다. */
+  showFurigana: boolean;
   setTab: (tab: "word" | "sentence") => void;
   setMode: (mode: "review" | "list") => void;
   setActiveGroup: (activeGroup: string) => void;
+  setShowFurigana: (showFurigana: boolean) => void;
 }
 
-// 옛 저장값에는 `tab`이 없지만 persist의 기본 merge가 얕은 병합이라 초기값("word")이 남는다.
+// 옛 저장값에는 `tab`·`showFurigana`가 없지만 persist의 기본 merge가 얕은 병합이라 초기값이 남는다.
 export const useWordbookView = create<WordbookView>()(
   persist(
     (set) => ({
       tab: "word",
       mode: "review",
       activeGroup: ALL_GROUP,
+      showFurigana: true,
       setTab: (tab) => set({ tab }),
       setMode: (mode) => set({ mode }),
       setActiveGroup: (activeGroup) => set({ activeGroup }),
+      setShowFurigana: (showFurigana) => set({ showFurigana }),
     }),
     { name: "wordbook-view" }
   )

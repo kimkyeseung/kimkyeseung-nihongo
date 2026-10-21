@@ -9,7 +9,7 @@ import { sentenceSrs } from "../lib/sentenceReview";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useConfettiStore } from "../stores/confettiStore";
 import { useGamificationStore } from "../stores/gamificationStore";
-import { useSentenceReview } from "../stores/pageStateStore";
+import { useSentenceReview, useWordbookView } from "../stores/pageStateStore";
 import { useSentencebookStore } from "../stores/sentencebookStore";
 
 /**
@@ -31,6 +31,7 @@ function SentenceReviewDeck() {
   const session = useSentenceReview((s) => s.session);
   const startSession = useSentenceReview((s) => s.start);
   const setQueue = useSentenceReview((s) => s.setQueue);
+  const showFurigana = useWordbookView((s) => s.showFurigana);
   const { handlers, dialogs } = useSentenceDialogs();
   const [revealedId, setRevealedId] = useState<string | null>(null);
   // 기준 시각은 세트를 열 때·끝낼 때만 잡는다(단어 복습과 같은 이유 — 렌더마다 흔들리지 않게).
@@ -124,7 +125,7 @@ function SentenceReviewDeck() {
           className="w-full max-w-md rounded-3xl border-2 border-gray-100 bg-white p-5 shadow-sm"
         >
           <p className="font-ja text-xl leading-loose">
-            <ClickableSentence text={current.text} {...handlers} />
+            <ClickableSentence text={current.text} showFurigana={showFurigana} {...handlers} />
             <SentenceActions text={current.text} subject="복습 문장" />
           </p>
 

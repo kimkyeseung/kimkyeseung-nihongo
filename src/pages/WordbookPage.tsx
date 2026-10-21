@@ -333,6 +333,7 @@ function WordList({ entries }: { entries: WordbookEntry[] }) {
   const groups = useWordbookStore((s) => s.groups);
   const removeWord = useWordbookStore((s) => s.removeWord);
   const setWordGroups = useWordbookStore((s) => s.setWordGroups);
+  const showFurigana = useWordbookView((s) => s.showFurigana);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (entries.length === 0) {
@@ -352,7 +353,9 @@ function WordList({ entries }: { entries: WordbookEntry[] }) {
               {entry.mastered && <span className="text-primary">✓</span>}
               <Link {...wordLink(word.id)} className="flex-1">
                 <span className="font-ja text-lg">{word.word}</span>
-                <span className="ml-2 font-ja text-sm text-gray-400">{word.reading}</span>
+                {showFurigana && word.reading !== word.word && (
+                  <span className="ml-2 font-ja text-sm text-gray-400">{word.reading}</span>
+                )}
               </Link>
               <button
                 onClick={() => setExpandedId(isExpanded ? null : entry.wordId)}
@@ -428,6 +431,8 @@ function WordbookPage() {
   const setMode = useWordbookView((s) => s.setMode);
   const activeGroup = useWordbookView((s) => s.activeGroup);
   const setActiveGroup = useWordbookView((s) => s.setActiveGroup);
+  const showFurigana = useWordbookView((s) => s.showFurigana);
+  const setShowFurigana = useWordbookView((s) => s.setShowFurigana);
 
   const allEntries = useMemo(() => Object.values(entriesMap), [entriesMap]);
   const filteredEntries = useMemo(
@@ -493,6 +498,18 @@ function WordbookPage() {
         value={tab}
         onChange={setTab}
       />
+
+      {/* 단어 복습 카드는 앞면에 읽기가 없고 뒷면의 읽기는 정답이라, 거기서는 바꿀 것이 없어 숨긴다. */}
+      {!(tab === "word" && mode === "review") && (
+        <label className="mt-3 flex items-center justify-end gap-1 text-xs text-gray-500">
+          <input
+            type="checkbox"
+            checked={showFurigana}
+            onChange={(e) => setShowFurigana(e.target.checked)}
+          />
+          후리가나 표시
+        </label>
+      )}
 
       {tab === "sentence" ? (
         mode === "review" ? <SentenceReviewDeck /> : <SentencebookList />

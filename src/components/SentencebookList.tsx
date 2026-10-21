@@ -5,6 +5,7 @@ import SentenceGrammar from "./SentenceGrammar";
 import { dangerChipClass } from "./iconButtonClass";
 import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import { useSentencebookStore } from "../stores/sentencebookStore";
+import { useWordbookView } from "../stores/pageStateStore";
 
 /**
  * 단어장의 **문장 칸** 목록.
@@ -16,6 +17,7 @@ import { useSentencebookStore } from "../stores/sentencebookStore";
 function SentencebookList() {
   const entriesMap = useSentencebookStore((s) => s.entries);
   const removeSentence = useSentencebookStore((s) => s.removeSentence);
+  const showFurigana = useWordbookView((s) => s.showFurigana);
   const { handlers, dialogs } = useSentenceDialogs();
 
   // 최근에 담은 것이 위로.
@@ -41,7 +43,7 @@ function SentencebookList() {
           <li key={entry.id} className="rounded-2xl border-2 border-gray-100 bg-white p-3">
             <div className="flex items-start gap-2">
               <span className="flex-1 font-ja text-lg leading-loose">
-                <ClickableSentence text={entry.text} {...handlers} />
+                <ClickableSentence text={entry.text} showFurigana={showFurigana} {...handlers} />
                 <SentenceActions text={entry.text} subject="담아둔 문장" />
               </span>
               <button
