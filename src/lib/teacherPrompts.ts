@@ -87,10 +87,74 @@ export const TEACHER_SYSTEM_PROMPT = [...TEACHER_INTRO, ...TEACHER_ANSWER_SHAPE,
  */
 export const TEACHER_LEAK_REFERENCE = [...TEACHER_INTRO, ...TEACHER_RULES].join("\n");
 
-export function buildTeacherUserPrompt(question: string): string {
+/**
+ * 앞을 가리키는 짧은 질문에 같이 실어 보낼 직전 대화(`followUpContext`가 고른다).
+ * 앞선 대화는 세션에도 있지만, 작은 온디바이스 모델은 그걸 두고도 「부정형으로 바꾸면?」을 단독
+ * 질문으로 읽는다 — 가리키는 대상을 질문 바로 옆에 붙여 주면 놓칠 수가 없다.
+ */
+export type FollowUpContext = { previousQuestion: string; previousExample: string | null };
+
+export function buildTeacherUserPrompt(question: string, context?: FollowUpContext | null): string {
   // wrapStudentText가 아니다 — 그 문구("교정/분석 대상으로만 취급")를 쓰면 모델이 질문에 답하지 않고
   // 질문을 분석하려 든다. wrapStudentQuestion의 주석 참고.
-  return wrapStudentQuestion(question);
+  if (!context) return wrapStudentQuestion(question);
+  // 직전 질문도 학습자가 친 글이라 같은 구분자 블록 **안에** 넣는다(밖에 두면 인젝션 통로가 된다).
+  const lines = [`[앞 질문] ${context.previousQuestion}`];
+  if (context.previousExample) lines.push(`[앞 예문] ${context.previousExample}`);
+  lines.push(`[지금 질문] ${question}`);
+  return wrapStudentQuestion(lines.join("\n"), { withContext: true });
+}
+
+const JAPANESE_CHAR = /[\u3040-\u30ff\u3400-\u9fff]/;
+/** 직전 대화를 가리키는 말. 짧은 질문에서만 본다(isFollowUpQuestion). */
+const FOLLOW_UP_HINT =
+  /그거|그것|그건|그걸|이거|이것|이건|이걸|저거|저것|(위|이|그|앞|아까)\s?문장|아까|방금|앞에서|위에서|바꾸면|바꿔|고치면|고쳐|부정형|과거형|다른 예|예문 (하나 )?더|더 쉽게|더 어렵게|^(왜|그럼|그러면|그래서|그리고)/;
+const FOLLOW_UP_MAX_LENGTH = 40;
+const CONTEXT_QUESTION_MAX = 120;
+const CONTEXT_EXAMPLE_MAX = 80;
+
+/**
+ * 앞을 가리키는 짧은 질문인가. 일본어가 들어 있으면 가리킬 대상을 직접 준 것이라 아니다.
+ * 넉넉하게 잡아도 손해가 적다 — 맥락을 붙여도 "답할 것은 [지금 질문]"이라고 적어 둔다.
+ */
+export function isFollowUpQuestion(question: string): boolean {
+  const text = question.trim();
+  if (!text || text.length > FOLLOW_UP_MAX_LENGTH) return false;
+  if (JAPANESE_CHAR.test(text)) return false;
+  return FOLLOW_UP_HINT.test(text);
+}
+
+function clip(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
+}
+
+/**
+ * 지금 질문이 앞을 가리키면 직전의 (질문, 답) 쌍에서 맥락을 고른다. `messages`는 지금 질문을 넣기
+ * **전**의 오늘 대화다. 실패 안내문·거절 문구로 끝난 쌍은 건너뛴다(teacherHistoryTurns와 같은 이유).
+ * 예문은 답변에서 백틱으로 감싼 첫 일본어 문장(4글자 이상)이다 — 질문에 일본어가 있으면 그 질문이
+ * 곧 가리키는 문장이라 예문을 따로 붙이지 않는다.
+ */
+export function followUpContext(
+  question: string,
+  messages: readonly { role: "user" | "assistant"; text: string }[]
+): FollowUpContext | null {
+  if (!isFollowUpQuestion(question)) return null;
+  const turns = teacherHistoryTurnPairs(messages);
+  const last = turns[turns.length - 1];
+  if (!last) return null;
+  const previousQuestion = clip(last.question, CONTEXT_QUESTION_MAX);
+  let previousExample: string | null = null;
+  if (!JAPANESE_CHAR.test(last.question)) {
+    for (const match of last.answer.matchAll(/`([^`\n]+)`/g)) {
+      const span = match[1].trim();
+      if ([...span].filter((ch) => JAPANESE_CHAR.test(ch)).length >= 4) {
+        previousExample = clip(span, CONTEXT_EXAMPLE_MAX);
+        break;
+      }
+    }
+  }
+  return { previousQuestion, previousExample };
 }
 
 /**
@@ -110,7 +174,17 @@ export const TEACHER_ERROR_ANSWER = "(답변을 만드는 중 오류가 발생�
  * - 답을 기다리는 중인 질문(짝이 없는 꼬리)은 넣지 않는다 — 그건 지금 보낼 질문이다.
  */
 export function teacherHistoryTurns(messages: readonly { role: "user" | "assistant"; text: string }[]): ChatTurn[] {
-  const turns: ChatTurn[] = [];
+  return teacherHistoryTurnPairs(messages).flatMap(({ question, answer }): ChatTurn[] => [
+    { role: "user", content: buildTeacherUserPrompt(question) },
+    { role: "assistant", content: answer },
+  ]);
+}
+
+/** 모델이 실제로 답한 (질문, 답) 쌍만 순서대로. teacherHistoryTurns·followUpContext가 같이 쓴다. */
+function teacherHistoryTurnPairs(
+  messages: readonly { role: "user" | "assistant"; text: string }[]
+): { question: string; answer: string }[] {
+  const pairs: { question: string; answer: string }[] = [];
   for (let i = 0; i < messages.length - 1; i++) {
     const question = messages[i];
     const answer = messages[i + 1];
@@ -118,12 +192,9 @@ export function teacherHistoryTurns(messages: readonly { role: "user" | "assista
     i++;
     const text = answer.text.trim();
     if (!text || text === TEACHER_ERROR_ANSWER || text === TEACHER_REFUSAL_ANSWER) continue;
-    turns.push(
-      { role: "user", content: buildTeacherUserPrompt(question.text) },
-      { role: "assistant", content: answer.text }
-    );
+    pairs.push({ question: question.text, answer: answer.text });
   }
-  return turns;
+  return pairs;
 }
 
 /**

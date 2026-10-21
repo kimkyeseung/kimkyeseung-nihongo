@@ -14,6 +14,7 @@ import {
   TEACHER_REFUSAL_ANSWER,
   buildTeacherSystemPrompt,
   buildTeacherUserPrompt,
+  followUpContext,
   teacherHistoryTurns,
 } from "../lib/teacherPrompts";
 import { XP_REWARDS } from "../lib/xpRewards";
@@ -120,6 +121,9 @@ function TeacherSessionController() {
         sessionDateRef.current = today;
         model.resetSession();
       }
+      // 「부정형으로 바꾸면?」처럼 앞을 가리키는 짧은 질문이면 직전 질문·예문을 같이 싣는다.
+      // ask() 전에 읽어야 지금 질문이 "직전 질문"으로 잡히지 않는다.
+      const context = followUpContext(question, chat.messagesByDate[today] ?? []);
       const { assistantId } = chat.ask(question);
       recordProgress(XP_REWARDS.teacherQuestion);
       recordStudyEvent({ type: "teacher-question", subject: question });
@@ -127,7 +131,7 @@ function TeacherSessionController() {
       let failed = false;
       try {
         let acc = "";
-        for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(question))) {
+        for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(question, context))) {
           acc += chunk;
           // 지시문을 그대로 읊기 시작하면 거기서 끊는다 — 프롬프트로 "말하지 말라"고 시키는
           // 것만으로는 막히지 않아서, 받은 답을 코드에서 한 번 더 본다(promptSafety.ts 주석 참고).
