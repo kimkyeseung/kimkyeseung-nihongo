@@ -1781,6 +1781,16 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
 싶어지면 dictionary.ts도 kanjivg.ts와 같은 방식으로 바꿀 것.
 
 ## 한자 페이지 구현 노트
+- **열린 한자 상세는 주소(`/kanji?k=水`)에 싣는다 (실제로 보고받았다).** 예전엔 로컬 state라 휴대폰
+  뒤로가기가 시트가 아니라 한자 페이지 자체를 벗어났다. 열 때 push(+ `state.kanjiSheet`), 닫을 때
+  `navigate(-1)` — 그 표시가 없으면(주소를 직접 열었다) 되돌릴 기록이 없으니 replace로 쿼리만 지운다.
+  **좌우 스와이프·‹ ›·←/→ 키로 같은 급수의 옆 글자로 넘긴다** — 넘김은 replace라 몇 글자를 넘겨도
+  뒤로가기 한 번이면 목록이다. 이 넘김은 `KanjiDetailSheet`의 `nav` prop이 있을 때만이다(단어 칩·문장
+  속 한자에서 연 시트엔 옆 글자가 없다).
+  - 스와이프는 패널의 pointerdown/up 거리로 잰다(가로 60px 이상 + 세로의 두 배) + `touch-action: pan-y`.
+    **따라 쓰기 칸(`data-no-swipe`)에서 시작한 제스처는 넘김이 아니다** — 가로획이 곧 가로 스와이프다.
+  - 활용 단어로 갈 때는 시트를 닫지 않는다(`onLeave` 무시). 닫기의 `navigate(-1)`과 단어 상세 push가
+    겹치면 뒤로가기가 나중에 처리되어 엉뚱한 곳에 떨어진다. 대신 단어 상세에서 뒤로가기로 시트에 돌아온다.
 - 획순 애니메이션은 `KanjiStrokeOrder`가 `kanjivg.json`의 path를 Framer Motion `motion.path`의
   `pathLength` 애니메이션으로 순서대로 그린다. 다시보기는 `key`를 바꿔 강제 리마운트하는 방식.
   KanjiVG 데이터가 없는 한자는 문자만 정적으로 표시하는 폴백이 있다.
