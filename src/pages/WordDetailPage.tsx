@@ -199,8 +199,8 @@ function WordSenses({ entry }: { entry: WordEntry }) {
                         {ex.variantOf && (
                           <p className="mb-1 text-xs text-gray-400">
                             {ex.variantOf === "easier"
-                              ? "🟡 더 쉽게 바꾼 문장"
-                              : "🔵 더 어렵게 바꾼 문장"}
+                              ? "더 쉽게 바꾼 문장"
+                              : "더 어렵게 바꾼 문장"}
                           </p>
                         )}
                         {/* 난이도 버튼은 문장 **오른쪽에 세로로** 둔다 — 가로 한 줄로 깔면
@@ -233,7 +233,7 @@ function WordSenses({ entry }: { entry: WordEntry }) {
                                 className="btn-press whitespace-nowrap rounded-full bg-warning px-2.5 py-1 text-xs font-bold text-white disabled:bg-gray-200"
                                 style={{ "--btn-shadow": "#c99a00" } as React.CSSProperties}
                               >
-                                🟡 더 쉽게
+                                더 쉽게
                               </button>
                               <button
                                 onClick={() => rewrite(ex, "harder")}
@@ -241,7 +241,7 @@ function WordSenses({ entry }: { entry: WordEntry }) {
                                 className="btn-press whitespace-nowrap rounded-full bg-info px-2.5 py-1 text-xs font-bold text-white disabled:bg-gray-200"
                                 style={{ "--btn-shadow": "#0e86c4" } as React.CSSProperties}
                               >
-                                🔵 더 어렵게
+                                더 어렵게
                               </button>
                             </div>
                           )}
