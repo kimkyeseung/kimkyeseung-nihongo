@@ -31,12 +31,15 @@ function WordbookCard({
   onReveal,
   isTop,
   revealed,
+  showFurigana,
 }: {
   entry: WordEntry;
   onSwipe: (direction: "left" | "right") => void;
   onReveal: () => void;
   isTop: boolean;
   revealed: boolean;
+  /** 켜면 앞면부터 단어 위에 읽기를 단다 — 그때는 뜻만 떠올려 보는 카드가 된다. */
+  showFurigana: boolean;
 }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-12, 12]);
@@ -44,6 +47,9 @@ function WordbookCard({
   const unknownOpacity = useTransform(x, [-120, -20], [1, 0]);
   const showBack = isTop && revealed;
   const wordLink = useWordLink();
+  // 후리가나는 사전의 `furigana`(글자별로 나눈 읽기)로만 단다 — 가나뿐인 단어는 그 필드가 없다.
+  // 오쿠리가나 조각(食べる의 べる)은 rt가 비어 있으니 그대로 둔다.
+  const ruby = showFurigana && entry.furigana && entry.furigana.length > 0 ? entry.furigana : null;
 
   return (
     <motion.div
@@ -83,17 +89,33 @@ function WordbookCard({
         <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
           {levelLabel(entry.jlptLevel)}
         </span>
-        <h3 className="mt-4 font-ja text-5xl">{entry.word}</h3>
+        <h3 className="mt-4 font-ja text-5xl">
+          {ruby
+            ? ruby.map((f, i) =>
+                f.rt ? (
+                  <ruby key={i}>
+                    {f.ruby}
+                    <rt className="text-base text-gray-500">{f.rt}</rt>
+                  </ruby>
+                ) : (
+                  <span key={i}>{f.ruby}</span>
+                )
+              )
+            : entry.word}
+        </h3>
         {showBack ? (
           <>
-            {entry.reading !== entry.word && (
+            {/* 위에 후리가나가 달려 있으면 같은 읽기를 한 줄 더 쓰지 않는다. */}
+            {!ruby && entry.reading !== entry.word && (
               <p className="mt-2 font-ja text-xl text-gray-500">{entry.reading}</p>
             )}
             {/* 긴 뜻풀이가 카드(h-72) 밖으로 넘치지 않게 자른다 — 전체는 "단어 상세"에서 본다. */}
             <p className="mt-3 line-clamp-3 text-gray-600">{displayMeaning(entry)}</p>
           </>
         ) : (
-          <p className="mt-4 text-sm text-gray-300">읽기와 뜻을 떠올려 본 뒤 탭하세요</p>
+          <p className="mt-4 text-sm text-gray-300">
+            {ruby ? "뜻을 떠올려 본 뒤 탭하세요" : "읽기와 뜻을 떠올려 본 뒤 탭하세요"}
+          </p>
         )}
       </div>
 

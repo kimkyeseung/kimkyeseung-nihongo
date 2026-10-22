@@ -123,6 +123,7 @@ function ReviewDeck({ group, entries }: { group: string; entries: WordbookEntry[
   const session = useWordbookReview((s) => (s.session?.group === group ? s.session : null));
   const startSession = useWordbookReview((s) => s.start);
   const setQueueInStore = useWordbookReview((s) => s.setQueue);
+  const showFurigana = useWordbookView((s) => s.showFurigana);
   const [undo, setUndo] = useState<WordbookEntry | null>(null);
   const [revealedId, setRevealedId] = useState<string | null>(null);
   const [exitDir, setExitDir] = useState<CardExit>("left");
@@ -282,6 +283,7 @@ function ReviewDeck({ group, entries }: { group: string; entries: WordbookEntry[
                 entry={word}
                 isTop={id === topId}
                 revealed={revealedId === id}
+                showFurigana={showFurigana}
                 onReveal={() => setRevealedId(id)}
                 onSwipe={(dir) => handleSwipe(id, dir)}
               />
@@ -499,17 +501,15 @@ function WordbookPage() {
         onChange={setTab}
       />
 
-      {/* 단어 복습 카드는 앞면에 읽기가 없고 뒷면의 읽기는 정답이라, 거기서는 바꿀 것이 없어 숨긴다. */}
-      {!(tab === "word" && mode === "review") && (
-        <label className="mt-3 flex items-center justify-end gap-1 text-xs text-gray-500">
-          <input
-            type="checkbox"
-            checked={showFurigana}
-            onChange={(e) => setShowFurigana(e.target.checked)}
-          />
-          후리가나 표시
-        </label>
-      )}
+      {/* 문장 칸의 ruby, 단어 목록의 읽기, 단어 복습 카드의 후리가나를 함께 켜고 끈다. */}
+      <label className="mt-3 flex items-center justify-end gap-1 text-xs text-gray-500">
+        <input
+          type="checkbox"
+          checked={showFurigana}
+          onChange={(e) => setShowFurigana(e.target.checked)}
+        />
+        후리가나 표시
+      </label>
 
       {tab === "sentence" ? (
         mode === "review" ? <SentenceReviewDeck /> : <SentencebookList />
