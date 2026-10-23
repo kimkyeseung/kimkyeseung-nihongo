@@ -161,13 +161,23 @@ function Layout() {
             늘수록 넓어져서(⭐ 213 → ⭐ 12,345) 375px에서는 언젠가 제목을 밀어내는데, 두 줄이
             되면 헤더가 높아지고 h-svh 레이아웃의 스크롤 영역이 그만큼 줄어든다. 넘칠 때는
             줄바꿈 대신 말줄임으로 조용히 넘어간다.
+            좁은 화면(sm 미만)에서는 "김계승"을 작게 위에 얹어 "일본어"만 한 줄을 차지한다 — 한 줄일 땐
+            375px에서 "김계승 일..."로 잘렸다. 두 줄 모두 leading-none이라 헤더 높이는 로고(32px)와
+            거의 같다. sm 이상은 예전처럼 한 줄.
             **헤더 아이콘은 둘(🧠·ⓘ)이 한계다** — 셋으로 늘렸더니 375px에서 제목이 7px 모자라
             잘렸다. 새 페이지는 /curriculum처럼 다른 페이지에서 링크로 잇는 쪽을 먼저 볼 것. */}
         <Link to="/" className="flex min-w-0 items-center gap-2" aria-label="대문으로">
           {/* 이름 텍스트가 바로 옆에 있고 Link에 이미 aria-label이 있어서 장식용 — alt를
               비워 스크린리더가 두 번 읽지 않게 한다. */}
           <img src="/favicon.svg" alt="" className="h-8 w-8 shrink-0 rounded-lg" />
-          <h1 className="truncate text-2xl whitespace-nowrap text-primary">김계승 일본어</h1>
+          {/* 두 span이 flex로 붙으면 사이 공백이 사라지므로 이름은 aria-label로 준다. */}
+          <h1
+            aria-label="김계승 일본어"
+            className="flex min-w-0 flex-col whitespace-nowrap text-primary sm:flex-row sm:items-baseline sm:gap-1.5"
+          >
+            <span className="text-xs leading-none sm:text-2xl sm:leading-normal">김계승</span>
+            <span className="truncate text-2xl leading-none sm:leading-normal">일본어</span>
+          </h1>
         </Link>
         <div className="flex items-center gap-2">
           <GamificationBar />
