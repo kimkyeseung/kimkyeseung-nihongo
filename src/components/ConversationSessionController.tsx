@@ -8,7 +8,6 @@ import { recordStudyEvent } from "../stores/learnerMemoryStore";
 import { XP_REWARDS } from "../lib/xpRewards";
 import {
   CONVERSATION_ERROR_REPLY,
-  CONVERSATION_REFUSAL_REPLY,
   GRAMMAR_CORRECTION_REFUSAL,
   GRAMMAR_CORRECTION_SYSTEM_PROMPT,
   OPENING_TRIGGER,
@@ -18,10 +17,11 @@ import {
   buildSystemPrompt,
   buildTranslationUserPrompt,
   conversationHistoryTurns,
+  conversationRedirectReply,
   type Level,
   type Scenario,
 } from "../lib/conversationPrompts";
-import { looksLikePromptLeak } from "../lib/promptSafety";
+import { looksLikePromptLeak, looksOffRole } from "../lib/promptSafety";
 import PromptApiTroubleshootDialog from "./PromptApiTroubleshootDialog";
 
 /**
@@ -69,9 +69,10 @@ function ConversationSessionController() {
         let acc = "";
         for await (const chunk of chatModel.promptStreaming(input)) {
           acc += chunk;
-          // 지시문을 읊기 시작하면 거기서 끊고 역할을 유지한 거절로 바꾼다(promptSafety.ts 참고).
-          const leaked = looksLikePromptLeak(acc, systemPrompt);
-          const snapshot = leaked ? CONVERSATION_REFUSAL_REPLY : acc;
+          // 지시문을 읊거나 역할을 벗어나면(일본어가 아닌 답) 거기서 끊고, 상대역 그대로 상황으로
+          // 되돌리는 말로 바꾼다(promptSafety.ts·conversationRedirectReply 참고).
+          const leaked = looksLikePromptLeak(acc, systemPrompt) || looksOffRole(acc, "conversation");
+          const snapshot = leaked ? conversationRedirectReply(scenario?.id) : acc;
           useConversationSessionStore.setState((s) => ({
             messages: s.messages.map((msg) => (msg.id === assistantMsgId ? { ...msg, text: snapshot } : msg)),
           }));
@@ -92,7 +93,7 @@ function ConversationSessionController() {
         useConversationSessionStore.setState({ isStreaming: false });
       }
     },
-    [chatModel, systemPrompt, reportError]
+    [chatModel, systemPrompt, scenario, reportError]
   );
 
   const sendMessage = useCallback(
