@@ -8,6 +8,7 @@ import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import { useCurriculum } from "../hooks/useCurriculumPlan";
 import { assignGrammarToFirstSentence } from "../lib/grammarPatterns";
 import { findExampleTranslation } from "../lib/sentenceReview";
+import { stripModelReadings } from "../lib/modelReadings";
 
 const HAS_JAPANESE = /[぀-ヿ㐀-䶿一-鿿]/;
 
@@ -46,7 +47,10 @@ const NO_PATTERNS: ReadonlySet<string> = new Set();
  * 메시지 목록이 위아래로 흔들렸다 — 단어 상세의 생성 예문과 같은 문제라 같은 방식으로
  * 고쳤다: 확정되지 않은 문장은 후리가나·단어 탭·문법 칩 없이 글자만 둔다.
  */
-function MarkdownAnswer({ text, isStreaming = false }: { text: string; isStreaming?: boolean }) {
+function MarkdownAnswer({ text: raw, isStreaming = false }: { text: string; isStreaming?: boolean }) {
+  // 모델이 직접 쓴 읽기(`面白い` (おもろい))는 자주 틀려서 걷어낸다 — 읽기는 사전 후리가나가 붙인다
+  // (modelReadings.ts). 저장된 원문은 그대로 두고 그릴 때만 걷어내므로 지난 대화에도 적용된다.
+  const text = useMemo(() => stripModelReadings(raw), [raw]);
   const { handlers, dialogs } = useSentenceDialogs();
   const curriculum = useCurriculum();
   // 같은 문법 칩은 그 문형이 처음 나온 예문에만 단다 — 예문 다섯 개에 같은 칩이 다섯 번 붙었다.

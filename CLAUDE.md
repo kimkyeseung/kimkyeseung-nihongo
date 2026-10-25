@@ -86,6 +86,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     `teacherHistoryTurns`·`followUpContext`, `conversationPrompts`의 `conversationHistoryTurns`) — 적게 넣으면 이어지는 질문에 맥락 없이 답하고, 실패 안내문·거절된 질문이
     섞이면 "선생님이 한 말"이 되거나 유출 가드가 버린 턴이 되살아난다. 화면은 멀쩡하다.
 
+  - 선생님 답변의 모델 읽기 걷어내기(`modelReadings`의 `stripModelReadings`) — 못 걷어내면 사전 후리가나 옆에
+    모델이 지어낸 틀린 읽기(面白い → おもろい)가 나란히 뜨고, 너무 걷어내면 뜻풀이 괄호가 사라진다.
+
   - 디버그 모드 질의·대화 내보내기(`debugMode`의 `parseDebugQuery`/`buildTeacherChatExport`) — 빈 값(`?debug=`)이
     끄기로 읽히면 모드가 조용히 꺼지고, 내보내기 행이 한 글자라도 바뀌면 되돌려 넣을 수 없는 파일이 된다.
 
@@ -265,7 +268,8 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                        writingCorrection.ts(첨삭 프롬프트/응답 파싱) ·
                        teacherPractice.ts(연습 문제 출제·파싱·피드백 프롬프트) ·
                        teacherCommands.ts(`/` 명령어 판별) · unitCheck.ts(`/test` 단원 점검 출제·채점) ·
-                       promptSafety.ts(인젝션 방어 — 전용 절 참고) +
+                       promptSafety.ts(인젝션 방어 — 전용 절 참고) ·
+                       modelReadings.ts(선생님 답변에서 모델이 쓴 읽기 걷어내기) +
                      AI 지원 판정: aiCapability.ts(안내 경로) · languageModel.ts ·
                        languageModelDiagnostics.ts · browserCheck.ts(진짜 Chrome 판별) ·
                        chromeLinks.tsx + gemmaModel.ts/gemmaEngine.ts(Gemma 4) ·
@@ -306,7 +310,7 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                      conjugationDrill.test.ts · weakReview.test.ts · weakReviewQuiz.test.ts ·
                      sentenceReview.test.ts · kanjiWriting.test.ts · studyCalendar.test.ts ·
                      teacherCommands.test.ts · unitCheck.test.ts · appViewport.test.ts ·
-                     chatHistory.test.ts · teacherPrompts.test.ts · japaneseVoices.test.ts ·
+                     chatHistory.test.ts · teacherPrompts.test.ts · modelReadings.test.ts · japaneseVoices.test.ts ·
                      levelTestBank.test.ts · levelTest/(adaptive·result·questions·run·history·comment).test.ts
 src/stores/        Zustand 스토어:
                      kanjiProgressStore·wordbookStore·sentencebookStore(단어장의 문장 칸)·
@@ -1165,6 +1169,14 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
     부정형/왜…」)이면 직전 질문과 답변의 첫 예문을 **같은 구분자 블록 안에** `[앞 질문]`·`[앞 예문]`·
     `[지금 질문]`으로 같이 보낸다(`followUpContext`). 직전 질문도 학습자 글이라 블록 밖에 두면 인젝션
     통로가 된다. 이 맥락은 지금 보내는 질문에만 붙고, 다시 채우는 히스토리에는 안 붙는다.
+    **직전 답에 일본어가 하나도 없으면(거절·딴소리) 그 앞 질문까지 거슬러 싣는다**(최대 3개) — 「계산해주세요」
+    → 거절 → 「계산해달라는걸 일본어로 해달라고...」 → 거절 → 「아니.일본어로 뭔지 알려달라고」에서 직전 질문만
+    붙였더니 「일본어로 뭔지 알려달라」 자체를 번역했다. 「아니」「말고」「~라고」 같은 되묻는 말도 지칭 질문으로 본다.
+  - **한국어 말만 보내면 "일본어로 뭐라고 하냐"는 뜻이다.** 「계산해주세요」를 "일본어 학습과 무관하다"며 거절했고
+    「일본어로」가 든 질문까지 거절했다. 프롬프트에 둘 다 못박았다(프롬프트라 완전하지 않다).
+  - **모델이 쓴 읽기는 그릴 때 걷어낸다**(`MarkdownAnswer` → `stripModelReadings`). "후리가나를 쓰지 말라"는
+    지시가 있는데도 `面白い` (おもろい)·`教えてください` (しちゃいてください)처럼 틀린 읽기를 붙였다. 괄호 안이
+    **가나뿐일 때만** 지운다 — 한글 괄호(`(물)`·`(와)`)는 뜻인지 소리인지 코드로 못 가른다. 저장된 원문은 그대로다.
   - **회화도 같은 방식으로 다시 채운다**(`conversationHistoryTurns`). 예전엔 회화만 빠져서 유출 가드
     reset·GPU 유실 뒤 상대가 대화를 잊었다. 먼저 건 인사는 실제로 보낸 `OPENING_TRIGGER`와 짝짓는다.
     같은 시나리오·레벨로 "다시 선택"하면 시스템 프롬프트가 같아 세션이 남았으므로 `startConversation`이

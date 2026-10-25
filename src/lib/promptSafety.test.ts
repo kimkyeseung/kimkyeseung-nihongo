@@ -174,6 +174,19 @@ describe("looksLikePromptLeak", () => {
     expect(looksLikePromptLeak(answer, TEACHER_LEAK_REFERENCE)).toBe(false);
   });
 
+  it("한국어 말을 일본어로 알려주는 정상 답변은 걸리지 않는다", () => {
+    // 「한국어 말만 보내면 일본어로 어떻게 말하는지 묻는 것」 규칙을 따른 답이 그 규칙 문장과 겹친다.
+    const answer = [
+      "'계산해주세요'를 일본어로 어떻게 말하는지 알려드릴게요.",
+      "",
+      "`お会計お願いします。`",
+      "*(계산해 주세요.)*",
+      "",
+      "가게에서 계산을 부탁할 때 가장 흔하게 쓰는 말이에요. 일본어로 말할 때는 `お勘定`도 써요.",
+    ].join("\n");
+    expect(looksLikePromptLeak(answer, TEACHER_LEAK_REFERENCE)).toBe(false);
+  });
+
   it("답변 모양 지시를 소제목으로 따라 써도 걸리지 않는다 (실제로 오탐했다)", () => {
     // 「~할 것 같다」 질문에 모델이 시키는 대로 ①②③ 구성을 소제목으로 옮겨 썼더니 조각
     // 네 개가 맞아떨어져 멀쩡한 답이 "그건 알려드릴 수 없어요"로 바뀌었다.
