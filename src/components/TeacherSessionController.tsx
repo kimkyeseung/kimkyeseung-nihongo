@@ -6,12 +6,14 @@ import {
   buildMemoryExtractionPrompt,
   parseExtractedFacts,
 } from "../lib/memoryExtraction";
-import { looksLikePromptLeak } from "../lib/promptSafety";
+import { looksLikePromptLeak, looksOffRole } from "../lib/promptSafety";
 import { localDateKey } from "../lib/localDate";
 import {
   TEACHER_ERROR_ANSWER,
   TEACHER_LEAK_REFERENCE,
   TEACHER_REFUSAL_ANSWER,
+  TEACHER_REDIRECT_INTRO,
+  buildTeacherRedirectPrompt,
   buildTeacherSystemPrompt,
   buildTeacherUserPrompt,
   followUpContext,
@@ -131,22 +133,51 @@ function TeacherSessionController() {
       let failed = false;
       try {
         let acc = "";
+        let derailed = false;
         for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(question, context))) {
           acc += chunk;
-          // 지시문을 그대로 읊기 시작하면 거기서 끊는다 — 프롬프트로 "말하지 말라"고 시키는
-          // 것만으로는 막히지 않아서, 받은 답을 코드에서 한 번 더 본다(promptSafety.ts 주석 참고).
+          // 지시문을 읊기 시작하거나(유출 가드) 역할을 벗어나면(중국어 레시피·영어 답 — looksOffRole)
+          // 거기서 끊는다. 프롬프트로 "하지 말라"고 시키는 것만으로는 막히지 않는다(promptSafety.ts 주석).
           //
           // **고정 지시문에서 답변 모양 지시를 뺀 TEACHER_LEAK_REFERENCE만 넘긴다.** 모델이
           // 모양 지시(①②③)를 소제목으로 따라 쓰는 건 정상이다. 또 실제로 모델에게 준 시스템
           // 프롬프트에는 기억 블록이 붙어 있지만, 그것까지 넘기면 선생님이 학습자의 기억을
           // 정상적으로 되받기만 해도 유출로 오인한다(teacherPrompts.ts 주석 참고).
-          if (looksLikePromptLeak(acc, TEACHER_LEAK_REFERENCE)) {
-            chat.appendAnswer(assistantId, TEACHER_REFUSAL_ANSWER);
-            // 화면만 바꾸고 끝내면 오염된 턴이 히스토리에 남아 다음 질문에서 이어받을 수 있다.
-            model.resetSession();
-            return;
+          if (looksLikePromptLeak(acc, TEACHER_LEAK_REFERENCE) || looksOffRole(acc, "teacher")) {
+            derailed = true;
+            break;
           }
           chat.appendAnswer(assistantId, acc);
+        }
+
+        if (derailed) {
+          // 거절 문구 하나로 끝내지 않고, 그 부탁하는 말을 일본어로 가르치는 답으로 되돌린다(사용자 요청).
+          // 먼저 세션을 버린다 — 오염된 턴이 히스토리에 남으면 다음 질문에서 이어받을 수 있다.
+          model.resetSession();
+          chat.appendAnswer(assistantId, TEACHER_REDIRECT_INTRO);
+          let redirect = "";
+          let ok = true;
+          try {
+            for await (const chunk of model.promptStreaming(buildTeacherRedirectPrompt(question))) {
+              redirect += chunk;
+              // 학습자가 쓴 「시스템 프롬프트」 같은 말이 번역 줄에 나오는 건 정상이라 그 표시는 봐준다.
+              if (
+                looksLikePromptLeak(redirect, TEACHER_LEAK_REFERENCE, { allowMarkersFrom: question }) ||
+                looksOffRole(redirect, "teacher")
+              ) {
+                ok = false;
+                break;
+              }
+              chat.appendAnswer(assistantId, TEACHER_REDIRECT_INTRO + redirect);
+            }
+          } catch {
+            ok = false;
+          }
+          // 되돌리기 질문에도 학습자의 그 글이 들어 있다 — 다음 질문은 깨끗한 세션에서 시작한다
+          // (다시 채울 때 TEACHER_REDIRECT_INTRO로 시작하는 답은 빠진다).
+          model.resetSession();
+          if (!ok || !redirect.trim()) chat.appendAnswer(assistantId, TEACHER_REFUSAL_ANSWER);
+          return;
         }
 
         // 답변이 끝난 뒤에 기억할 만한 사실이 있었는지 따로 물어본다. 답변을 기다리게 하지
