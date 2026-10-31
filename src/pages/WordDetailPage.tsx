@@ -309,22 +309,6 @@ function WordDetailPage() {
   // 엉뚱한 데로 보낸다(lib/wordLink.ts 주석).
   const origin = originFromState(useLocation().state);
   const entry = id ? findWordById(id) : undefined;
-  const inWordbook = useWordbookStore((s) => (id ? Boolean(s.entries[id]) : false));
-  const toggleWord = useWordbookStore((s) => s.toggleWord);
-  const recordProgress = useGamificationStore((s) => s.recordProgress);
-  const koreanReading = entry ? getKoreanReadingForWord(entry.word) : null;
-  const adjectiveType = entry ? detectAdjectiveType(entry) : null;
-  const conjugations = entry ? getVerbConjugations(entry) : null;
-
-  function handleToggleWordbook() {
-    if (!entry) return;
-    if (!inWordbook) {
-      recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
-      // 급수를 같이 남긴다 — 어휘 수준 추정의 주된 근거다(learnerProfile.ts).
-      recordStudyEvent({ type: "word-added", subject: entry.word, level: entry.jlptLevel ?? undefined });
-    }
-    toggleWord(entry.id);
-  }
 
   if (!entry) {
     return (
@@ -342,7 +326,34 @@ function WordDetailPage() {
       <Link to={origin.to} className="text-info">
         {backLabel(origin)}
       </Link>
+      <WordDetail entry={entry} />
+    </div>
+  );
+}
 
+/**
+ * 단어 상세의 내용 — 이 페이지(`/word/:id`)와 넓은 화면 사전의 오른쪽 패널이 같이 쓴다
+ * (한자의 `KanjiDetail`과 같은 나눔). 두 벌로 만들지 말 것.
+ */
+export function WordDetail({ entry }: { entry: WordEntry }) {
+  const inWordbook = useWordbookStore((s) => Boolean(s.entries[entry.id]));
+  const toggleWord = useWordbookStore((s) => s.toggleWord);
+  const recordProgress = useGamificationStore((s) => s.recordProgress);
+  const koreanReading = getKoreanReadingForWord(entry.word);
+  const adjectiveType = detectAdjectiveType(entry);
+  const conjugations = getVerbConjugations(entry);
+
+  function handleToggleWordbook() {
+    if (!inWordbook) {
+      recordProgress(XP_REWARDS.wordAdded); // 추가할 때만 XP 지급
+      // 급수를 같이 남긴다 — 어휘 수준 추정의 주된 근거다(learnerProfile.ts).
+      recordStudyEvent({ type: "word-added", subject: entry.word, level: entry.jlptLevel ?? undefined });
+    }
+    toggleWord(entry.id);
+  }
+
+  return (
+    <>
       <div className="mt-3 flex items-center justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
@@ -418,8 +429,10 @@ function WordDetailPage() {
         </div>
       )}
 
-      <WordSenses entry={entry} />
-    </div>
+      {/* 단어가 바뀌면 예문 생성 상태(스트리밍 중인 job)를 버린다 — 패널에서 다른 단어를 고르면
+          앞 단어의 미리보기가 새 단어 밑에 붙어 있으면 안 된다. */}
+      <WordSenses key={entry.id} entry={entry} />
+    </>
   );
 }
 

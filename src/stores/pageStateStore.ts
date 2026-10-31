@@ -140,18 +140,26 @@ interface DictionaryView {
    * 매번 사라졌다). 갱신은 Layout이 경로를 보고 한 곳에서 한다.
    */
   lastWordId: string | null;
+  /**
+   * 넓은 화면에서 오른쪽 상세 패널에 띄운 단어. 넓은 화면은 단어 상세 주소로 넘어가지 않으므로
+   * `lastWordId`가 아니라 이게 "보던 단어"다 — 탭을 옮겼다 와도 같은 단어가 패널에 있다.
+   */
+  panelWordId: string | null;
   setQuery: (query: string) => void;
   setCommittedQuery: (committedQuery: string | null) => void;
   setLastWordId: (lastWordId: string | null) => void;
+  setPanelWordId: (panelWordId: string | null) => void;
 }
 
 export const useDictionaryView = create<DictionaryView>((set) => ({
   query: "",
   committedQuery: null,
   lastWordId: null,
+  panelWordId: null,
   setQuery: (query) => set({ query }),
   setCommittedQuery: (committedQuery) => set({ committedQuery }),
   setLastWordId: (lastWordId) => set({ lastWordId }),
+  setPanelWordId: (panelWordId) => set({ panelWordId }),
 }));
 
 interface WritingDraft {
