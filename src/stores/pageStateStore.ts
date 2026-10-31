@@ -49,13 +49,26 @@ export const useGojuonView = create<GojuonView>()(
   )
 );
 
+export type KanjiFilter = "all" | "unlearned" | "learned";
+
 interface KanjiView {
   level: JlptLevel;
+  /** 넓은 화면의 격자 필터. 옛 저장값에는 없지만 persist의 얕은 병합이 초기값을 남긴다. */
+  filter: KanjiFilter;
   setLevel: (level: JlptLevel) => void;
+  setFilter: (filter: KanjiFilter) => void;
 }
 
 export const useKanjiView = create<KanjiView>()(
-  persist((set) => ({ level: "N5", setLevel: (level) => set({ level }) }), { name: "kanji-view" })
+  persist(
+    (set) => ({
+      level: "N5",
+      filter: "all",
+      setLevel: (level) => set({ level }),
+      setFilter: (filter) => set({ filter }),
+    }),
+    { name: "kanji-view" }
+  )
 );
 
 export const ALL_GROUP = "all";
