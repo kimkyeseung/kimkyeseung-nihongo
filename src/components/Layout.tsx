@@ -94,8 +94,10 @@ function BottomNav() {
     /* 항목이 7개라 375px 화면에서는 한 칸이 40px대까지 좁아진다 — 고정 최소 너비(min-w-16)를
        주면 넘쳐서 마지막 항목이 잘리므로, flex-1 + min-w-0으로 화면을 n등분하고 라벨은
        줄바꿈 없이(whitespace-nowrap) 작은 글씨로 넣는다. 항목을 더 늘릴 거라면 이 계산을
-       다시 할 것(라벨을 줄이거나 아이콘만 남기는 식). */
-    <nav className="app-nav flex gap-0.5 border-t-4 border-primary/20 bg-white px-1 py-2 sm:gap-1 sm:px-2">
+       다시 할 것(라벨을 줄이거나 아이콘만 남기는 식).
+       **넓은 화면(lg 이상)에서는 왼쪽 세로 사이드바다** — 하단에 그대로 두면 7칸이 1440px에 펼쳐져 한 칸이
+       200px짜리 막대가 되고, 세로 공간(약 80px)만 먹었다. 순서는 Layout이 `lg:order-first`로 옮긴다. */
+    <nav className="app-nav flex gap-0.5 border-t-4 border-primary/20 bg-white px-1 py-2 sm:gap-1 sm:px-2 lg:order-first lg:w-52 lg:shrink-0 lg:flex-col lg:gap-1 lg:overflow-y-auto lg:border-t-0 lg:border-r-4 lg:px-3 lg:py-4">
       {NAV_ITEMS.map((item) => {
         const isActive = isNavActive(pathname, item);
         const isDictionary = item.to === "/dictionary";
@@ -113,11 +115,11 @@ function BottomNav() {
                 navigate(item.to);
               }
             }}
-            className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[11px] whitespace-nowrap sm:text-sm ${
-              isActive ? "bg-primary/10 text-primary" : "text-gray-500"
+            className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[11px] whitespace-nowrap sm:text-sm lg:flex-none lg:flex-row lg:gap-3 lg:px-4 lg:py-3 lg:text-base ${
+              isActive ? "bg-primary/10 text-primary" : "text-gray-500 lg:hover:bg-gray-50"
             }`}
           >
-            <span className="text-xl leading-none font-ja">{item.icon}</span>
+            <span className="text-xl leading-none font-ja lg:w-7 lg:text-center">{item.icon}</span>
             <span>{item.label}</span>
           </Link>
         );
@@ -212,15 +214,19 @@ function Layout() {
           overflow-y-auto가 무용지물이 되고(자체 스크롤이 안 생김), 결과적으로
           페이지 전체가 스크롤되면서 하단 네비게이션이 화면 밖으로 밀려난다
           (flexbox의 잘 알려진 min-height:auto 기본값 문제). */}
-      <main className="min-h-0 flex-1 overflow-y-auto">
-        <AnimatedOutlet />
-      </main>
+      {/* 좁은 화면은 main 아래 하단 네비, 넓은 화면은 [사이드바 | main] 한 줄이다. 이 줄에도
+          min-h-0이 있어야 main의 내부 스크롤이 산다(위 주석과 같은 함정이 한 겹 더). */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <AnimatedOutlet />
+        </main>
 
-      {/* 항목이 7개라 375px 화면에서는 한 칸이 40px대까지 좁아진다 — 고정 최소 너비(min-w-16)를
-          주면 넘쳐서 마지막 항목이 잘리므로, flex-1 + min-w-0으로 화면을 n등분하고 라벨은
-          줄바꿈 없이(whitespace-nowrap) 작은 글씨로 넣는다. 항목을 더 늘릴 거라면 이 계산을
-          다시 할 것(라벨을 줄이거나 아이콘만 남기는 식). */}
-      <BottomNav />
+        {/* 항목이 7개라 375px 화면에서는 한 칸이 40px대까지 좁아진다 — 고정 최소 너비(min-w-16)를
+            주면 넘쳐서 마지막 항목이 잘리므로, flex-1 + min-w-0으로 화면을 n등분하고 라벨은
+            줄바꿈 없이(whitespace-nowrap) 작은 글씨로 넣는다. 항목을 더 늘릴 거라면 이 계산을
+            다시 할 것(라벨을 줄이거나 아이콘만 남기는 식). */}
+        <BottomNav />
+      </div>
 
       <Confetti />
       <BadgeWatcher />

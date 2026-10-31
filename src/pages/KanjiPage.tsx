@@ -240,7 +240,7 @@ function KanjiPage() {
             패널과 같은 계산으로 묶고(맨 위일 때 패널 위의 제목 줄까지 빼서 바닥이 안 잘리게), 넘치면
             상세 카드 안에서 스크롤한다. */}
         {isWide && panelEntry && (
-          <aside className="sticky top-6 flex max-h-[calc(var(--app-height,100svh)-16.5rem)] flex-col">
+          <aside className="sticky top-6 flex max-h-[calc(var(--app-height,100svh)-11.5rem)] flex-col">
             <div className="min-h-0 overflow-y-auto rounded-3xl border-2 border-primary/10 bg-white p-6 shadow-sm">
               <KanjiDetail entry={panelEntry} nav={nav} strokeSize={200} />
             </div>

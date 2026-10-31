@@ -535,7 +535,8 @@ function TeacherPage() {
             **지난 날짜에서도 감춘다** — 지난 대화는 읽기 전용이다(store의 `ask`가 오늘로
             돌려보내긴 하지만, 입력창을 남겨두면 그 날짜에 이어 쓰는 것처럼 보인다). */}
         {!isAnswering && viewingToday && (
-          <div className="border-t border-gray-100 p-3">
+          // 답변 말풍선과 같은 폭(max-w-3xl)으로 묶는다 — 넓은 화면에서 입력창만 1,000px 넘게 늘어났다.
+          <div className="border-t border-gray-100 p-3 *:max-w-3xl">
             {/* 방금 대화에서 건진 "기억해둘까요?" 확인. 입력창 바로 위라 자연스럽게 눈에 들어오고,
                 답변 중에는 입력 영역과 함께 사라진다. */}
             <MemoryFactPrompt />

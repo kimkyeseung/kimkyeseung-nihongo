@@ -202,7 +202,7 @@ function WritingPage() {
   // Prompt API 안내와 다른 화면을 보여준다.
   if (model.engine === "gemma4" && (model.status === "model-missing" || model.status === "unsupported")) {
     return (
-      <div>
+      <div className="mx-auto w-full max-w-3xl">
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">✏️ 작문 첨삭</h2>
         <GemmaEngineNotice reason={model.status} feature="작문 첨삭" />
       </div>
@@ -213,7 +213,7 @@ function WritingPage() {
   // 이걸 빼먹으면 화면은 멀쩡한데 보내는 순간 실패한다 — aiCapability.ts 주석 참고.
   if (model.status === "unsupported" || model.status === "unavailable") {
     return (
-      <div>
+      <div className="mx-auto w-full max-w-3xl">
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">✏️ 작문 첨삭</h2>
         <PromptApiUnsupportedNotice feature="작문 첨삭" />
       </div>
@@ -221,7 +221,7 @@ function WritingPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
       <div className="flex flex-wrap gap-2">
         <OptionChip
           label="한자 변환 제안"

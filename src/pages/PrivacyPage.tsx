@@ -27,7 +27,7 @@ function ExternalLink({ href, children }: { href: string; children: ReactNode })
 
 function PrivacyPage() {
   return (
-    <div className="p-4 sm:p-6">
+    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
       <Link to="/about" className="text-info">
         ← 정보로 돌아가기
       </Link>

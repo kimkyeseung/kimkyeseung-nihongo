@@ -146,7 +146,7 @@ function DictionaryPage() {
   );
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
       <h2 className="text-xl text-primary">📖 사전</h2>
 
       <div className="relative mt-4">

@@ -26,7 +26,7 @@ function PwaUpdatePrompt() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 16 }}
-          className="fixed inset-x-4 bottom-20 z-50 flex items-center justify-between gap-3 rounded-2xl border-2 border-gray-100 bg-white px-4 py-3 shadow-lg sm:inset-x-auto sm:right-6 sm:w-80"
+          className="fixed inset-x-4 bottom-20 z-50 lg:bottom-6 flex items-center justify-between gap-3 rounded-2xl border-2 border-gray-100 bg-white px-4 py-3 shadow-lg sm:inset-x-auto sm:right-6 sm:w-80"
         >
           <p className="text-sm text-gray-700">새 버전이 있어요. 새로고침할까요?</p>
           <div className="flex shrink-0 gap-2">

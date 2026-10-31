@@ -77,7 +77,7 @@ function MemoryPage() {
   }
 
   return (
-    <div className="p-4 pb-10 sm:p-6">
+    <div className="mx-auto w-full max-w-3xl p-4 pb-10 sm:p-6">
       <Link to="/teacher" className="text-info">
         ← 선생님으로
       </Link>

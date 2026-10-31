@@ -328,7 +328,7 @@ function WordDetailPage() {
 
   if (!entry) {
     return (
-      <div className="p-6">
+      <div className="mx-auto w-full max-w-3xl p-6">
         <Link to={origin.to} className="text-info">
           {backLabel(origin)}
         </Link>
@@ -338,7 +338,7 @@ function WordDetailPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="mx-auto w-full max-w-3xl p-6">
       <Link to={origin.to} className="text-info">
         {backLabel(origin)}
       </Link>

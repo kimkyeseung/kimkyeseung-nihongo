@@ -48,7 +48,7 @@ function AboutPage() {
   const theme = useAppearance((s) => s.theme);
   const setTheme = useAppearance((s) => s.setTheme);
   return (
-    <div className="p-4 sm:p-6">
+    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
       <Link to="/gojuon" className="text-info">
         ← 돌아가기
       </Link>

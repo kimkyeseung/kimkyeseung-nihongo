@@ -41,7 +41,7 @@ function ScenarioPicker({
   const nameInput = useScriptInput<HTMLInputElement>(nameScript, name, setName, toggleNameScript);
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm text-gray-400">이름 (선택)</h3>
         <InputModeToggle value={nameScript} onChange={setNameScript} />
@@ -149,7 +149,7 @@ function ConversationPage() {
   // Prompt API 안내와 다른 화면을 보여준다.
   if (chatEngine === "gemma4" && (chatStatus === "model-missing" || chatStatus === "unsupported")) {
     return (
-      <div>
+      <div className="mx-auto w-full max-w-3xl">
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
         <GemmaEngineNotice reason={chatStatus} feature="회화 연습" />
       </div>
@@ -160,7 +160,7 @@ function ConversationPage() {
   // 이걸 빼먹으면 화면은 멀쩡한데 보내는 순간 실패한다 — aiCapability.ts 주석 참고.
   if (chatStatus === "unsupported" || chatStatus === "unavailable") {
     return (
-      <div>
+      <div className="mx-auto w-full max-w-3xl">
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
         <PromptApiUnsupportedNotice feature="회화 연습" />
       </div>
@@ -169,7 +169,7 @@ function ConversationPage() {
 
   if (!scenario || !level) {
     return (
-      <div>
+      <div className="mx-auto w-full max-w-3xl">
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">💬 회화 연습</h2>
         <ScenarioPicker onStart={startConversation} />
       </div>
@@ -177,7 +177,7 @@ function ConversationPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="mx-auto w-full max-w-3xl flex h-full flex-col">
       <div className="flex items-center justify-between gap-2 border-b border-gray-100 p-3">
         <div className="flex items-center gap-2 text-sm">
           <span className="rounded-full bg-primary/10 px-2 py-1 text-primary">

@@ -126,7 +126,7 @@ function PromptApiDiagnosticsPage() {
   const apiExists = result?.steps.some((s) => s.id === "api" && s.status === "pass") ?? false;
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
       {/* 어디서 들어왔든 오십음도로 보내버리지 않는다(예전엔 /gojuon 하드코딩이었다). */}
       <button onClick={() => navigate(-1)} className="text-info">
         ← 돌아가기

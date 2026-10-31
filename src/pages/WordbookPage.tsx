@@ -476,7 +476,7 @@ function WordbookPage() {
   const [drillSession, setDrillSession] = useState(0);
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl text-primary">🗂️ 단어장</h2>
         {/* 복습/목록은 단어 칸과 문장 칸이 같은 값을 쓴다 — 탭을 바꿔도 하던 방식 그대로. */}

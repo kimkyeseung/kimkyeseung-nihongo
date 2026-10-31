@@ -133,7 +133,7 @@ function CurriculumPage() {
 
   if (!startLevel) {
     return (
-      <div className="p-4 sm:p-6">
+      <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
         <Link to="/" className="text-info">
           ← 대문으로
         </Link>
@@ -159,7 +159,7 @@ function CurriculumPage() {
   }
 
   return (
-    <div className="p-4 pb-10 sm:p-6">
+    <div className="mx-auto w-full max-w-3xl p-4 pb-10 sm:p-6">
       <Link to="/" className="text-info">
         ← 대문으로
       </Link>

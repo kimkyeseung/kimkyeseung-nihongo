@@ -166,12 +166,12 @@ function GojuonPage() {
         </div>
 
         {/* 표가 길어도(탁음·요음) 패널은 따라 내려온다. 스크롤 컨테이너는 Layout의 <main>이다.
-            패널 높이는 <main>(앱 높이 − 헤더·하단 네비 약 148px)에서 맨 위일 때 패널 위에 놓인 제목 줄·여백
+            패널 높이는 <main>(넓은 화면에선 네비가 왼쪽 사이드바라 앱 높이 − 헤더 약 72px)에서 맨 위일 때 패널 위에 놓인 제목 줄·여백
             (약 88px)과 아래 여백을 뺀 만큼으로 묶는다(붙기 전에도 바닥이 안 잘리게) —
             안 묶으면 대표 단어 다섯 개에 패널이 화면보다 길어져(800px 창에서 810px) 아래의 진도·게임
             카드가 잘린 채 붙어 있었다. 넘치면 상세 카드만 안에서 스크롤한다. */}
         {isWide && panelCell && (
-          <aside className="sticky top-6 flex max-h-[calc(var(--app-height,100svh)-16.5rem)] flex-col gap-4">
+          <aside className="sticky top-6 flex max-h-[calc(var(--app-height,100svh)-11.5rem)] flex-col gap-4">
             <div className="min-h-0 overflow-y-auto rounded-3xl border-2 border-primary/10 bg-white p-6 shadow-sm">
               <KanaDetail key={kanaOf(panelCell)} cell={panelCell} mode={mode} />
             </div>
