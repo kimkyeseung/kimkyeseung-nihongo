@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import ClickableSentence from "./ClickableSentence";
 import SentenceActions from "./SentenceActions";
 import SentenceGrammar from "./SentenceGrammar";
+import { REVIEW_KEYS_HINT, useReviewKeys } from "../hooks/useReviewKeys";
 import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import { buildReviewQueue, formatDueIn, isDue, nextDueAt, planReviewOutcome } from "../lib/srs";
 import { sentenceSrs } from "../lib/sentenceReview";
@@ -75,6 +76,16 @@ function SentenceReviewDeck() {
     setQueue(queue.filter((q) => q !== id));
     if (queue.length <= 1) setNow(Date.now());
   }
+
+  const currentId = queue[0] ?? null;
+  useReviewKeys({
+    enabled: currentId !== null,
+    revealed: revealedId === currentId,
+    // 문장은 "뜻 보기" 전에는 답 버튼이 없다 — 키도 같은 규칙.
+    answerBeforeReveal: false,
+    onReveal: () => setRevealedId(currentId),
+    onAnswer: (know) => currentId && answer(currentId, know),
+  });
 
   if (items.length === 0) {
     return (
@@ -172,6 +183,7 @@ function SentenceReviewDeck() {
           </button>
         )}
       </div>
+      <p className="mt-3 hidden text-xs text-gray-300 lg:block">{REVIEW_KEYS_HINT}</p>
 
       {dialogs}
     </div>

@@ -7,8 +7,10 @@ import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent, useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 import { reviewTargetCount, type ReviewTargets } from "../lib/weakReview";
 import { useConfettiStore } from "../stores/confettiStore";
-import { findWordById } from "../lib/dictionary";
+import { displayMeaning, findWordById, levelLabel } from "../lib/dictionary";
 import { useWordLink } from "../hooks/useWordLink";
+import { useMediaQuery, WIDE_SCREEN_QUERY } from "../hooks/useMediaQuery";
+import { REVIEW_KEYS_HINT, useReviewKeys } from "../hooks/useReviewKeys";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { buildReviewQueue, formatDueIn, isDue, nextDueAt, planReviewOutcome } from "../lib/srs";
 import SegmentedTabs from "../components/SegmentedTabs";
@@ -218,6 +220,16 @@ function ReviewDeck({ group, entries }: { group: string; entries: WordbookEntry[
     [queue]
   );
 
+  // 키보드로도 넘긴다(useReviewKeys). 단어 카드는 앞면에서도 스와이프되므로 뒤집기 전 ←/→도 받는다.
+  const currentId = queue[0] ?? null;
+  useReviewKeys({
+    enabled: currentId !== null,
+    revealed: revealedId === currentId,
+    answerBeforeReveal: true,
+    onReveal: () => setRevealedId(currentId),
+    onAnswer: (know) => currentId && handleSwipe(currentId, know ? "right" : "left"),
+  });
+
   if (entries.length === 0) {
     return (
       <p className="mt-10 text-center text-gray-400">
@@ -324,6 +336,7 @@ function ReviewDeck({ group, entries }: { group: string; entries: WordbookEntry[
       >
         이 단어 삭제
       </button>
+      <p className="mt-2 hidden text-xs text-gray-300 lg:block">{REVIEW_KEYS_HINT}</p>
 
       {undoBar}
     </div>
@@ -334,12 +347,27 @@ function WordList({ entries }: { entries: WordbookEntry[] }) {
   const wordLink = useWordLink();
   const groups = useWordbookStore((s) => s.groups);
   const removeWord = useWordbookStore((s) => s.removeWord);
-  const setWordGroups = useWordbookStore((s) => s.setWordGroups);
   const showFurigana = useWordbookView((s) => s.showFurigana);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // 넓은 화면은 표다 — 카드 목록 그대로면 한 줄에 단어 하나가 900px을 차지하고 뜻도 안 보였다.
+  // 뜻·급수·다음 복습을 한눈에 훑어 "뭘 아직 모르지?"를 가려내는 화면이 된다.
+  const isWide = useMediaQuery(WIDE_SCREEN_QUERY);
+  // "다음 복습" 기준 시각 — 렌더마다 Date.now()를 부르지 않게 목록을 열 때 한 번 잡는다.
+  const [now] = useState(() => Date.now());
 
   if (entries.length === 0) {
     return <p className="mt-10 text-center text-gray-400">단어장이 비어있습니다.</p>;
+  }
+
+  if (isWide) {
+    return (
+      <WordTable
+        entries={entries}
+        now={now}
+        expandedId={expandedId}
+        onToggleExpand={(id) => setExpandedId(expandedId === id ? null : id)}
+      />
+    );
   }
 
   return (
@@ -387,39 +415,132 @@ function WordList({ entries }: { entries: WordbookEntry[] }) {
               </div>
             )}
 
-            {isExpanded && (
-              <div className="mt-2 flex flex-wrap gap-1 border-t border-gray-100 pt-2">
-                {groups.length === 0 ? (
-                  <p className="text-xs text-gray-300">그룹이 없습니다. 위에서 그룹을 먼저 만들어보세요.</p>
-                ) : (
-                  groups.map((g) => {
-                    const active = entry.groupIds.includes(g.id);
-                    return (
-                      <button
-                        key={g.id}
-                        onClick={() =>
-                          setWordGroups(
-                            entry.wordId,
-                            active
-                              ? entry.groupIds.filter((id) => id !== g.id)
-                              : [...entry.groupIds, g.id]
-                          )
-                        }
-                        className={`rounded-full px-2 py-0.5 text-xs ${
-                          active ? "bg-primary text-white" : "bg-gray-100 text-gray-500"
-                        }`}
-                      >
-                        {g.name}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            )}
+            {isExpanded && <GroupPicker entry={entry} />}
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** 단어 하나의 그룹 넣고 빼기(목록의 "그룹" 버튼을 누르면 펼쳐진다). 카드 목록과 표가 같이 쓴다. */
+function GroupPicker({ entry }: { entry: WordbookEntry }) {
+  const groups = useWordbookStore((s) => s.groups);
+  const setWordGroups = useWordbookStore((s) => s.setWordGroups);
+  return (
+    <div className="mt-2 flex flex-wrap gap-1 border-t border-gray-100 pt-2">
+      {groups.length === 0 ? (
+        <p className="text-xs text-gray-300">그룹이 없습니다. 위에서 그룹을 먼저 만들어보세요.</p>
+      ) : (
+        groups.map((g) => {
+          const active = entry.groupIds.includes(g.id);
+          return (
+            <button
+              key={g.id}
+              onClick={() =>
+                setWordGroups(
+                  entry.wordId,
+                  active ? entry.groupIds.filter((id) => id !== g.id) : [...entry.groupIds, g.id]
+                )
+              }
+              className={`rounded-full px-2 py-0.5 text-xs ${
+                active ? "bg-primary text-white" : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {g.name}
+            </button>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+/** 넓은 화면의 단어 목록 — 단어 · 뜻 · 급수 · 다음 복습 · 그룹/삭제. */
+function WordTable({
+  entries,
+  now,
+  expandedId,
+  onToggleExpand,
+}: {
+  entries: WordbookEntry[];
+  now: number;
+  expandedId: string | null;
+  onToggleExpand: (wordId: string) => void;
+}) {
+  const wordLink = useWordLink();
+  const groups = useWordbookStore((s) => s.groups);
+  const removeWord = useWordbookStore((s) => s.removeWord);
+  const showFurigana = useWordbookView((s) => s.showFurigana);
+  const columns = "grid grid-cols-[minmax(9rem,14rem)_minmax(0,1fr)_4.5rem_5.5rem_auto] items-center gap-4";
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border-2 border-gray-100 bg-white">
+      <div className={`${columns} border-b-2 border-gray-100 bg-gray-50 px-4 py-2 text-xs text-gray-400`}>
+        <span>단어</span>
+        <span>뜻</span>
+        <span>급수</span>
+        <span>다음 복습</span>
+        <span className="w-[6.5rem]" />
+      </div>
+      <ul>
+        {entries.map((entry) => {
+          const word = findWordById(entry.wordId);
+          if (!word) return null;
+          const entryGroups = entry.groupIds
+            .map((id) => groups.find((g) => g.id === id))
+            .filter((g): g is NonNullable<typeof g> => Boolean(g));
+          return (
+            <li key={entry.wordId} className="border-b border-gray-100 px-4 py-2.5 last:border-b-0 hover:bg-gray-50">
+              <div className={columns}>
+                <Link {...wordLink(word.id)} className="min-w-0">
+                  <span className="font-ja text-lg">
+                    {entry.mastered && <span className="mr-1 text-primary">✓</span>}
+                    {word.word}
+                  </span>
+                  {showFurigana && word.reading !== word.word && (
+                    <span className="ml-2 font-ja text-sm text-gray-400">{word.reading}</span>
+                  )}
+                </Link>
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-gray-600">{displayMeaning(word)}</p>
+                  {entryGroups.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {entryGroups.map((g) => (
+                        <span key={g.id} className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                          {g.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span className="text-xs text-gray-500">{levelLabel(word.jlptLevel)}</span>
+                <span className={`text-xs ${isDue(entry.srs, now) ? "text-warning" : "text-gray-400"}`}>
+                  {/* 모양이 어긋난 옛 값(백업 등)이면 "NaN일 뒤" 대신 비워 둔다. */}
+                  {Number.isFinite(entry.srs?.dueAt) ? formatDueIn(entry.srs.dueAt, now) : "—"}
+                </span>
+                <div className="flex w-[6.5rem] justify-end gap-1">
+                  <button
+                    onClick={() => onToggleExpand(entry.wordId)}
+                    className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-500"
+                  >
+                    그룹
+                  </button>
+                  <button
+                    onClick={() => removeWord(entry.wordId)}
+                    className={dangerChipClass}
+                    aria-label="단어장에서 삭제"
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
+              {expandedId === entry.wordId && <GroupPicker entry={entry} />}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -475,75 +596,116 @@ function WordbookPage() {
   // 열 때마다 새로 섞도록 리마운트 키를 올린다(한자 퀴즈의 quizSessionId와 같은 방식).
   const [drillSession, setDrillSession] = useState(0);
 
+  // **넓은 화면(lg 이상)은 [왼쪽 도구 칸 | 복습·목록] 2단이다.** 좁은 화면 그대로 늘렸더니 단어/문장 탭이
+  // 1,000px 넘는 알약이 되고 복습 카드는 가운데 작게 떠 있었다. 탭·그룹·연습 버튼을 왼쪽에 모으고
+  // 오른쪽은 카드나 표만 둔다. 좁은 화면의 순서·모양은 예전 그대로다.
+  const isWide = useMediaQuery(WIDE_SCREEN_QUERY);
+
+  const modeTabs = (
+    // 복습/목록은 단어 칸과 문장 칸이 같은 값을 쓴다 — 탭을 바꿔도 하던 방식 그대로.
+    <SegmentedTabs
+      fill={isWide}
+      options={[
+        { key: "review", label: "복습" },
+        { key: "list", label: "목록" },
+      ]}
+      value={mode}
+      onChange={setMode}
+    />
+  );
+
+  const tabTabs = (
+    <SegmentedTabs
+      className={isWide ? "" : "mt-4"}
+      fill
+      options={[
+        { key: "word", label: "단어", hint: String(allEntries.length) },
+        { key: "sentence", label: "문장", hint: String(sentenceCount) },
+      ]}
+      value={tab}
+      onChange={setTab}
+    />
+  );
+
+  // 문장 칸의 ruby, 단어 목록의 읽기, 단어 복습 카드의 후리가나를 함께 켜고 끈다.
+  const furiganaToggle = (
+    <label className={`flex items-center gap-1 text-xs text-gray-500 ${isWide ? "" : "mt-3 justify-end"}`}>
+      <input type="checkbox" checked={showFurigana} onChange={(e) => setShowFurigana(e.target.checked)} />
+      후리가나 표시
+    </label>
+  );
+
+  const practiceButtons = (
+    <>
+      {weakCount > 0 && (
+        <button
+          onClick={() => setWeakSnapshot(reviewTargets)}
+          className="mt-3 w-full rounded-2xl border-2 border-warning/40 bg-white py-2 text-sm text-gray-700"
+        >
+          🔁 약한 것 모아 풀기 <span className="text-xs text-gray-400">한자·단어 {weakCount}개</span>
+        </button>
+      )}
+      {drillVerbs.length > 0 && (
+        <button
+          onClick={() => {
+            setDrillSession((n) => n + 1);
+            setDrillPool(drillVerbs);
+          }}
+          className="mt-3 w-full rounded-2xl border-2 border-primary/20 bg-white py-2 text-sm text-primary"
+        >
+          ✍️ 동사 활용 연습 <span className="text-xs text-gray-400">동사 {drillVerbs.length}개</span>
+        </button>
+      )}
+    </>
+  );
+
+  const content =
+    tab === "sentence" ? (
+      mode === "review" ? <SentenceReviewDeck /> : <SentencebookList />
+    ) : mode === "review" ? (
+      <ReviewDeck key={activeGroup} group={activeGroup} entries={filteredEntries} />
+    ) : (
+      <WordList entries={filteredEntries} />
+    );
+
   return (
-    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xl text-primary">🗂️ 단어장</h2>
-        {/* 복습/목록은 단어 칸과 문장 칸이 같은 값을 쓴다 — 탭을 바꿔도 하던 방식 그대로. */}
-        <SegmentedTabs
-          options={[
-            { key: "review", label: "복습" },
-            { key: "list", label: "목록" },
-          ]}
-          value={mode}
-          onChange={setMode}
-        />
-      </div>
-
-      <SegmentedTabs
-        className="mt-4"
-        fill
-        options={[
-          { key: "word", label: "단어", hint: String(allEntries.length) },
-          { key: "sentence", label: "문장", hint: String(sentenceCount) },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
-
-      {/* 문장 칸의 ruby, 단어 목록의 읽기, 단어 복습 카드의 후리가나를 함께 켜고 끈다. */}
-      <label className="mt-3 flex items-center justify-end gap-1 text-xs text-gray-500">
-        <input
-          type="checkbox"
-          checked={showFurigana}
-          onChange={(e) => setShowFurigana(e.target.checked)}
-        />
-        후리가나 표시
-      </label>
-
-      {tab === "sentence" ? (
-        mode === "review" ? <SentenceReviewDeck /> : <SentencebookList />
+    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:max-w-6xl lg:px-8">
+      {isWide ? (
+        <>
+          <h2 className="text-2xl text-primary">🗂️ 단어장</h2>
+          <div className="mt-4 grid grid-cols-[16rem_minmax(0,1fr)] items-start gap-8">
+            <aside className="sticky top-6 flex flex-col gap-3 rounded-3xl border-2 border-primary/10 bg-white p-4 shadow-sm">
+              {tabTabs}
+              {modeTabs}
+              {furiganaToggle}
+              {tab === "word" && (
+                <div className="border-t border-gray-100 pt-3">
+                  <p className="mb-2 text-xs text-gray-400">그룹</p>
+                  <GroupChips activeGroup={activeGroup} onSelect={setActiveGroup} />
+                  {practiceButtons}
+                </div>
+              )}
+            </aside>
+            <div className="min-w-0">{content}</div>
+          </div>
+        </>
       ) : (
         <>
-          <div className="mt-4">
-            <GroupChips activeGroup={activeGroup} onSelect={setActiveGroup} />
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-xl text-primary">🗂️ 단어장</h2>
+            {modeTabs}
           </div>
-
-          {weakCount > 0 && (
-            <button
-              onClick={() => setWeakSnapshot(reviewTargets)}
-              className="mt-3 w-full rounded-2xl border-2 border-warning/40 bg-white py-2 text-sm text-gray-700"
-            >
-              🔁 약한 것 모아 풀기 <span className="text-xs text-gray-400">한자·단어 {weakCount}개</span>
-            </button>
+          {tabTabs}
+          {furiganaToggle}
+          {tab === "word" && (
+            <>
+              <div className="mt-4">
+                <GroupChips activeGroup={activeGroup} onSelect={setActiveGroup} />
+              </div>
+              {practiceButtons}
+            </>
           )}
-          {drillVerbs.length > 0 && (
-            <button
-              onClick={() => {
-                setDrillSession((n) => n + 1);
-                setDrillPool(drillVerbs);
-              }}
-              className="mt-3 w-full rounded-2xl border-2 border-primary/20 bg-white py-2 text-sm text-primary"
-            >
-              ✍️ 동사 활용 연습 <span className="text-xs text-gray-400">동사 {drillVerbs.length}개</span>
-            </button>
-          )}
-
-          {mode === "review" ? (
-            <ReviewDeck key={activeGroup} group={activeGroup} entries={filteredEntries} />
-          ) : (
-            <WordList entries={filteredEntries} />
-          )}
+          {content}
         </>
       )}
 
