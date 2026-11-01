@@ -176,155 +176,190 @@ function ConversationPage() {
     );
   }
 
+  // 설정(후리가나·문법 교정·번역)은 좁은 화면에선 대화 위·입력창 옆에, 넓은 화면에선 오른쪽 패널에 있다.
+  // 같은 체크박스를 두 자리에 그리므로 한 벌로 만들어 둔다.
+  const settingToggles = (
+    <>
+      <label className="flex items-center gap-1">
+        <input type="checkbox" checked={showFurigana} onChange={(e) => setShowFurigana(e.target.checked)} />
+        후리가나 표시
+      </label>
+      <label className="flex items-center gap-1">
+        <input type="checkbox" checked={showCorrection} onChange={(e) => setShowCorrection(e.target.checked)} />
+        문법 교정 보기
+      </label>
+    </>
+  );
+
   return (
-    <div className="mx-auto w-full max-w-3xl flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-gray-100 p-3">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="rounded-full bg-primary/10 px-2 py-1 text-primary">
-            {scenario.emoji} {scenario.label}
-          </span>
-          <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-500">{level.label}</span>
+    // **넓은 화면(lg 이상)은 [대화 | 오른쪽 패널]이다.** 대화 폭은 읽기 좋은 너비(max-w-3xl)로 두고, 대화 위의
+    // 설정 줄 두 개와 입력창 옆 "번역"을 패널로 옮겨 대화가 화면 높이를 다 쓴다. 좁은 화면은 예전 그대로다.
+    <div className="mx-auto flex h-full w-full max-w-3xl lg:max-w-5xl lg:gap-6 lg:px-6">
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        <div className="flex items-center justify-between gap-2 border-b border-gray-100 p-3 lg:hidden">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="rounded-full bg-primary/10 px-2 py-1 text-primary">
+              {scenario.emoji} {scenario.label}
+            </span>
+            <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-500">{level.label}</span>
+          </div>
+          <button onClick={resetConversation} className="text-xs text-gray-400">
+            다시 선택
+          </button>
         </div>
-        <button onClick={resetConversation} className="text-xs text-gray-400">
-          다시 선택
-        </button>
-      </div>
 
-      <div className="flex items-center gap-4 border-b border-gray-100 px-3 py-2 text-xs text-gray-500">
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={showFurigana}
-            onChange={(e) => setShowFurigana(e.target.checked)}
-          />
-          후리가나 표시
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={showCorrection}
-            onChange={(e) => setShowCorrection(e.target.checked)}
-          />
-          문법 교정 보기
-        </label>
-      </div>
-
-      {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
-      {chatBusyLabel && (
-        <div className="p-3">
-          <LoadingMascot label={chatBusyLabel} />
+        <div className="flex items-center gap-4 border-b border-gray-100 px-3 py-2 text-xs text-gray-500 lg:hidden">
+          {settingToggles}
         </div>
-      )}
 
-      {chatDownloadProgress !== null && (
-        <div className="p-3 text-xs text-gray-400">
-          모델 다운로드 중... {Math.round(chatDownloadProgress * 100)}%
-          <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${chatDownloadProgress * 100}%` }}
-            />
+        {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
+        {chatBusyLabel && (
+          <div className="p-3">
+            <LoadingMascot label={chatBusyLabel} />
+          </div>
+        )}
+
+        {chatDownloadProgress !== null && (
+          <div className="p-3 text-xs text-gray-400">
+            모델 다운로드 중... {Math.round(chatDownloadProgress * 100)}%
+            <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${chatDownloadProgress * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-3">
+          {messages.length === 0 && (
+            <p className="mt-4 text-center text-sm text-gray-300">
+              일본어로 말을 걸어보세요! 🗻
+            </p>
+          )}
+          <div className="flex flex-col gap-3">
+            {messages.map((m) => (
+              <div key={m.id} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`max-w-[80%] rounded-2xl px-4 py-2 font-ja ${
+                    m.role === "user" ? "bg-primary text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {m.role === "assistant" && m.text === "" && isStreaming ? (
+                    <LoadingMascot />
+                  ) : m.role === "assistant" ? (
+                    <>
+                      <ClickableSentence
+                        text={m.text}
+                        showFurigana={showFurigana}
+                        {...sentenceHandlers}
+                      />
+                      <SentenceActions text={m.text} subject="상대 문장" translation={m.translation} />
+                      {/* 사전에 없는 것(문형)은 커리큘럼이 들고 있다 — 걸리는 게 없으면 안 그린다. */}
+                      <SentenceGrammar text={m.text} />
+                    </>
+                  ) : (
+                    <>
+                      {m.text}
+                      <SpeakButton
+                        text={m.text}
+                        label="내 문장 발음 듣기"
+                        tone="onPrimary"
+                        className="ml-1"
+                      />
+                    </>
+                  )}
+                </motion.div>
+                {m.role === "user" && (m.correction || m.correctionLoading) && (
+                  <p className="mt-1 max-w-[80%] rounded-xl bg-info/10 px-3 py-1 text-xs text-info">
+                    {m.correctionLoading ? "문법 확인 중..." : m.correction}
+                  </p>
+                )}
+                {/* 번역은 AI 대사에만 붙인다 — 내가 쓴 문장은 뜻을 이미 알고 쓴 것이다. */}
+                {m.role === "assistant" && showTranslation && (m.translation || m.translationLoading) && (
+                  <p className="mt-1 max-w-[80%] px-1 text-sm text-gray-500">
+                    {m.translationLoading ? "번역 중..." : m.translation}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
-      )}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-3">
-        {messages.length === 0 && (
-          <p className="mt-4 text-center text-sm text-gray-300">
-            일본어로 말을 걸어보세요! 🗻
-          </p>
-        )}
-        <div className="flex flex-col gap-3">
-          {messages.map((m) => (
-            <div key={m.id} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`max-w-[80%] rounded-2xl px-4 py-2 font-ja ${
-                  m.role === "user" ? "bg-primary text-white" : "bg-gray-100 text-gray-800"
-                }`}
-              >
-                {m.role === "assistant" && m.text === "" && isStreaming ? (
-                  <LoadingMascot />
-                ) : m.role === "assistant" ? (
-                  <>
-                    <ClickableSentence
-                      text={m.text}
-                      showFurigana={showFurigana}
-                      {...sentenceHandlers}
-                    />
-                    <SentenceActions text={m.text} subject="상대 문장" translation={m.translation} />
-                    {/* 사전에 없는 것(문형)은 커리큘럼이 들고 있다 — 걸리는 게 없으면 안 그린다. */}
-                    <SentenceGrammar text={m.text} />
-                  </>
-                ) : (
-                  <>
-                    {m.text}
-                    <SpeakButton
-                      text={m.text}
-                      label="내 문장 발음 듣기"
-                      tone="onPrimary"
-                      className="ml-1"
-                    />
-                  </>
-                )}
-              </motion.div>
-              {m.role === "user" && (m.correction || m.correctionLoading) && (
-                <p className="mt-1 max-w-[80%] rounded-xl bg-info/10 px-3 py-1 text-xs text-info">
-                  {m.correctionLoading ? "문법 확인 중..." : m.correction}
-                </p>
-              )}
-              {/* 번역은 AI 대사에만 붙인다 — 내가 쓴 문장은 뜻을 이미 알고 쓴 것이다. */}
-              {m.role === "assistant" && showTranslation && (m.translation || m.translationLoading) && (
-                <p className="mt-1 max-w-[80%] px-1 text-sm text-gray-500">
-                  {m.translationLoading ? "번역 중..." : m.translation}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex gap-2 border-t border-gray-100 p-3">
-        <div className="relative flex-1">
-          <input
-            ref={japaneseInput.ref}
-            defaultValue=""
-            onFocus={() => japaneseInput.setShowSuggestions(true)}
-            onBlur={() => setTimeout(() => japaneseInput.setShowSuggestions(false), 150)}
-            onKeyDown={handleKeyDown}
-            placeholder="日本語でメッセージを入力..."
-            className="w-full rounded-2xl border-2 border-gray-100 px-4 py-2 font-ja focus:border-primary/40 focus:outline-none"
-          />
-          {japaneseInput.showSuggestions && (
-            <JapaneseSuggestionList
-              suggestions={japaneseInput.suggestions}
-              activeIndex={japaneseInput.activeIndex}
-              onSelect={japaneseInput.selectSuggestion}
+        <div className="flex gap-2 border-t border-gray-100 p-3">
+          <div className="relative flex-1">
+            <input
+              ref={japaneseInput.ref}
+              defaultValue=""
+              onFocus={() => japaneseInput.setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => japaneseInput.setShowSuggestions(false), 150)}
+              onKeyDown={handleKeyDown}
+              placeholder="日本語でメッセージを入力..."
+              className="w-full rounded-2xl border-2 border-gray-100 px-4 py-2 font-ja focus:border-primary/40 focus:outline-none"
             />
-          )}
+            {japaneseInput.showSuggestions && (
+              <JapaneseSuggestionList
+                suggestions={japaneseInput.suggestions}
+                activeIndex={japaneseInput.activeIndex}
+                onSelect={japaneseInput.selectSuggestion}
+              />
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowTranslation(!showTranslation)}
+            aria-pressed={showTranslation}
+            title="AI 대사의 한국어 번역 보기"
+            className={`shrink-0 rounded-2xl border-2 px-3 py-2 text-sm font-bold lg:hidden ${
+              showTranslation
+                ? "border-info bg-info/10 text-info"
+                : "border-gray-100 bg-white text-gray-400"
+            }`}
+          >
+            번역
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={!japaneseInput.value.trim() || isStreaming}
+            className="rounded-2xl bg-primary px-5 py-2 font-bold text-white disabled:bg-gray-200"
+          >
+            전송
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowTranslation(!showTranslation)}
-          aria-pressed={showTranslation}
-          title="AI 대사의 한국어 번역 보기"
-          className={`shrink-0 rounded-2xl border-2 px-3 py-2 text-sm font-bold ${
-            showTranslation
-              ? "border-info bg-info/10 text-info"
-              : "border-gray-100 bg-white text-gray-400"
-          }`}
-        >
-          번역
-        </button>
-        <button
-          onClick={handleSend}
-          disabled={!japaneseInput.value.trim() || isStreaming}
-          className="rounded-2xl bg-primary px-5 py-2 font-bold text-white disabled:bg-gray-200"
-        >
-          전송
-        </button>
       </div>
+
+      <aside className="hidden w-64 shrink-0 flex-col gap-4 py-6 lg:flex">
+        <div className="rounded-3xl border-2 border-primary/10 bg-white p-4 shadow-sm">
+          <p className="text-xs text-gray-400">지금 대화</p>
+          <p className="mt-2 text-lg">
+            {scenario.emoji} {scenario.label}
+          </p>
+          <span className="mt-2 inline-block rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-500">
+            {level.label}
+          </span>
+          <button
+            onClick={resetConversation}
+            className="mt-4 w-full rounded-2xl bg-gray-100 py-2 text-sm text-gray-500 hover:bg-gray-50"
+          >
+            다시 선택
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-3xl border-2 border-primary/10 bg-white p-4 text-sm text-gray-600 shadow-sm">
+          <p className="text-xs text-gray-400">보기</p>
+          {settingToggles}
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={showTranslation} onChange={(e) => setShowTranslation(e.target.checked)} />
+            상대 대사 번역
+          </label>
+        </div>
+
+        <p className="px-2 text-xs leading-relaxed text-gray-400">
+          상대 문장의 단어를 누르면 뜻이, ⋮ 메뉴에서 발음·단어장에 담기·선생님에게 묻기가 나와요.
+        </p>
+      </aside>
 
       {sentenceDialogs}
     </div>

@@ -648,6 +648,10 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   판단에 쓰지 말 것 — 브랜드가 아니라 기능으로 판단해야 한다.
 
 ## 회화 페이지 구현 노트
+- **넓은 화면(lg 이상)은 [대화 | 오른쪽 패널]이다.** 대화 칸은 읽기 좋은 폭(max-w-3xl)이고, 좁은 화면에서 대화 위에
+  있던 설정 줄 두 개(시나리오·레벨·다시 선택 / 후리가나·문법 교정)와 입력창 옆 "번역" 버튼을 오른쪽 패널(w-64)로
+  옮겼다 — 대화가 화면 높이를 다 쓴다. 두 자리 모두 CSS(`lg:hidden` / `hidden lg:flex`)로 가르고, 같은 체크박스는
+  `settingToggles` 한 벌을 두 자리에 그린다. 좁은 화면은 예전 그대로다.
 - `useLanguageModel(systemPrompt)` 훅이 `window.LanguageModel` 전체를 감싼다: 마운트 시
   `isPromptApiSupported()`로 동기 가드 후 `availability()` 확인, 세션은 첫 프롬프트 때
   지연 생성, `systemPrompt`가 바뀌면(시나리오/레벨 변경) 이전 세션을 destroy. `monitor`의
