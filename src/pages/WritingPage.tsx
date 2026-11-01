@@ -221,197 +221,224 @@ function WritingPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
-      <div className="flex flex-wrap gap-2">
-        <OptionChip
-          label="한자 변환 제안"
-          active={showKanjiSuggestions}
-          onToggle={() => toggleOption("showKanjiSuggestions")}
-        />
-        <OptionChip
-          label="비슷한 문장"
-          active={showSimilarSentences}
-          onToggle={() => toggleOption("showSimilarSentences")}
-        />
-        <OptionChip
-          label="응용 표현"
-          active={showAppliedExpressions}
-          onToggle={() => toggleOption("showAppliedExpressions")}
-        />
-        <OptionChip
-          label="더 정중한 표현"
-          active={showMorePolite}
-          onToggle={() => toggleOption("showMorePolite")}
-        />
-        <OptionChip
-          label="더 친근한 표현"
-          active={showMoreCasual}
-          onToggle={() => toggleOption("showMoreCasual")}
-        />
-      </div>
-
-      <h2 className="mt-4 text-xl text-primary">✏️ 작문 첨삭</h2>
+    // **넓은 화면(lg 이상)은 [쓰기 | 결과] 2단이다.** 한 줄로 늘어놓았더니 입력창이 1,000px 넘게 늘어나고,
+    // 결과가 길면 쓴 문장이 화면 위로 사라져 원문과 수정문을 오가며 볼 수 없었다. 왼쪽(쓰기)은 붙박이.
+    // 제목은 옵션 칩 위로 올렸다 — 예전엔 칩이 제목보다 먼저 나와 무슨 화면인지 알기 전에 옵션부터 보였다.
+    <div className="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:max-w-6xl lg:px-8">
+      <h2 className="text-xl text-primary lg:text-2xl">✏️ 작문 첨삭</h2>
       <p className="mt-1 text-sm text-gray-400">일본어 문장을 쓰면 문법과 표현을 첨삭해드려요.</p>
 
-      <div className="relative mt-4">
-        <textarea
-          ref={japaneseInput.ref}
-          defaultValue=""
-          onFocus={() => japaneseInput.setShowSuggestions(true)}
-          onBlur={() => setTimeout(() => japaneseInput.setShowSuggestions(false), 150)}
-          onKeyDown={(e) => japaneseInput.handleSuggestionKeyDown(e)}
-          placeholder="ここに日本語で文章を書いてください..."
-          rows={4}
-          className="w-full resize-none rounded-2xl border-2 border-gray-100 p-3 font-ja text-lg focus:border-primary/40 focus:outline-none"
-        />
-        {japaneseInput.showSuggestions && (
-          <JapaneseSuggestionList
-            suggestions={japaneseInput.suggestions}
-            activeIndex={japaneseInput.activeIndex}
-            onSelect={japaneseInput.selectSuggestion}
-          />
-        )}
-      </div>
-
-      {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
-      {model.busyLabel && (
-        <div className="mt-2">
-          <LoadingMascot label={model.busyLabel} />
-        </div>
-      )}
-
-      {model.downloadProgress !== null && (
-        <div className="mt-2 text-xs text-gray-400">
-          모델 다운로드 중... {Math.round(model.downloadProgress * 100)}%
-          <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${model.downloadProgress * 100}%` }}
+      <div className="lg:mt-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">
+        <div className="lg:sticky lg:top-6">
+          <div className="mt-4 flex flex-wrap gap-2 lg:mt-0">
+            <OptionChip
+              label="한자 변환 제안"
+              active={showKanjiSuggestions}
+              onToggle={() => toggleOption("showKanjiSuggestions")}
+            />
+            <OptionChip
+              label="비슷한 문장"
+              active={showSimilarSentences}
+              onToggle={() => toggleOption("showSimilarSentences")}
+            />
+            <OptionChip
+              label="응용 표현"
+              active={showAppliedExpressions}
+              onToggle={() => toggleOption("showAppliedExpressions")}
+            />
+            <OptionChip
+              label="더 정중한 표현"
+              active={showMorePolite}
+              onToggle={() => toggleOption("showMorePolite")}
+            />
+            <OptionChip
+              label="더 친근한 표현"
+              active={showMoreCasual}
+              onToggle={() => toggleOption("showMoreCasual")}
             />
           </div>
-        </div>
-      )}
 
-      <div className="mt-3 flex gap-2">
-        <button
-          onClick={handleSubmit}
-          disabled={!japaneseInput.value.trim() || isLoading}
-          className="btn-press flex-1 rounded-2xl bg-primary py-3 font-bold text-white disabled:bg-gray-200"
-          style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
-        >
-          {isLoading ? "첨삭 중..." : "첨삭받기"}
-        </button>
-        {submittedText && (
-          <button onClick={handleReset} className="rounded-2xl bg-gray-100 px-4 py-3 text-gray-500">
-            새 문장
-          </button>
-        )}
-      </div>
-
-      {isLoading && (
-        <div className="mt-4">
-          <LoadingMascot label="첨삭 중..." />
-        </div>
-      )}
-
-      {result && (
-        <div
-          className={`mt-6 rounded-2xl border-2 border-gray-100 bg-white p-4 ${shake ? "animate-shake" : ""}`}
-        >
-          {result.formality && (
-            <span className="rounded-full bg-info/10 px-3 py-1 text-xs text-info">{result.formality}</span>
-          )}
-
-          <div className="mt-3">
-            <WritingDiff original={submittedText ?? ""} corrected={result.corrected} />
-            {scriptReverted && (
-              <p className="mt-2 text-xs text-gray-400">
-                ‘한자 변환 제안’이 꺼져 있어, 한자로 바뀐 표기는 원문 그대로 되돌렸어요.
-              </p>
+          <div className="relative mt-4">
+            <textarea
+              ref={japaneseInput.ref}
+              defaultValue=""
+              onFocus={() => japaneseInput.setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => japaneseInput.setShowSuggestions(false), 150)}
+              onKeyDown={(e) => {
+                // Ctrl/⌘+Enter로 바로 첨삭받기 — 그냥 Enter는 줄바꿈·자동완성 고르기 몫이라 건드리지 않는다.
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  japaneseInput.setShowSuggestions(false);
+                  void handleSubmit();
+                  return;
+                }
+                japaneseInput.handleSuggestionKeyDown(e);
+              }}
+              placeholder="ここに日本語で文章を書いてください..."
+              rows={4}
+              className="w-full resize-none rounded-2xl border-2 border-gray-100 p-3 font-ja text-lg focus:border-primary/40 focus:outline-none lg:min-h-56"
+            />
+            {japaneseInput.showSuggestions && (
+              <JapaneseSuggestionList
+                suggestions={japaneseInput.suggestions}
+                activeIndex={japaneseInput.activeIndex}
+                onSelect={japaneseInput.selectSuggestion}
+              />
             )}
           </div>
 
-          {result.explanation && (
-            <p className="mt-4 whitespace-pre-wrap rounded-xl bg-gray-50 p-3 text-sm text-gray-600">
-              {result.explanation}
-            </p>
-          )}
-
-          {result.grammarPoints.length > 0 && (
-            <div className="mt-3 rounded-xl bg-info/5 p-3">
-              <p className="text-xs font-bold text-info">💡 문법 포인트</p>
-              <ul className="mt-2 flex flex-col gap-1.5">
-                {result.grammarPoints.map((point, i) => (
-                  <li key={i} className="font-ja text-sm text-gray-600">
-                    {point}
-                  </li>
-                ))}
-              </ul>
+          {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
+          {model.busyLabel && (
+            <div className="mt-2">
+              <LoadingMascot label={model.busyLabel} />
             </div>
           )}
 
-          {result.similarSentences.length > 0 && (
-            <div className="mt-3 rounded-xl bg-primary/5 p-3">
-              <p className="text-xs font-bold text-primary">📚 비슷한 문장</p>
-              <ul className="mt-2 flex flex-col gap-1.5">
-                {result.similarSentences.map((sentence, i) => (
-                  <li key={i} className="font-ja text-sm text-gray-600">
-                    {sentence}
-                    <SpeakButton text={sentence} label="비슷한 문장 발음 듣기" className="ml-1" />
-                  </li>
-                ))}
-              </ul>
+          {model.downloadProgress !== null && (
+            <div className="mt-2 text-xs text-gray-400">
+              모델 다운로드 중... {Math.round(model.downloadProgress * 100)}%
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${model.downloadProgress * 100}%` }}
+                />
+              </div>
             </div>
           )}
 
-          {result.appliedExpressions.length > 0 && (
-            <div className="mt-3 rounded-xl bg-accent/5 p-3">
-              <p className="text-xs font-bold text-accent">🔧 응용 표현</p>
-              <ul className="mt-2 flex flex-col gap-1.5">
-                {result.appliedExpressions.map((expr, i) => (
-                  <li key={i} className="font-ja text-sm text-gray-600">
-                    {expr}
-                    <SpeakButton text={expr} label="응용 표현 발음 듣기" className="ml-1" />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {result.morePolite && (
-            <div className="mt-3 rounded-xl bg-gray-50 p-3">
-              <p className="text-xs font-bold text-gray-500">🎩 더 정중한 표현</p>
-              <p className="mt-2 font-ja text-sm text-gray-600">
-                {result.morePolite}
-                <SpeakButton text={result.morePolite} label="더 정중한 표현 발음 듣기" className="ml-1" />
-              </p>
-            </div>
-          )}
-
-          {result.moreCasual && (
-            <div className="mt-3 rounded-xl bg-gray-50 p-3">
-              <p className="text-xs font-bold text-gray-500">😊 더 친근한 표현</p>
-              <p className="mt-2 font-ja text-sm text-gray-600">
-                {result.moreCasual}
-                <SpeakButton text={result.moreCasual} label="더 친근한 표현 발음 듣기" className="ml-1" />
-              </p>
-            </div>
-          )}
-
-          {/* 첨삭은 diff·표기 보정이 붙은 고정 형식 답이라 여기서 더 캐물을 수 없다 — 왜
-              이렇게 고쳐야 하는지는 자유 대화가 되는 선생님 페이지로 넘긴다(원문·수정문을
-              질문에 실어 보내 맥락을 잃지 않게 한다). */}
-          <button
-            onClick={() => {
-              requestQuestion(buildWritingCorrectionQuestion(submittedText ?? "", result.corrected));
-              navigate("/teacher");
-            }}
-            className="btn-press mt-4 w-full rounded-2xl bg-info/10 py-3 text-sm font-bold text-info"
-          >
-            🧑‍🏫 선생님에게 더 물어보기
-          </button>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={handleSubmit}
+              disabled={!japaneseInput.value.trim() || isLoading}
+              className="btn-press flex-1 rounded-2xl bg-primary py-3 font-bold text-white disabled:bg-gray-200"
+              style={{ "--btn-shadow": "#3d9401" } as React.CSSProperties}
+            >
+              {isLoading ? "첨삭 중..." : "첨삭받기"}
+            </button>
+            {submittedText && (
+              <button onClick={handleReset} className="rounded-2xl bg-gray-100 px-4 py-3 text-gray-500">
+                새 문장
+              </button>
+            )}
+          </div>
+          <p className="mt-2 hidden text-center text-xs text-gray-300 lg:block">Ctrl(⌘) + Enter로 첨삭받기</p>
         </div>
-      )}
+
+        <div className="min-w-0">
+          {isLoading && (
+            <div className="mt-4 lg:mt-0">
+              <LoadingMascot label="첨삭 중..." />
+            </div>
+          )}
+
+          {/* 넓은 화면의 오른쪽 칸이 비어 있으면 어디에 결과가 나오는지 모른다. */}
+          {!result && !isLoading && (
+            <div className="hidden flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-100 py-20 text-center text-gray-300 lg:flex">
+              <p className="text-4xl">✏️</p>
+              <p className="mt-3 text-sm">첨삭 결과가 여기에 나와요.</p>
+            </div>
+          )}
+
+          {result && (
+            <div
+              className={`mt-6 lg:mt-0 rounded-2xl border-2 border-gray-100 bg-white p-4 ${shake ? "animate-shake" : ""}`}
+            >
+              {result.formality && (
+                <span className="rounded-full bg-info/10 px-3 py-1 text-xs text-info">{result.formality}</span>
+              )}
+
+              <div className="mt-3">
+                <WritingDiff original={submittedText ?? ""} corrected={result.corrected} />
+                {scriptReverted && (
+                  <p className="mt-2 text-xs text-gray-400">
+                    ‘한자 변환 제안’이 꺼져 있어, 한자로 바뀐 표기는 원문 그대로 되돌렸어요.
+                  </p>
+                )}
+              </div>
+
+              {result.explanation && (
+                <p className="mt-4 whitespace-pre-wrap rounded-xl bg-gray-50 p-3 text-sm text-gray-600">
+                  {result.explanation}
+                </p>
+              )}
+
+              {result.grammarPoints.length > 0 && (
+                <div className="mt-3 rounded-xl bg-info/5 p-3">
+                  <p className="text-xs font-bold text-info">💡 문법 포인트</p>
+                  <ul className="mt-2 flex flex-col gap-1.5">
+                    {result.grammarPoints.map((point, i) => (
+                      <li key={i} className="font-ja text-sm text-gray-600">
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {result.similarSentences.length > 0 && (
+                <div className="mt-3 rounded-xl bg-primary/5 p-3">
+                  <p className="text-xs font-bold text-primary">📚 비슷한 문장</p>
+                  <ul className="mt-2 flex flex-col gap-1.5">
+                    {result.similarSentences.map((sentence, i) => (
+                      <li key={i} className="font-ja text-sm text-gray-600">
+                        {sentence}
+                        <SpeakButton text={sentence} label="비슷한 문장 발음 듣기" className="ml-1" />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {result.appliedExpressions.length > 0 && (
+                <div className="mt-3 rounded-xl bg-accent/5 p-3">
+                  <p className="text-xs font-bold text-accent">🔧 응용 표현</p>
+                  <ul className="mt-2 flex flex-col gap-1.5">
+                    {result.appliedExpressions.map((expr, i) => (
+                      <li key={i} className="font-ja text-sm text-gray-600">
+                        {expr}
+                        <SpeakButton text={expr} label="응용 표현 발음 듣기" className="ml-1" />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {result.morePolite && (
+                <div className="mt-3 rounded-xl bg-gray-50 p-3">
+                  <p className="text-xs font-bold text-gray-500">🎩 더 정중한 표현</p>
+                  <p className="mt-2 font-ja text-sm text-gray-600">
+                    {result.morePolite}
+                    <SpeakButton text={result.morePolite} label="더 정중한 표현 발음 듣기" className="ml-1" />
+                  </p>
+                </div>
+              )}
+
+              {result.moreCasual && (
+                <div className="mt-3 rounded-xl bg-gray-50 p-3">
+                  <p className="text-xs font-bold text-gray-500">😊 더 친근한 표현</p>
+                  <p className="mt-2 font-ja text-sm text-gray-600">
+                    {result.moreCasual}
+                    <SpeakButton text={result.moreCasual} label="더 친근한 표현 발음 듣기" className="ml-1" />
+                  </p>
+                </div>
+              )}
+
+              {/* 첨삭은 diff·표기 보정이 붙은 고정 형식 답이라 여기서 더 캐물을 수 없다 — 왜
+                  이렇게 고쳐야 하는지는 자유 대화가 되는 선생님 페이지로 넘긴다(원문·수정문을
+                  질문에 실어 보내 맥락을 잃지 않게 한다). */}
+              <button
+                onClick={() => {
+                  requestQuestion(buildWritingCorrectionQuestion(submittedText ?? "", result.corrected));
+                  navigate("/teacher");
+                }}
+                className="btn-press mt-4 w-full rounded-2xl bg-info/10 py-3 text-sm font-bold text-info"
+              >
+                🧑‍🏫 선생님에게 더 물어보기
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       <PromptApiTroubleshootDialog error={troubleshootError} onClose={dismissTroubleshoot} />
     </div>
