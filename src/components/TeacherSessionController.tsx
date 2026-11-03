@@ -123,7 +123,7 @@ function TeacherSessionController() {
         sessionDateRef.current = today;
         model.resetSession();
       }
-      // 「부정형으로 바꾸면?」처럼 앞을 가리키는 짧은 질문이면 직전 질문·예문을 같이 싣는다.
+      // 앞 대화가 있으면 질문마다 직전 질문·답변 요약·예문을 질문 바로 옆에 같이 싣는다(followUpContext).
       // ask() 전에 읽어야 지금 질문이 "직전 질문"으로 잡히지 않는다.
       const context = followUpContext(question, chat.messagesByDate[today] ?? []);
       const { assistantId } = chat.ask(question);

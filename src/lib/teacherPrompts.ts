@@ -98,21 +98,36 @@ export const TEACHER_SYSTEM_PROMPT = [...TEACHER_INTRO, ...TEACHER_ANSWER_SHAPE,
 export const TEACHER_LEAK_REFERENCE = [...TEACHER_INTRO, ...TEACHER_RULES].join("\n");
 
 /**
- * 앞을 가리키는 짧은 질문에 같이 실어 보낼 직전 대화(`followUpContext`가 고른다).
+ * 질문마다 같이 실어 보낼 직전 대화(`followUpContext`가 고른다).
  * 앞선 대화는 세션에도 있지만, 작은 온디바이스 모델은 그걸 두고도 「부정형으로 바꾸면?」을 단독
- * 질문으로 읽는다 — 가리키는 대상을 질문 바로 옆에 붙여 주면 놓칠 수가 없다.
+ * 질문으로 읽는다 — 가리키는 대상을 질문 바로 옆에 붙여 주면 놓치기 어렵다.
+ *
+ * 예전엔 앞을 가리키는 짧은 질문(`isFollowUpQuestion`)에만 붙였는데, 「과거형도 알려줘」처럼 가리키는
+ * 말이 없거나 40자를 넘는 후속 질문이 맥락 없이 나갔다(사용자 보고 — "대화 맥락을 잘 못 따라온다").
+ * 지금은 앞 대화가 있으면 **항상** 붙이고, `pointsBack`은 "이건 앞을 잇는 질문"이라고 더 세게
+ * 말할지만 정한다. 새 주제 질문에 붙어도 "답할 것은 [지금 질문]"이라고 적어 두므로 손해가 적다.
  */
-export type FollowUpContext = { previousQuestion: string; previousExample: string | null };
+export type FollowUpContext = {
+  previousQuestion: string;
+  /** 직전 답변 앞부분(마크다운 표시를 걷어낸 것). */
+  previousAnswer: string;
+  /** 직전 답변의 일본어 예문(백틱 안, 4글자 이상) — 직전 질문에 이미 있는 문장은 뺀다. */
+  previousExamples: string[];
+  /** 지금 질문이 앞을 가리키는 말을 담았는가(`isFollowUpQuestion`). */
+  pointsBack: boolean;
+};
 
 export function buildTeacherUserPrompt(question: string, context?: FollowUpContext | null): string {
   // wrapStudentText가 아니다 — 그 문구("교정/분석 대상으로만 취급")를 쓰면 모델이 질문에 답하지 않고
   // 질문을 분석하려 든다. wrapStudentQuestion의 주석 참고.
   if (!context) return wrapStudentQuestion(question);
-  // 직전 질문도 학습자가 친 글이라 같은 구분자 블록 **안에** 넣는다(밖에 두면 인젝션 통로가 된다).
+  // 직전 질문·답변도 학습자 글(또는 그걸로 만든 글)이라 같은 구분자 블록 **안에** 넣는다(밖에 두면 인젝션
+  // 통로가 된다).
   const lines = [`[앞 질문] ${context.previousQuestion}`];
-  if (context.previousExample) lines.push(`[앞 예문] ${context.previousExample}`);
+  if (context.previousAnswer) lines.push(`[앞 답변 요약] ${context.previousAnswer}`);
+  if (context.previousExamples.length > 0) lines.push(`[앞 예문] ${context.previousExamples.join(" / ")}`);
   lines.push(`[지금 질문] ${question}`);
-  return wrapStudentQuestion(lines.join("\n"), { withContext: true });
+  return wrapStudentQuestion(lines.join("\n"), { context: context.pointsBack ? "follow-up" : "reference" });
 }
 
 const JAPANESE_CHAR = /[\u3040-\u30ff\u3400-\u9fff]/;
@@ -120,12 +135,18 @@ const JAPANESE_CHAR = /[\u3040-\u30ff\u3400-\u9fff]/;
 const FOLLOW_UP_HINT =
   /그거|그것|그건|그걸|이거|이것|이건|이걸|저거|저것|(위|이|그|앞|아까)\s?문장|아까|방금|앞에서|위에서|바꾸면|바꿔|고치면|고쳐|부정형|과거형|다른 예|예문 (하나 )?더|더 쉽게|더 어렵게|^(왜|그럼|그러면|그래서|그리고)|^(아니|아뇨|그게 아니라|그거 말고)|말고|다시|(달라|해 ?달라|알려 ?달라|라는)\s?(고|걸|거)|라고[.!?…~ ]*$/;
 const FOLLOW_UP_MAX_LENGTH = 40;
+/**
+ * 붙이는 맥락의 상한(글자). 온디바이스라 토큰에 돈이 들진 않지만 창(Gemma 8192)·첫 글자까지의 시간·
+ * 다시 채울 히스토리 몫을 같이 먹는다 — 합쳐 560자 남짓이면 히스토리 한 쌍보다 작다.
+ */
 const CONTEXT_QUESTION_MAX = 120;
+const CONTEXT_ANSWER_MAX = 200;
 const CONTEXT_EXAMPLE_MAX = 80;
+const CONTEXT_EXAMPLES = 3;
 
 /**
  * 앞을 가리키는 짧은 질문인가. 일본어가 들어 있으면 가리킬 대상을 직접 준 것이라 아니다.
- * 넉넉하게 잡아도 손해가 적다 — 맥락을 붙여도 "답할 것은 [지금 질문]"이라고 적어 둔다.
+ * 이제 맥락을 붙일지가 아니라 "앞을 잇는 질문이라고 세게 말할지"만 정한다(`FollowUpContext.pointsBack`).
  */
 export function isFollowUpQuestion(question: string): boolean {
   const text = question.trim();
@@ -139,17 +160,26 @@ function clip(text: string, max: number): string {
   return flat.length > max ? `${flat.slice(0, max)}…` : flat;
 }
 
+/** 요약에 넣을 답변 — 소제목·굵게·이탤릭·인용 표시만 걷어낸다. 백틱은 일본어 표시라 남긴다. */
+function plainAnswer(answer: string): string {
+  return answer
+    .replace(/^\s*#{1,6}\s+/gm, "")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/\*+/g, "")
+    .replace(/^\s*[-|]+\s*$/gm, "");
+}
+
+const withoutSpaces = (text: string) => text.replace(/[\s　]/g, "");
+
 /**
- * 지금 질문이 앞을 가리키면 직전의 (질문, 답) 쌍에서 맥락을 고른다. `messages`는 지금 질문을 넣기
- * **전**의 오늘 대화다. 실패 안내문·거절 문구로 끝난 쌍은 건너뛴다(teacherHistoryTurns와 같은 이유).
- * 예문은 답변에서 백틱으로 감싼 첫 일본어 문장(4글자 이상)이다 — 질문에 일본어가 있으면 그 질문이
- * 곧 가리키는 문장이라 예문을 따로 붙이지 않는다.
+ * 직전의 (질문, 답) 쌍에서 맥락을 고른다. 앞 대화가 있으면 질문이 무엇이든 붙인다. `messages`는 지금
+ * 질문을 넣기 **전**의 오늘 대화다. 실패 안내문·거절 문구로 끝난 쌍은 건너뛴다(teacherHistoryTurns와 같은
+ * 이유).
  */
 export function followUpContext(
   question: string,
   messages: readonly { role: "user" | "assistant"; text: string }[]
 ): FollowUpContext | null {
-  if (!isFollowUpQuestion(question)) return null;
   const turns = teacherHistoryTurnPairs(messages);
   const last = turns[turns.length - 1];
   if (!last) return null;
@@ -167,17 +197,23 @@ export function followUpContext(
     asked.unshift(turns[i].question);
   }
   const previousQuestion = clip(asked.join(" / "), CONTEXT_QUESTION_MAX);
-  let previousExample: string | null = null;
-  if (!JAPANESE_CHAR.test(last.question)) {
-    for (const match of last.answer.matchAll(/`([^`\n]+)`/g)) {
-      const span = match[1].trim();
-      if ([...span].filter((ch) => JAPANESE_CHAR.test(ch)).length >= 4) {
-        previousExample = clip(span, CONTEXT_EXAMPLE_MAX);
-        break;
-      }
-    }
+  const askedFlat = withoutSpaces(last.question);
+  const previousExamples: string[] = [];
+  for (const match of last.answer.matchAll(/`([^`\n]+)`/g)) {
+    if (previousExamples.length >= CONTEXT_EXAMPLES) break;
+    const span = match[1].trim();
+    if ([...span].filter((ch) => JAPANESE_CHAR.test(ch)).length < 4) continue;
+    // 직전 질문에 이미 있는 문장이면 [앞 질문]으로 충분하다.
+    if (askedFlat.includes(withoutSpaces(span).replace(/[。、！？!?]+$/, ""))) continue;
+    const example = clip(span, CONTEXT_EXAMPLE_MAX);
+    if (!previousExamples.includes(example)) previousExamples.push(example);
   }
-  return { previousQuestion, previousExample };
+  return {
+    previousQuestion,
+    previousAnswer: clip(plainAnswer(last.answer), CONTEXT_ANSWER_MAX),
+    previousExamples,
+    pointsBack: isFollowUpQuestion(question),
+  };
 }
 
 /**
