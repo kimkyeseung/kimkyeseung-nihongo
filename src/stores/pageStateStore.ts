@@ -420,10 +420,25 @@ export const useDebugMode = create<{
   )
 );
 
+/** 풀다 만 진단을 이만큼 지나면 버린다 — 이어 풀면 경과 시간이 며칠로 뜨고, 그 사이 실력도 바뀐다. */
+const LEVEL_TEST_RESUME_MS = 24 * 60 * 60 * 1000;
+
+/** 저장된 진행 상태가 지금 코드가 아는 모양인지만 본다(어긋나면 처음부터 — 화면이 깨지는 것보다 낫다). */
+function restorableRun(value: unknown, now: number): LevelTestRun | null {
+  if (!value || typeof value !== "object") return null;
+  const run = value as Partial<LevelTestRun>;
+  if (typeof run.phase !== "string" || typeof run.startedAt !== "number" || !Array.isArray(run.history)) return null;
+  if (run.phase !== "result" && now - run.startedAt > LEVEL_TEST_RESUME_MS) return null;
+  return value as LevelTestRun;
+}
+
 /**
- * 레벨 진단(`/level`) 진행 상태. **메모리 전용** — 탭을 옮겼다 와도 이어서 풀리고, 새로고침하면
- * 처음부터다(15분짜리를 persist까지 하지는 않는다). 진행 중에 나가는 것은 막지 않고, 돌아왔을 때
- * 페이지가 "이어서 풀기 / 처음부터"를 묻는다.
+ * 레벨 진단(`/level`) 진행 상태. **persist한다**(키 `level-test-session`) — 탭을 옮겨도, 새로고침해도
+ * 풀던 문제·경과 시간(`startedAt`이 절대 시각이다)이 그대로다(사용자 요청 — 예전엔 메모리 전용이라
+ * 새로고침 한 번에 10분 치가 날아갔다). 진행 중에 나가는 것은 막지 않고, 돌아왔을 때 페이지가
+ * "이어서 풀기 / 처음부터"를 묻는다.
+ * - 진행 중인 세션이라 **백업에는 담지 않는다** — 결과 요약은 `level-test`가 따로 담는다.
+ * - 모양이 틀리거나 하루 넘게 묵은 미완료 진단은 불러올 때 버린다(`restorableRun`).
  */
 export const useLevelTestSession = create<{
   run: LevelTestRun | null;
@@ -437,12 +452,31 @@ export const useLevelTestSession = create<{
   setProfile: (profile: LevelTestProfile) => void;
   setComment: (comment: { takenAt: number; text: string; source: "ai" | "fallback" }) => void;
   reset: () => void;
-}>((set) => ({
-  run: null,
-  profile: { purpose: null, exam: null },
-  comment: null,
-  setRun: (run) => set({ run }),
-  setProfile: (profile) => set({ profile }),
-  setComment: (comment) => set({ comment }),
-  reset: () => set({ run: null, profile: { purpose: null, exam: null }, comment: null }),
-}));
+}>()(
+  persist(
+    (set) => ({
+      run: null,
+      profile: { purpose: null, exam: null },
+      comment: null,
+      setRun: (run) => set({ run }),
+      setProfile: (profile) => set({ profile }),
+      setComment: (comment) => set({ comment }),
+      reset: () => set({ run: null, profile: { purpose: null, exam: null }, comment: null }),
+    }),
+    {
+      name: "level-test-session",
+      partialize: ({ run, profile, comment }) => ({ run, profile, comment }),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<typeof current>;
+        const run = restorableRun(saved.run, Date.now());
+        return {
+          ...current,
+          run,
+          profile: saved.profile && typeof saved.profile === "object" ? saved.profile : current.profile,
+          // 총평은 그 진단의 것일 때만 남긴다.
+          comment: run && saved.comment?.takenAt === run.finishedAt ? saved.comment : null,
+        };
+      },
+    }
+  )
+);
