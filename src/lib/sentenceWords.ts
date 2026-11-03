@@ -100,6 +100,15 @@ function buildIndexes() {
   readingIndex = readings;
 }
 
+/**
+ * 이 글자와 표기(또는 가나로 쓰는 단어의 읽기)가 같은 사전 항목. 분절과 **같은 색인·같은 예외 목록**을
+ * 쓴다 — 선생님 질문의 사전 참고(teacherGrounding.ts)가 활용형을 사전형으로 되돌려 찾을 때 쓴다.
+ */
+export function lookupWord(text: string): readonly WordEntry[] {
+  if (!wordIndex || !readingIndex) buildIndexes();
+  return [...(wordIndex!.get(text) ?? []), ...(readingIndex!.get(text) ?? [])];
+}
+
 function pickEntry(candidates: WordEntry[]): WordEntry {
   return candidates.find((c) => c.common) ?? candidates[0];
 }

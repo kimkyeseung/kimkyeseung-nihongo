@@ -17,14 +17,48 @@ import {
   buildTeacherSystemPrompt,
   buildTeacherUserPrompt,
   followUpContext,
+  groundingSources,
   teacherHistoryTurns,
 } from "../lib/teacherPrompts";
+import { loadCurriculum } from "../lib/curriculum";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent, useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
 import { useTeacherSessionStore } from "../stores/teacherSessionStore";
 import PromptApiTroubleshootDialog from "./PromptApiTroubleshootDialog";
+
+/**
+ * 사전 참고를 기다리는 최대 시간. 사전 청크(7.7MB)는 선생님 화면이 답변을 그리느라 대개 이미 받아 뒀지만,
+ * 처음이면 받는 동안 질문이 멈춘다 — 그보다는 참고 없이 묻는 편이 낫다.
+ */
+const GROUNDING_TIMEOUT_MS = 3000;
+
+/**
+ * 질문 옆에 붙일 사전 참고(teacherGrounding.ts). **동적 import다** — 이 컨트롤러는 Layout에 상주하므로
+ * 정적으로 끌어오면 모든 페이지 진입 청크에 사전이 딸려 온다. 실패·시간 초과면 null(참고 없이 묻는다).
+ */
+async function loadTeacherGrounding(sources: string[]): Promise<string | null> {
+  if (sources.length === 0) return null;
+  const work = (async () => {
+    const [{ buildTeacherGrounding }, curriculum] = await Promise.all([
+      import("../lib/teacherGrounding"),
+      loadCurriculum().catch(() => null),
+    ]);
+    return buildTeacherGrounding(sources, curriculum);
+  })();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), GROUNDING_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * 이보다 짧은 답변에서는 기억할 만한 개인적인 사실이 나올 일이 없다. 추출은 추론이 한 번 더
@@ -134,7 +168,10 @@ function TeacherSessionController() {
       try {
         let acc = "";
         let derailed = false;
-        for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(question, context))) {
+        // 질문에 든 일본어의 읽기·뜻·활용·문형을 앱 사전으로 미리 풀어 같이 보낸다 — 작은 모델이 사실을
+        // 지어내지 않고 설명만 하게(teacherGrounding.ts 머리 주석).
+        const grounding = await loadTeacherGrounding(groundingSources(question, context));
+        for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(question, context, grounding))) {
           acc += chunk;
           // 지시문을 읊기 시작하거나(유출 가드) 역할을 벗어나면(중국어 레시피·영어 답 — looksOffRole)
           // 거기서 끊는다. 프롬프트로 "하지 말라"고 시키는 것만으로는 막히지 않는다(promptSafety.ts 주석).

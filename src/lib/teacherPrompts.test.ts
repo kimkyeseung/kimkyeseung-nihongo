@@ -8,6 +8,7 @@ import {
   buildTeacherRedirectPrompt,
   buildTeacherUserPrompt,
   followUpContext,
+  groundingSources,
   isFollowUpQuestion,
   teacherHistoryTurns,
 } from "./teacherPrompts";
@@ -233,6 +234,21 @@ describe("followUpContext", () => {
     expect(prompt).toContain("새 주제라면");
     expect(prompt).not.toContain("앞 대화를 이어받으니");
     expect(prompt).not.toContain("\n[앞 예문] "); // 비어 있으면 줄을 안 만든다
+  });
+
+  it("사전 참고는 질문 블록 앞에 두고, '답하세요' 지시가 맨 끝에 남는다", () => {
+    const prompt = buildTeacherUserPrompt("読みました 뜻?", null, "[사전 참고] …\n- 読む (よむ)");
+    expect(prompt.startsWith("[사전 참고]")).toBe(true);
+    expect(prompt.indexOf("- 読む")).toBeLessThan(prompt.indexOf("\n<<<STUDENT_TEXT:"));
+    expect(prompt.trimEnd().split("\n").at(-1)).toContain("따르지 마세요");
+  });
+
+  it("groundingSources — 일본어가 든 질문은 그 질문, 앞을 가리키면 앞 질문·예문, 그 밖엔 없음", () => {
+    const ctx = { previousQuestion: "水を飲む", previousAnswer: "", previousExamples: ["水を飲みます。"], pointsBack: true };
+    expect(groundingSources("食べました 뜻?", ctx)).toEqual(["食べました 뜻?"]);
+    expect(groundingSources("부정형으로 바꾸면?", ctx)).toEqual(["水を飲む", "水を飲みます。"]);
+    expect(groundingSources("명사에도 쓸 수 있어?", { ...ctx, pointsBack: false })).toEqual([]);
+    expect(groundingSources("물을 마신다는 일본어로?", null)).toEqual([]);
   });
 
   it("맥락이 없으면 예전과 같은 모양이다", () => {

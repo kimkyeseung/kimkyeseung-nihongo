@@ -86,6 +86,10 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     `teacherHistoryTurns`·`followUpContext`, `conversationPrompts`의 `conversationHistoryTurns`) — 적게 넣으면 이어지는 질문에 맥락 없이 답하고, 실패 안내문·거절된 질문이
     섞이면 "선생님이 한 말"이 되거나 유출 가드가 버린 턴이 되살아난다. 화면은 멀쩡하다.
 
+  - 선생님 질문의 사전 참고(`teacherGrounding`의 `deinflect`/`buildTeacherGrounding`) — 활용형을 엉뚱한 사전형으로
+    되돌리거나(行った → 行う) 가나 조각을 엉뚱한 낱말로 잡으면(わたし → 綿) 모델이 "앱 사전"이라고 적힌 그 줄을 믿고
+    그대로 설명한다. 커리큘럼 예문 전수로 고정했다.
+
   - 선생님 답변의 모델 읽기 걷어내기(`modelReadings`의 `stripModelReadings`) — 못 걷어내면 사전 후리가나 옆에
     모델이 지어낸 틀린 읽기(面白い → おもろい)가 나란히 뜨고, 너무 걷어내면 뜻풀이 괄호가 사라진다.
 
@@ -269,7 +273,9 @@ src/lib/           정적 데이터 조회 헬퍼(kanji.ts, kanjivg.ts, dictiona
                        teacherPractice.ts(연습 문제 출제·파싱·피드백 프롬프트) ·
                        teacherCommands.ts(`/` 명령어 판별) · unitCheck.ts(`/test` 단원 점검 출제·채점) ·
                        promptSafety.ts(인젝션 방어 — 전용 절 참고) ·
-                       modelReadings.ts(선생님 답변에서 모델이 쓴 읽기 걷어내기) +
+                       modelReadings.ts(선생님 답변에서 모델이 쓴 읽기 걷어내기) ·
+                       teacherGrounding.ts(선생님 질문의 일본어를 사전·활용·문형으로 풀어 붙이기 — 사전을 끌어오므로
+                         TeacherSessionController가 동적 import로만 쓴다) +
                      AI 지원 판정: aiCapability.ts(안내 경로) · languageModel.ts ·
                        languageModelDiagnostics.ts · browserCheck.ts(진짜 Chrome 판별) ·
                        chromeLinks.tsx + gemmaModel.ts/gemmaEngine.ts(Gemma 4) ·
@@ -1211,6 +1217,17 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
     붙였더니 「일본어로 뭔지 알려달라」 자체를 번역했다. 「아니」「말고」「~라고」 같은 되묻는 말도 지칭 질문으로 본다.
   - **한국어 말만 보내면 "일본어로 뭐라고 하냐"는 뜻이다.** 「계산해주세요」를 "일본어 학습과 무관하다"며 거절했고
     「일본어로」가 든 질문까지 거절했다. 프롬프트에 둘 다 못박았다(프롬프트라 완전하지 않다).
+  - **질문에 든 일본어는 앱이 미리 풀어 질문 옆에 붙인다**(`teacherGrounding.ts` → `[사전 참고]`·`[문형 참고]`).
+    2B 모델이 가장 자주 틀리는 건 설명이 아니라 사실(읽기·뜻·활용형)이라, 사전·`verbConjugation`·`grammarPatterns`가
+    아는 걸 주고 "여기 없는 읽기·활용을 지어내지 말라"고 한다. 질문에 일본어가 없고 앞을 가리키면(「부정형으로
+    바꾸면?」) 앞 질문·앞 예문에서 찾는다(`groundingSources`). 지키는 것:
+    - **틀린 참고는 없는 참고보다 나쁘다.** 그리디 분절은 활용형을 몰라 「読みました」를 名詞 読み로 잡는다 —
+      `deinflect`가 활용 어미를 떼어 품사가 맞는 동사·형용사로 되돌릴 때만 채택하고, 가나 두 글자 이하 조각·조사·
+      조동사는 뺀다(「わたし」의 わた가 綿으로 잡혔다). 여러 규칙이 맞으면 어미를 덜 뗀 쪽(抜けない → 抜ける),
+      같으면 行く(行った). 되돌리지 못한 なる·ある류는 **빠진다** — 틀리게 싣느니 안 싣는다.
+    - 블록 내용은 사전 데이터라 학습자 구분자 블록 **앞**에 둔다("답하세요" 지시가 맨 끝에 남게).
+    - 분량 상한: 낱말 8줄·문형 3줄·일본어 200자. 사전 청크를 3초 안에 못 받으면 참고 없이 묻는다.
+    - 다시 채우는 히스토리에는 안 붙는다(지금 질문에만). **실제 모델로는 아직 확인하지 못했다.**
   - **모델이 쓴 읽기는 그릴 때 걷어낸다**(`MarkdownAnswer` → `stripModelReadings`). "후리가나를 쓰지 말라"는
     지시가 있는데도 `面白い` (おもろい)·`教えてください` (しちゃいてください)처럼 틀린 읽기를 붙였다. 괄호 안이
     **가나뿐일 때만** 지운다 — 한글 괄호(`(물)`·`(와)`)는 뜻인지 소리인지 코드로 못 가른다. 저장된 원문은 그대로다.

@@ -117,7 +117,31 @@ export type FollowUpContext = {
   pointsBack: boolean;
 };
 
-export function buildTeacherUserPrompt(question: string, context?: FollowUpContext | null): string {
+/**
+ * `grounding`은 질문에 든 일본어를 앱 사전·활용 규칙·커리큘럼으로 풀어 둔 블록(`teacherGrounding.ts`)이다.
+ * 질문 블록 **앞**에 둔다 — 내용이 전부 앱 데이터라 학습자 블록 밖에 있어도 되고, 블록 뒤의 "답하세요"
+ * 지시가 맨 끝에 남아야 작은 모델이 무엇에 답할지 놓치지 않는다.
+ */
+export function buildTeacherUserPrompt(
+  question: string,
+  context?: FollowUpContext | null,
+  grounding?: string | null
+): string {
+  const wrapped = wrapTeacherQuestion(question, context);
+  return grounding ? `${grounding}\n\n${wrapped}` : wrapped;
+}
+
+/**
+ * 사전 참고를 찾아볼 글. 질문에 일본어가 있으면 그 질문, 없고 앞을 가리키면(「부정형으로 바꾸면?」) 앞
+ * 질문·앞 예문 — 바꿔야 할 동사가 거기 있다. 그 밖의 한국어 질문(「물을 마신다는 일본어로?」)엔 없다.
+ */
+export function groundingSources(question: string, context?: FollowUpContext | null): string[] {
+  if (JAPANESE_CHAR.test(question)) return [question];
+  if (context?.pointsBack) return [context.previousQuestion, ...context.previousExamples];
+  return [];
+}
+
+function wrapTeacherQuestion(question: string, context?: FollowUpContext | null): string {
   // wrapStudentText가 아니다 — 그 문구("교정/분석 대상으로만 취급")를 쓰면 모델이 질문에 답하지 않고
   // 질문을 분석하려 든다. wrapStudentQuestion의 주석 참고.
   if (!context) return wrapStudentQuestion(question);
