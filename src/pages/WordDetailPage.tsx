@@ -203,49 +203,43 @@ function WordSenses({ entry }: { entry: WordEntry }) {
                               : "더 어렵게 바꾼 문장"}
                           </p>
                         )}
-                        {/* 난이도 버튼은 문장 **오른쪽에 세로로** 둔다 — 가로 한 줄로 깔면
-                            예문 한 개가 카드 두 배 높이를 먹어서 목록이 금세 화면을 넘긴다.
-                            `min-w-0`이 있어야 긴 일본어 문장이 버튼을 밀어내지 않고 접힌다. */}
-                        <div className="flex items-start gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-ja text-lg">
-                              <ClickableSentence
-                                text={ex.japanese}
-                                {...sentenceHandlers}
-                                excludeWord={entry.word}
-                              />
-                              <SentenceActions text={ex.japanese} subject="예문" translation={ex.korean} />
-                            </p>
-                            {ex.korean && (
-                              <p className="mt-1 text-sm text-gray-500">{ex.korean}</p>
-                            )}
-                            {/* 사전에 없는 것(문형)은 커리큘럼이 들고 있다 — 걸리는 게 없으면 안 그린다. */}
-                            <SentenceGrammar text={ex.japanese} />
-                          </div>
+                        {/* 문장은 카드 폭을 **전부** 쓴다. 예전엔 난이도 버튼이 오른쪽에 세로로 붙어
+                            있어 375px에서 한 줄이 서너 글자씩 접혔다(사용자 보고). */}
+                        <p className="font-ja text-lg">
+                          <ClickableSentence
+                            text={ex.japanese}
+                            {...sentenceHandlers}
+                            excludeWord={entry.word}
+                          />
+                          <SentenceActions text={ex.japanese} subject="예문" translation={ex.korean} />
+                        </p>
+                        {ex.korean && <p className="mt-1 text-sm text-gray-500">{ex.korean}</p>}
+                        {/* 사전에 없는 것(문형)은 커리큘럼이 들고 있다 — 걸리는 게 없으면 안 그린다. */}
+                        <SentenceGrammar text={ex.japanese} />
 
-                          {/* 이 버튼이 **예문마다** 붙는 이유: 목록 전체에 하나만 두면 아무 상관
-                              없는 새 문장이 쌓일 뿐이라, 같은 내용이 어떻게 복잡해지는지를 볼 수 없다. */}
-                          {canGenerate && (
-                            <div className="flex shrink-0 flex-col gap-1">
-                              <button
-                                onClick={() => rewrite(ex, "easier")}
-                                disabled={isLoading}
-                                className="btn-press whitespace-nowrap rounded-full bg-warning px-2.5 py-1 text-xs font-bold text-white disabled:bg-gray-200"
-                                style={{ "--btn-shadow": "#c99a00" } as React.CSSProperties}
-                              >
-                                더 쉽게
-                              </button>
-                              <button
-                                onClick={() => rewrite(ex, "harder")}
-                                disabled={isLoading}
-                                className="btn-press whitespace-nowrap rounded-full bg-info px-2.5 py-1 text-xs font-bold text-white disabled:bg-gray-200"
-                                style={{ "--btn-shadow": "#0e86c4" } as React.CSSProperties}
-                              >
-                                더 어렵게
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        {/* 난이도 버튼은 카드 **맨 아래 한 줄**이다 — 읽은 다음에 하는 일이라 읽는 순서의
+                            끝에 두고, 문장보다 눈에 덜 띄게 흰 칩으로 둔다(원색 버튼은 "예문 더 만들기"
+                            하나만). 예문마다 붙는 이유: 목록 전체에 하나만 두면 아무 상관 없는 새 문장이
+                            쌓일 뿐이라, 같은 내용이 어떻게 복잡해지는지를 볼 수 없다. */}
+                        {canGenerate && (
+                          <div className="mt-3 flex items-center gap-2 border-t-2 border-gray-100 pt-2">
+                            <span className="mr-auto text-xs text-gray-400">이 문장을</span>
+                            <button
+                              onClick={() => rewrite(ex, "easier")}
+                              disabled={isLoading}
+                              className="whitespace-nowrap rounded-full border-2 border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 hover:border-warning disabled:opacity-40"
+                            >
+                              <span aria-hidden className="text-warning">▼</span> 더 쉽게
+                            </button>
+                            <button
+                              onClick={() => rewrite(ex, "harder")}
+                              disabled={isLoading}
+                              className="whitespace-nowrap rounded-full border-2 border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 hover:border-info disabled:opacity-40"
+                            >
+                              <span aria-hidden className="text-info">▲</span> 더 어렵게
+                            </button>
+                          </div>
+                        )}
                       </li>
 
                       {job?.kind === "variant" && job.sourceId === ex.id && (
