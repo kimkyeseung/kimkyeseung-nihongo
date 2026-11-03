@@ -20,7 +20,8 @@ function ClickableSentence({
   showFurigana = true,
 }: {
   text: string;
-  onWordClick: (word: WordEntry) => void;
+  /** 없으면 단어를 누를 수 없고 후리가나만 단다(레벨 진단 — 뜻을 보면 진단이 안 된다). */
+  onWordClick?: (word: WordEntry) => void;
   onKanjiClick?: (kanji: KanjiEntry) => void;
   /** 지금 보고 있는 단어와 같은 표제어는 예문 안에서 또 눌러도 의미가 없으니 클릭 불가로 둔다. */
   excludeWord?: string;
@@ -45,6 +46,8 @@ function ClickableSentence({
                 </ruby>
               ))
             : seg.text;
+
+          if (!onWordClick) return <Fragment key={i}>{content}</Fragment>;
 
           if (seg.word.word === excludeWord) {
             return (

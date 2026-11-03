@@ -330,7 +330,8 @@ src/stores/        Zustand 스토어:
                      teacherSessionStore(선생님 세션 상태 + 질문 큐, 메모리 전용) ·
                      gemmaDownloadStore(모델 다운로드 상태, 메모리 전용) ·
                      levelTestStore(레벨 진단 결과 최근 3번, persist `level-test`, 백업에 담는다) ·
-                     pageStateStore의 useLevelTestSession(진단 진행·두 질문·총평, 메모리 전용)
+                     pageStateStore의 useLevelTestSession(진단 진행·두 질문·총평, persist `level-test-session` —
+                       백업에는 안 담는다)
 src/data/          정적 데이터(dictionary.json, kanji.json, kanjivg.json, pos-tags.json,
                      kana-words.json, kana-homophones.json, gojuon.ts) — 완료
                      · dictionary.json의 `usuallyKana`는 JMDict `uk`(보통 가나로 쓰는 단어) —
@@ -1361,9 +1362,19 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   "N5 전"으로 나와 종합을 끌어내렸다). 가나 영역은 어휘가 N5에서 끝나거나 N5 정답률 < 1/2일 때만 끝에 붙는다.
 - 종합(`result.ts`): 측정한 영역의 중앙값(짝수면 낮은 쪽), 최저 영역이 2단계 이상 낮으면 한 단계 내림, 가나
   미통과면 Pre-N5. "측정 안 함"(청해에 음성이 없을 때)은 0점이 아니라 **빼고** 계산한다.
-- 진단 중에는 정답을 보여주지 않는다(다음 문제 판단을 흔든다). 독해 지문도 `ClickableSentence`로 그리지
-  않는다(단어를 눌러 뜻을 보면 진단이 안 된다) — 결과의 "틀린 문제 다시 보기"(`LevelTestReview`, lazy)에서만.
-  진행은 메모리 스토어(`useLevelTestSession`)라 탭을 옮겨도 이어지고, 돌아오면 "이어서 풀기 / 처음부터".
+- 진단 중에는 정답을 보여주지 않는다(다음 문제 판단을 흔든다). 문제의 단어는 누를 수 없다(뜻을 보면 진단이
+  안 된다) — 누를 수 있는 문장은 결과의 "틀린 문제 다시 보기"(`LevelTestReview`, lazy)에서만.
+- **한자 문제를 뺀 모든 문제에 후리가나를 단다**(`FuriganaOnly` — `ClickableSentence`를 `onWordClick` 없이
+  lazy로 그린다. 사용자 요청). 예전엔 하나도 없어서 한자를 못 읽는 학습자가 문법·독해·어휘를 틀렸고, 그 영역
+  급수가 한자 실력만큼 깎여 종합(중앙값)까지 끌려 내려갔다 — 한자는 한자 영역이 따로 잰다. 보기에도 한자가
+  있으면 단다(`ChoiceQuestion`). 어휘 단어는 분절하지 않고 그 항목의 `furigana`를 쓴다. 한자 문제는 읽기 자체를
+  묻고, 단어의 다른 한자에 읽기를 달면 단어 읽기에서 빼서 답이 나오므로 그대로 둔다. 단원 점검(`/test`)도 같은
+  컴포넌트라 같이 바뀐다. 후리가나를 다는 문제에서 어휘가 조금 높게 나올 수 있다(소리로만 아는 단어도 맞힌다).
+  진행(`useLevelTestSession`)은 **persist한다**(사용자 요청 — 메모리 전용일 땐 새로고침 한 번에 10분 치가
+  날아갔다). 탭을 옮겨도 새로고침해도 풀던 문제·보기 순서·경과 시간(`startedAt`이 절대 시각)이 그대로고, 돌아오면
+  "이어서 풀기 / 처음부터". 불러올 때 모양이 틀리거나 하루 넘게 묵은 미완료 진단은 버린다(`restorableRun`).
+  진행 중인 세션이라 백업에는 안 담는다(결과 요약은 `level-test`가 담는다). `LevelTestRun`에 Set·Map 같은
+  JSON으로 안 되는 값을 넣지 말 것 — 새로고침 뒤 조용히 빈 객체가 된다.
 - **페이지는 사전을 동적 import로 받는다**(`loadData.ts`) — 인사 화면이 사전(7.7MB)을 기다리지 않게. 그래서
   `kanjiReading.ts`(대표 읽기·한자가 든 단어)와 `koreanMeaning.ts`(`koreanTokens`)는 사전을 **인자로** 받는다.
   `ClickableSentence`는 사전을 정적으로 끌어오므로 그걸 쓰는 화면 조각은 lazy로 뗀다.

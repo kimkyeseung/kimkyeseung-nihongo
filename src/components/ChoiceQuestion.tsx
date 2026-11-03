@@ -1,4 +1,5 @@
 import { useState } from "react";
+import FuriganaOnly from "./FuriganaOnly";
 
 /**
  * 4지선다 + "모르겠어요" 한 문제. 레벨 진단(`/level`)과 단원 점검(`/test`)이 같이 쓴다.
@@ -50,7 +51,8 @@ function ChoiceQuestion({
           disabled={answered}
           className={`min-h-14 rounded-2xl border-2 px-4 py-3 text-left text-lg transition-colors hover:border-primary/40 active:bg-primary/10 ${colorFor(i)} ${choiceFont}`}
         >
-          {choice}
+          {/* 일본어 보기의 한자에는 후리가나를 단다(누를 수는 없다) — 한자가 없으면 그대로다. */}
+          <FuriganaOnly text={choice} />
         </button>
       ))}
       <button
