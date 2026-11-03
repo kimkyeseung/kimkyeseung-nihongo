@@ -85,6 +85,11 @@ function DictionaryPage() {
   const recent = useRecentSearchesStore((s) => s.recent);
   const addRecent = useRecentSearchesStore((s) => s.add);
   const clearRecent = useRecentSearchesStore((s) => s.clear);
+  // 사전에서 사라진 id(데이터를 다시 만들었다)는 검색어로만 보여 준다.
+  const recentItems = useMemo(
+    () => recent.map((item) => ({ item, entry: item.wordId ? findWordById(item.wordId) : undefined })),
+    [recent]
+  );
 
   // 로마자 입력 시 실시간으로 히라가나로 변환 (예: nihongo -> にほんご).
   // WanaKana가 값을 직접 바꾼 뒤 발생시키는 input 이벤트는 React의 합성 onChange가
@@ -134,20 +139,21 @@ function DictionaryPage() {
 
   const goToWord = useCallback(
     (entry: WordEntry) => {
-      addRecent(entry.word);
+      addRecent(entry.word, entry.id);
       setShowSuggestions(false);
-      setInputValue(entry.word);
+      // 입력창은 학습자가 친 검색어 그대로 둔다 — 고른 단어(대개 한자 표기)로 바꿔 넣으면 상세에서
+      // 돌아왔을 때 「たべ」로 찾던 자리에 「食べる」가 들어 있다(실제로 보고받았다). 목록도 그 검색어로
+      // 맞춘다 — 자동완성은 같은 검색어의 앞쪽 결과라 고른 단어가 목록에 들어 있고, 옛 검색어의 목록이
+      // 남아 있으면 지금 보는 단어가 목록 어디에도 없다.
+      setCommittedQuery(query.trim() || entry.word);
       if (isWide) {
-        // 자동완성에서 고른 단어는 그 표기로 검색한 목록과 함께 보여준다 — 패널만 바뀌고 왼쪽 목록이
-        // 엉뚱한 옛 검색어로 남아 있으면 지금 보는 단어가 목록 어디에도 없다.
-        setCommittedQuery(entry.word);
         setPanelWordId(entry.id);
         return;
       }
       const { to, state } = wordLink(entry.id);
       navigate(to, { state });
     },
-    [addRecent, isWide, navigate, setCommittedQuery, setInputValue, setPanelWordId, wordLink]
+    [addRecent, isWide, navigate, query, setCommittedQuery, setPanelWordId, wordLink]
   );
 
   const commitSearch = useCallback(
@@ -220,12 +226,16 @@ function DictionaryPage() {
         <CompactResultRow
           entry={entry}
           active={panelEntry?.id === entry.id}
-          onClick={() => setPanelWordId(entry.id)}
+          onClick={() => {
+            addRecent(entry.word, entry.id);
+            setPanelWordId(entry.id);
+          }}
         />
       ) : (
         <ResultRow
           entry={entry}
           onClick={() => {
+            addRecent(entry.word, entry.id);
             const { to, state } = wordLink(entry.id);
             navigate(to, { state });
           }}
@@ -242,7 +252,10 @@ function DictionaryPage() {
         {/* 넓은 화면에서 왼쪽 칸(검색·목록)은 붙박이다 — 오른쪽 상세가 길어(뜻마다 예문) 페이지가
             내려가도 목록은 제자리에 있고, 목록만 안에서 스크롤한다. 높이는 한자·오십음도 패널과 같은 계산. */}
         <div className="lg:sticky lg:top-6 lg:flex lg:max-h-[calc(var(--app-height,100svh)-11.5rem)] lg:flex-col">
-          <div className="relative mt-4 lg:mt-0 lg:shrink-0">
+          {/* 좁은 화면에선 입력창이 맨 위에 붙어 있다 — 결과·검색 기록이 길어 내려 봐도 다시 검색하러
+              끝까지 올라가지 않게(사용자 요청). 바탕을 칠해 밑으로 지나가는 목록을 가린다. 넓은 화면은
+              왼쪽 칸 전체가 붙박이라 필요 없다. */}
+          <div className="sticky top-0 z-10 -mx-4 mt-2 bg-white px-4 py-2 sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:mt-0 lg:shrink-0 lg:px-0 lg:py-0">
             <input
               ref={inputRef}
               defaultValue=""
@@ -260,33 +273,6 @@ function DictionaryPage() {
               onSelect={goToWord}
             />
           </div>
-
-          {/* 검색 기록은 입력창 바로 아래에 늘 둔다. 예전엔 입력창이 비어 있을 때만 보였는데,
-              검색어는 탭을 옮겨도 남아 있어서(pageStateStore) 사실상 거의 안 보였다. */}
-          {recent.length > 0 && (
-            <div className="mt-3 lg:shrink-0">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-400">최근 검색어</p>
-                <button onClick={clearRecent} className="text-xs text-gray-300">
-                  전체 삭제
-                </button>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {recent.map((term) => (
-                  <button
-                    key={term}
-                    onClick={() => {
-                      setInputValue(term);
-                      commitSearch(term);
-                    }}
-                    className="whitespace-nowrap rounded-full bg-gray-100 px-3 py-1 font-ja text-sm text-gray-600"
-                  >
-                    {term}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {committedQuery && (
             <div className="mt-6 lg:flex lg:min-h-0 lg:flex-col">
@@ -317,6 +303,53 @@ function DictionaryPage() {
                   {results.slice(AD_AFTER_RESULT).map(renderResult)}
                 </ul>
               )}
+            </div>
+          )}
+
+          {/* 검색 기록은 결과 아래에 한 줄씩 쌓는다(사용자 요청 — 예전엔 입력창 밑의 알약 칩이었다).
+              고른 단어는 뜻까지 보여 주고 누르면 그 단어로 바로 가며, 직접 친 검색어는 다시 검색한다.
+              넓은 화면에선 왼쪽 칸 높이가 묶여 있어 결과 목록 몫을 다 먹지 않게 따로 스크롤한다. */}
+          {recentItems.length > 0 && (
+            <div className="mt-6 lg:flex lg:max-h-64 lg:shrink-0 lg:flex-col">
+              <div className="flex items-center justify-between lg:shrink-0">
+                <p className="text-sm text-gray-400">최근 검색</p>
+                <button onClick={clearRecent} className="text-xs text-gray-300">
+                  전체 삭제
+                </button>
+              </div>
+              <ul className="mt-2 flex flex-col gap-2 lg:-m-1 lg:min-h-0 lg:overflow-y-auto lg:p-1">
+                {recentItems.map(({ item, entry }) => (
+                  <li key={entry ? `w:${entry.id}` : `t:${item.term}`}>
+                    <button
+                      onClick={() => {
+                        if (entry) {
+                          goToWord(entry);
+                          return;
+                        }
+                        setInputValue(item.term);
+                        commitSearch(item.term);
+                      }}
+                      className="w-full rounded-2xl border-2 border-gray-100 bg-white px-3 py-2 text-left"
+                    >
+                      {entry ? (
+                        <>
+                          <div className="flex items-baseline gap-2">
+                            <span className="shrink-0 whitespace-nowrap font-ja text-base text-gray-700">
+                              {entry.word}
+                            </span>
+                            {entry.reading !== entry.word && (
+                              <span className="min-w-0 truncate font-ja text-xs text-gray-400">{entry.reading}</span>
+                            )}
+                          </div>
+                          <p className="mt-0.5 truncate text-sm text-gray-500">{displayMeaning(entry)}</p>
+                        </>
+                      ) : (
+                        <span className="font-mixed text-sm text-gray-600">🔍 {item.term}</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
