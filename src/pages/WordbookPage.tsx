@@ -232,9 +232,16 @@ function ReviewDeck({ group, entries }: { group: string; entries: WordbookEntry[
 
   if (entries.length === 0) {
     return (
-      <p className="mt-10 text-center text-gray-400">
-        아직 단어장이 비어있습니다. 사전에서 단어를 추가해보세요.
-      </p>
+      <div className="mt-10 flex flex-col items-center gap-3 text-center text-gray-400">
+        <p>아직 담아둔 단어가 없어요. 사전에서 단어를 찾아 담아보세요.</p>
+        <Link
+          to="/dictionary"
+          className="btn-press rounded-2xl bg-primary px-5 py-2.5 font-bold text-white"
+          style={{ ["--btn-shadow" as string]: "#3d9401" }}
+        >
+          📖 사전에서 찾기
+        </Link>
+      </div>
     );
   }
 
@@ -356,7 +363,14 @@ function WordList({ entries }: { entries: WordbookEntry[] }) {
   const [now] = useState(() => Date.now());
 
   if (entries.length === 0) {
-    return <p className="mt-10 text-center text-gray-400">단어장이 비어있습니다.</p>;
+    return (
+      <div className="mt-10 flex flex-col items-center gap-3 text-center text-gray-400">
+        <p>아직 담아둔 단어가 없어요.</p>
+        <Link to="/dictionary" className="text-info underline underline-offset-2">
+          📖 사전에서 찾기
+        </Link>
+      </div>
+    );
   }
 
   if (isWide) {

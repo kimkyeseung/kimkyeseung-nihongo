@@ -8,6 +8,7 @@ import PromptApiUnsupportedNotice from "../components/PromptApiUnsupportedNotice
 import SpeakButton from "../components/SpeakButton";
 import WritingDiff from "../components/WritingDiff";
 import { useJapaneseInput } from "../hooks/useJapaneseInput";
+import { useCurriculumStore } from "../stores/curriculumStore";
 import { useAiModel } from "../hooks/useAiModel";
 import { usePromptApiTroubleshoot } from "../hooks/usePromptApiTroubleshoot";
 import {
@@ -15,6 +16,7 @@ import {
   buildWritingCorrectionSystemPrompt,
   buildWritingCorrectionUserPrompt,
   parseCorrectionResponse,
+  writingStarters,
   type WritingCorrectionOptions,
   type WritingCorrectionResult,
 } from "../lib/writingCorrection";
@@ -73,6 +75,7 @@ function WritingPage() {
   const { troubleshootError, reportError, dismissTroubleshoot } = usePromptApiTroubleshoot();
   // 쓰다 만 문장도 탭을 옮겼다 돌아오면 그대로 남아있도록 store 값으로 시작한다.
   const japaneseInput = useJapaneseInput<HTMLTextAreaElement>(8, useWritingDraft.getState().input);
+  const startLevel = useCurriculumStore((s) => s.startLevel);
   // 입력·결과·옵션 모두 페이지를 떠나도 남는다(pageStateStore 주석 참고). 스트리밍 도중
   // 페이지를 벗어나면 세션이 destroy되어 첨삭은 중단되지만, 이미 받은 만큼은 남는다.
   const submittedText = useWritingDraft((s) => s.submittedText);
@@ -286,6 +289,24 @@ function WritingPage() {
               />
             )}
           </div>
+
+          {/* 뭘 써야 할지 모르는 사람을 위한 시작 문장. 쓰기 시작하면 사라진다. */}
+          {!japaneseInput.value.trim() && (
+            <div className="mt-2">
+              <p className="text-xs text-gray-400">이런 문장으로 시작해 보세요</p>
+              <div className="mt-1 flex flex-col items-start gap-1.5">
+                {writingStarters(startLevel).map((sentence) => (
+                  <button
+                    key={sentence}
+                    onClick={() => japaneseInput.setValue(sentence)}
+                    className="rounded-full border-2 border-gray-100 bg-white px-3 py-1 text-left font-ja text-sm text-gray-600"
+                  >
+                    {sentence}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Gemma 엔진 준비는 퍼센트가 없어서(모델을 GPU에 올리는 작업) 문구만 보여준다. */}
           {model.busyLabel && (

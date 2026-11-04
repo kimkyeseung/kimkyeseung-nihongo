@@ -25,7 +25,6 @@ export const BACKUP_VERSION = 1;
  *  - `ai-engine` — 기기마다 다르다. Gemma를 받은 컴퓨터의 백업을 폰에 풀면, 모델이 없는 폰이
  *    Gemma로 설정되어 "모델을 받아주세요" 안내부터 본다.
  *  - `teacher-greeting` — "오늘 인사를 했나"라서 옮길 이유가 없다.
- *  - `promptApiNoticeDismissed` — 이 브라우저의 AI 지원 여부에 달린 안내라 기기마다 다르다.
  *  - `appearance` — 화면 모드. 폰은 어둡게, 컴퓨터는 밝게 쓰는 식으로 기기마다 다르다.
  *  - `guided-tour` — 앱 둘러보기를 끝냈는가. 되돌린 기기에서는 XP가 있어 어차피 권하지 않는다.
  *

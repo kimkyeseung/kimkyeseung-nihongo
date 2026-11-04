@@ -14,7 +14,8 @@ import { useSentenceDialogs } from "../hooks/useSentenceDialogs";
 import { useStickToBottom } from "../hooks/useStickToBottom";
 import { useUserProfileStore } from "../stores/userProfileStore";
 import { useConversationSessionStore } from "../stores/conversationSessionStore";
-import { LEVELS, SCENARIOS, type Level, type Scenario } from "../lib/conversationPrompts";
+import { LEVELS, SCENARIOS, defaultConversationLevel, type Level, type Scenario } from "../lib/conversationPrompts";
+import { useCurriculumStore } from "../stores/curriculumStore";
 import { INLINE_VALUE_MAX_LENGTH } from "../lib/promptSafety";
 import InputModeToggle from "../components/InputModeToggle";
 import { useScriptInput, type InputScript } from "../hooks/useScriptInput";
@@ -32,7 +33,8 @@ function ScenarioPicker({
   onStart: (scenario: Scenario, level: Level) => void;
 }) {
   const [scenario, setScenario] = useState<Scenario | null>(null);
-  const [level, setLevel] = useState<Level | null>(null);
+  const startLevel = useCurriculumStore((s) => s.startLevel);
+  const [level, setLevel] = useState<Level | null>(() => defaultConversationLevel(startLevel));
   const name = useUserProfileStore((s) => s.name);
   const setName = useUserProfileStore((s) => s.setName);
   const nameScript = useInputScriptPrefs((s) => s.conversationName);

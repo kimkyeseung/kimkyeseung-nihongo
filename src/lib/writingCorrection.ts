@@ -132,6 +132,20 @@ export function buildCorrectionRefusalResponse(original: string): string {
  * 도착하기 전까지 **정상 응답에서도 항상** raw가 화면에 흘렀다. 지금은 못 찾은 섹션은 그냥
  * 비워둔다 — 스트리밍이 진행되면서 채워지고, 끝까지 없으면 안 보여주는 게 맞다.
  */
+/**
+ * 작문창이 비었을 때 눌러서 넣어 볼 문장. 뭘 써야 할지 모르는 사람이 첨삭이 어떤 건지 바로 보게 한다.
+ * 직접 지은 문장이고(문제집·기출에서 옮기지 않았다), 첨삭받을 거리가 있게 일부러 조금 어색한 것도 섞었다.
+ */
+export function writingStarters(startLevel: string | null): string[] {
+  if (startLevel === "N1" || startLevel === "N2") {
+    return ["忙しいにもかかわらず、彼は毎日練習をつづけている。", "環境問題について考えることが大切と思います。"];
+  }
+  if (startLevel === "N3" || startLevel === "N4") {
+    return ["日本語の勉強はむずかしいだけど、おもしろいです。", "雨が降ったら、家で本を読みます。"];
+  }
+  return ["わたしは がくせいです。", "きのう ともだちと えいがを みます。"];
+}
+
 export function parseCorrectionResponse(raw: string, original: string): WritingCorrectionResult {
   const hasExpectedFormat = /###\s*수정문/.test(raw);
   return {

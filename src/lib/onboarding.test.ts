@@ -3,7 +3,6 @@ import {
   TOUR_FIRST_STOP_STEP,
   TOUR_LAST_STEP,
   TOUR_STOPS,
-  TOUR_WELCOME_STEP,
   isNewTeacherLearner,
   needsPlacement,
   shouldOfferTour,
@@ -11,11 +10,15 @@ import {
 } from "./onboarding";
 
 describe("shouldOfferTour", () => {
-  const fresh = { done: false, active: false, xp: 0, pathname: "/gojuon" };
+  const fresh = { done: false, active: false, eligible: true, xp: 10, pathname: "/gojuon" };
 
-  it("처음 온 사람이 하단 네비 탭에 있으면 권한다", () => {
+  it("첫 학습을 마치면 하단 네비 탭에서 권한다", () => {
     expect(shouldOfferTour(fresh)).toBe(true);
     expect(shouldOfferTour({ ...fresh, pathname: "/teacher" })).toBe(true);
+  });
+
+  it("아무것도 배우기 전에는 끼어들지 않는다", () => {
+    expect(shouldOfferTour({ ...fresh, xp: 0 })).toBe(false);
   });
 
   it("이미 끝냈거나 진행 중이면 다시 권하지 않는다", () => {
@@ -23,8 +26,8 @@ describe("shouldOfferTour", () => {
     expect(shouldOfferTour({ ...fresh, active: true })).toBe(false);
   });
 
-  it("XP가 있는 기존 사용자에게는 업데이트 뒤에도 뜨지 않는다", () => {
-    expect(shouldOfferTour({ ...fresh, xp: 1 })).toBe(false);
+  it("XP 0으로 앱을 본 적 없는 기존 사용자에게는 업데이트 뒤에도 뜨지 않는다", () => {
+    expect(shouldOfferTour({ ...fresh, eligible: false })).toBe(false);
   });
 
   it("공유 링크나 진단 도중처럼 탭이 아닌 화면에서는 끌고 가지 않는다", () => {
@@ -35,10 +38,6 @@ describe("shouldOfferTour", () => {
 });
 
 describe("tourStopForStep", () => {
-  it("인사 단계는 페이지를 옮기지 않는다", () => {
-    expect(tourStopForStep(TOUR_WELCOME_STEP)).toBeNull();
-  });
-
   it("첫 칸과 마지막 칸이 어긋나지 않는다", () => {
     expect(tourStopForStep(TOUR_FIRST_STOP_STEP)?.path).toBe("/gojuon");
     expect(tourStopForStep(TOUR_LAST_STEP)?.path).toBe("/teacher");

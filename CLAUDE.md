@@ -203,8 +203,7 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      Layout에 상주하는 것들: BadgeWatcher(뱃지 신규 획득 감지) · Confetti ·
                        ConversationSessionController(회화 세션 — 페이지 밖에 둬야 탭 이동에도
                        스트리밍이 안 끊긴다) · TeacherSessionController(선생님 수업 세션 — 같은 이유) ·
-                       PromptApiOnboardingDialog(첫 접속 1회 안내 모달) ·
-                       GuidedTour(처음 온 사람의 페이지별 둘러보기)
+                       GuidedTour(페이지별 둘러보기) · TourOffer(첫 학습 뒤의 둘러보기 권유 띠)
                      학습 UI: KanjiStrokeOrder, KanjiWritingPad(한자 따라 쓰기), KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
                        ClickableSentence(후리가나·단어 탭 — 일본어 문장은 전부 이걸로 그린다),
                        WritingDiff, BadgeSheet(🔥를 누르면 — 학습 달력 + 뱃지), StudyCalendar,
@@ -433,8 +432,8 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   messages} | null }`. **`memory: null`은 "백업할 때 못 읽었다"**(사생활 보호 모드 등)라 빈
   배열과 다르다 — 되돌릴 때 지금 기록을 지우지 않는다.
 - **담는 키는 허용 목록(`BACKUP_LOCAL_KEYS`)이다.** `ai-engine`(기기마다 다르다 — Gemma를 받은
-  컴퓨터의 백업을 폰에 풀면 모델도 없는 폰이 Gemma로 설정된다)·`teacher-greeting`·
-  `promptApiNoticeDismissed`는 일부러 뺐다. 되돌릴 때도 파일에 뭐가 들었든 이 목록의 키만 쓴다.
+  컴퓨터의 백업을 폰에 풀면 모델도 없는 폰이 Gemma로 설정된다)·`teacher-greeting`은
+  일부러 뺐다. 되돌릴 때도 파일에 뭐가 들었든 이 목록의 키만 쓴다.
   레벨 진단 결과(`level-test`)는 학습 이력이라 담는다 — 그 스토어는 `merge`에서 `parseRecords`로 값을 다시
   검사한다(이 파일은 persist 모양만 본다).
 - **되돌리기는 합치기가 아니라 갈아끼우기다.** 스트릭·XP처럼 "하나의 값"은 합칠 방법이 없다.
@@ -486,14 +485,14 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   표시"를 스트릭/XP 숫자로, 뱃지는 탭해서 보는 상세 뷰로 구현했다.
 
 ## 처음 온 사람 안내 (`GuidedTour` / `TeacherWelcomeCard` / `onboarding.ts`) 구현 노트
-- **앱 둘러보기**(`GuidedTour`, Layout 상주): 처음 하단 네비 탭에 들어오면 "둘러볼까요?"를 묻고, 수락하면
+- **앱 둘러보기**(`GuidedTour`, Layout 상주): 첫 학습 뒤에 헤더 아래 띠(`TourOffer`)가 권하고, 수락하면
   일곱 페이지로 **실제로 옮겨 가며**(replace — 뒤로가기가 일곱 칸을 거슬러 오르지 않게) 탭을 뚫어 보여주고 카드로
   설명한다. 문구는 `TOUR_STOPS` 한 곳이다. **탭 기능을 바꾸면 여기 문구도 볼 것.** 하이라이트는 `data-tour` =
   `NAV_ITEMS`의 `to`로 찾으니 경로를 바꾸면 같이 바꿀 것(안 맞으면 콘솔은 조용하고 칸만 안 뚫린다).
-- **권하는 조건은 `shouldOfferTour`** — 완료 표시(`guided-tour`, 백업에 안 담는다)가 없고, **XP가 0이고**(이게
-  없으면 기존 사용자 전원이 업데이트 뒤에 만난다), 하단 네비 탭일 때. 레벨 진단을 먼저 끝내고 XP가 생긴 사람에게도
-  안 뜬다 — /about의 "페이지별 안내 다시 보기"가 있다.
-- 떠 있는 동안 뒤쪽은 막는다(`data-modal` + `useScrollLock`). z-35라 `PromptApiOnboardingDialog`(z-40)가 위에 뜬다.
+- **권하는 조건은 `shouldOfferTour`** — **XP가 처음 생긴 뒤에**, 막지 않는 띠로 권한다. 예전엔 들어오자마자 전체 화면 인사가 막아서, 시작 버튼을 누른 사람이
+  수업 위에서 또 인사를 받았다. 권유 대상(`eligible` — XP 0으로 앱을 본 사람)이 아니면 안 뜨므로 기존 사용자는 업데이트 뒤에도 안 본다. 진단을 먼저 끝낸 사람에게도 뜬다.
+  완료 표시·대상 표시(`guided-tour`)는 백업에 안 담는다. /about의 "페이지별 안내 다시 보기"로 언제든 본다.
+- 둘러보는 동안 뒤쪽은 막는다(`data-modal` + `useScrollLock`).
   **닫을 때 `AnimatePresence`로 사라지게 하지 말 것 (실제로 겪었다)** — "진단 시작"처럼 닫으면서 페이지를 옮기면
   투명해진 막이 DOM에 남아 화면 전체의 클릭을 막았다. 콘솔은 조용하다.
 - **선생님 첫 방문**(`TeacherWelcomeCard`): 지난 대화·오늘 대화·진단 기록·시작 단계가 모두 없으면
@@ -651,7 +650,7 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 
 ## AI 안내 흐름 (`aiCapability.ts`) — 중요
 - **"AI를 쓸 수 있나?"는 `aiCapability.ts` 한 곳에서만 판단한다.** `isPromptApiSupported()`나
-  `navigator.gpu`를 화면에서 직접 부르지 말 것. 세 화면(첫 접속 모달·대문 카드·회화/작문 인라인
+  `navigator.gpu`를 화면에서 직접 부르지 말 것. 세 화면(대문 안내 줄·대문 카드·회화/작문 인라인
   안내)이 같은 판단을 써야 문구가 서로 어긋나지 않는다.
 - **`window.LanguageModel`이 있다고 쓸 수 있는 게 아니다 (실제로 겪은 버그, Whale)**:
   크로미움 포크(Whale·Edge·Opera·Samsung Internet…)에는 API 객체가 노출되지만 구글이 Gemini
@@ -770,10 +769,7 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   실제 온디바이스 모델이 아니라 입력을 그대로 되돌려주는 스텁이다("On-device model is not
   available in Chromium, this API is just echoing back the input: ..."). 덕분에 실제 세션
   생성·스트리밍·후리가나 오버레이·문법 교정 흐름을 콘솔 에러 없이 end-to-end로 검증할 수
-  있었지만, 실제 자연스러운 응답 품질은 Chrome Canary에서 별도로 확인해야 한다. 이 환경에
-  `window.LanguageModel`이 있다 보니 아래 온보딩 다이얼로그도 정상적으로는 안 뜬다 —
-  검증할 땐 `PromptApiOnboardingDialog.tsx`의 `show` 계산식을 잠깐 `true ||`로 강제한 뒤
-  꼭 원복할 것 (실제로 이렇게 확인했음).
+  있었지만, 실제 자연스러운 응답 품질은 Chrome Canary에서 별도로 확인해야 한다.
 
 ## 단어장 복습 (`ReviewDeck` / `srs.ts`) 구현 노트
 - **오른쪽은 "알아요", 왼쪽은 "모르겠어요"다. 삭제는 스와이프가 아니다**(카드 아래 "이 단어
@@ -886,14 +882,9 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 담은 문장과 문장 복습 결과는 `recordStudyEvent`로 남기지 **않는다.** 학습자 프로필(취약/강한 한자·어휘 수준)은
   단어·한자 단위로 세는 값이라 문장 이벤트를 새 타입으로 들이면 그 계산이 흔들린다.
 
-## 첫 접속 안내 다이얼로그 (`PromptApiOnboardingDialog`)
-- 첫 접속 시 이 브라우저에서 AI 기능을 **쓸 수 없을 때만** 한 번 안내한다. 내용은
-  `useAiCapability()`의 경로에 따라 갈린다 — Gemma를 쓸 수 있으면 모델 받기로, 그것도 안 되면
-  Chrome Canary로("AI 안내 흐름" 노트 참고). 내장 AI가 되는 사용자에게는 **뜨지 않는다**.
-  `localStorage`(`promptApiNoticeDismissed`)로 한 번 닫으면 다시 안 뜬다 — 회화/작문/선생님
-  페이지에 항상 보이는 `PromptApiUnsupportedNotice`(인라인 안내)와는 역할이 다르다:
-  이 다이얼로그는 "앱 켜자마자 한 번" 알려주는 용도, 인라인 안내는 "그 페이지에 실제로
-  들어갈 때마다" 보여주는 용도라 **둘 다 유지할 것, 하나로 합치지 말 것**.
+## AI를 못 쓰는 브라우저의 안내
+- **첫 접속 모달은 없앴다.** 앱을 켜자마자 2GB 모델 안내를 띄워서, "브라우저 하나로"라는 대문과 어긋나고 첫 인상이 다운로드 권유가 됐다. 안내는 필요한 자리에서 한다:
+  대문 시작 영역의 한 줄(`HomeAiNotice`)과 회화·작문·선생님에 들어갔을 때의 인라인 안내(`PromptApiUnsupportedNotice`).
 - `src/lib/languageModel.ts`의 `isPromptApiSupported()`는 **API 객체 존재 여부만** 본다.
   화면에서 직접 쓰지 말 것 — 그것만으로 판단하면 Whale에서 뚫린다("AI 안내 흐름" 노트).
   지금은 `aiCapability.ts`가 이 함수를 감싸 쓰는 유일한 곳이다.

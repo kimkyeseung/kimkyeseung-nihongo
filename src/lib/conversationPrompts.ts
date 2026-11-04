@@ -28,6 +28,17 @@ export const LEVELS: Level[] = [
 ];
 
 /**
+ * 시작 단계에 맞는 회화 난이도 — 이미 진단까지 받은 사람에게 수준을 또 묻지 않으려고 미리 골라 둔다. 바꿀 수는 있다.
+ * 경계는 `guide` 문구를 따른다(초급 N5~N4 · 중급 N3~N2 · 고급 N1).
+ */
+export function defaultConversationLevel(startLevel: string | null): Level | null {
+  if (!startLevel) return null;
+  if (startLevel === "N1") return LEVELS[2];
+  if (startLevel === "N2" || startLevel === "N3") return LEVELS[1];
+  return LEVELS[0];
+}
+
+/**
  * AI가 자기소개할 때 쓸 이름. 이게 없으면 "私の名前は[あなたの名前]です"처럼 대괄호
  * 자리표시자를 만들어낸다(실제로 겪은 버그) — 역할극 상대에게도 이름이 있어야 한다.
  */

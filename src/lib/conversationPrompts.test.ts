@@ -8,7 +8,21 @@ import {
   buildSystemPrompt,
   conversationHistoryTurns,
   conversationRedirectReply,
+  defaultConversationLevel,
 } from "./conversationPrompts";
+
+describe("defaultConversationLevel", () => {
+  it("시작 단계를 난이도 문구의 경계대로 옮긴다", () => {
+    const id = (start: string | null) => defaultConversationLevel(start)?.id ?? null;
+    expect(["Pre-N5", "N5", "N4"].map(id)).toEqual(["beginner", "beginner", "beginner"]);
+    expect(["N3", "N2"].map(id)).toEqual(["intermediate", "intermediate"]);
+    expect(id("N1")).toBe("advanced");
+  });
+
+  it("단계를 안 골랐으면 미리 고르지 않는다", () => {
+    expect(defaultConversationLevel(null)).toBeNull();
+  });
+});
 
 // 학습자 이름은 사용자가 친 값인데 **시스템 프롬프트 안에** 들어간다 — wrapStudentText가
 // 감쌀 수 없는 자리라, 여기가 뚫리면 나머지 방어가 통째로 우회된다(CLAUDE.md 참고).

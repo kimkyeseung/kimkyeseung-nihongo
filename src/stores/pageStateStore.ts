@@ -327,15 +327,18 @@ export const useTeacherGreeting = create<TeacherGreeting>()(
 );
 
 /**
- * 앱 둘러보기(`GuidedTour`). 끝냈다는 표시(`done`)만 저장한다 — 지금 몇 번째 칸인지까지 남기면
+ * 앱 둘러보기(`GuidedTour`). 끝냈다는 표시와 권유 대상인지만 저장한다 — 지금 몇 번째 칸인지까지 남기면
  * 새로고침했을 때 앞뒤 설명 없이 중간 칸이 뜬다. 끝내기 전에 새로고침하면 처음부터 다시 권한다.
  *
- * 기기를 옮겨도 처음 온 사람이 아니라는 건 XP가 말해주므로(`shouldOfferTour`) 백업에는 담지 않는다.
+ * 백업에는 담지 않는다 — 되돌린 기기는 XP가 이미 있어 권유 대상이 되지 않는다(`shouldOfferTour`).
  */
 interface GuidedTourState {
   done: boolean;
+  /** XP 0으로 앱을 본 적이 있는가 — 첫 학습 뒤에 둘러보기를 권할 사람이다. */
+  eligible: boolean;
   /** 지금 보여주는 단계(`onboarding.ts`). null이면 둘러보는 중이 아니다. */
   step: number | null;
+  markEligible: () => void;
   goTo: (step: number) => void;
   finish: () => void;
 }
@@ -344,11 +347,13 @@ export const useGuidedTour = create<GuidedTourState>()(
   persist(
     (set) => ({
       done: false,
+      eligible: false,
       step: null,
+      markEligible: () => set({ eligible: true }),
       goTo: (step) => set({ step }),
       finish: () => set({ done: true, step: null }),
     }),
-    { name: "guided-tour", partialize: (s) => ({ done: s.done }) }
+    { name: "guided-tour", partialize: (s) => ({ done: s.done, eligible: s.eligible }) }
   )
 );
 

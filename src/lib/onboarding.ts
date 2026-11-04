@@ -83,31 +83,31 @@ export const TOUR_STOPS: readonly TourStop[] = [
   },
 ];
 
-/** 둘러보기 단계: 0은 "둘러볼까요?" 인사, 1부터가 `TOUR_STOPS`의 각 탭이다. */
-export const TOUR_WELCOME_STEP = 0;
+/** 둘러보기 단계: 1부터가 `TOUR_STOPS`의 각 탭이다. */
 export const TOUR_FIRST_STOP_STEP = 1;
 export const TOUR_LAST_STEP = TOUR_STOPS.length;
 
-/** 이 단계가 보여줄 탭. 인사 단계나 범위 밖이면 null — 이때는 페이지를 옮기지 않는다. */
+/** 이 단계가 보여줄 탭. 범위 밖이면 null — 이때는 페이지를 옮기지 않는다. */
 export function tourStopForStep(step: number): TourStop | null {
   return TOUR_STOPS[step - 1] ?? null;
 }
 
 /**
- * 둘러보기를 먼저 권할까.
+ * 둘러보기를 권할까 — **첫 학습 뒤에** 권한다. 아무것도 배우기 전에 설명부터 끼어들면 왜 봐야 하는지 약하다.
  *
- * - **XP가 있으면 처음 온 사람이 아니다.** 완료 표시(`done`)는 이 기능과 함께 생겨서, 이것 없이는 기존
- *   사용자 전원이 업데이트 뒤에 튜토리얼을 만난다. 백업에서 되돌린 새 기기도 같은 이유로 걸러진다.
- * - **하단 네비 탭에서만 권한다.** 공유받은 단어 링크로 들어온 사람이나 레벨 진단을 푸는 중인 사람을
- *   다른 페이지로 끌고 가면 안 된다.
+ * - `eligible`: XP 0으로 앱을 본 적이 있는 사람. 이것 없이 "XP가 있으면"으로만 보면 기존 사용자 전원이 업데이트 뒤에
+ *   권유를 받는다. 백업에서 되돌린 새 기기도 처음부터 XP가 있어 걸러진다.
+ * - `xp > 0`: 첫 학습을 했다. 레벨 진단을 먼저 끝낸 사람도 여기로 온다(예전엔 빠졌다).
+ * - **하단 네비 탭에서만 권한다.** 공유받은 단어 링크나 레벨 진단을 푸는 도중에 끼어들지 않는다.
  */
 export function shouldOfferTour(opts: {
   done: boolean;
   active: boolean;
+  eligible: boolean;
   xp: number;
   pathname: string;
 }): boolean {
-  if (opts.done || opts.active || opts.xp > 0) return false;
+  if (opts.done || opts.active || !opts.eligible || opts.xp <= 0) return false;
   return TOUR_STOPS.some((stop) => stop.path === opts.pathname);
 }
 

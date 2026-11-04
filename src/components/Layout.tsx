@@ -11,7 +11,7 @@ import TeacherSessionController from "./TeacherSessionController";
 import GemmaDownloadBar from "./GemmaDownloadBar";
 import GuidedTour from "./GuidedTour";
 import LoadingMascot from "./LoadingMascot";
-import PromptApiOnboardingDialog from "./PromptApiOnboardingDialog";
+import TourOffer from "./TourOffer";
 
 const NAV_ITEMS = [
   { to: "/gojuon", label: "오십음도", icon: "あ" },
@@ -211,6 +211,7 @@ function Layout() {
           않으므로 헤더 아래 공간을 차지하지 않는다 (h-svh 레이아웃이라 이게 중요하다 —
           빈 자리를 남기면 그만큼 main의 스크롤 영역이 줄어든다). */}
       <GemmaDownloadBar />
+      <TourOffer />
 
       {/* min-h-0가 없으면 flex-1 아이템이 내용물 높이만큼 계속 늘어나 버려서
           overflow-y-auto가 무용지물이 되고(자체 스크롤이 안 생김), 결과적으로
@@ -232,7 +233,6 @@ function Layout() {
 
       <Confetti />
       <BadgeWatcher />
-      <PromptApiOnboardingDialog />
       <GuidedTour />
       <ConversationSessionController />
       {/* 선생님 답변도 탭을 옮겨도 끊기지 않게 페이지 밖에 둔다(회화와 같은 이유). */}
