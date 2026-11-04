@@ -7,6 +7,7 @@
 // 각 항목은 앱 안의 **이미 있는 화면으로 보내는 것**을 목표로 한다. 새 학습 화면을 만드는
 // 대신 한자/사전/회화/작문/선생님을 커리큘럼 순서대로 이어 붙이는 것이 이 기능의 전부다.
 
+import { grammarLessonQuestion } from "./lessonPlan";
 import type { LearnerProfile } from "./learnerProfile";
 import type { UnitProgress } from "./curriculumProgress";
 import type { CurriculumUnit } from "../types/curriculum";
@@ -143,11 +144,7 @@ export function buildDailyPlan(
       title: `문법 ${grammar.pattern} 배우기`,
       detail: grammar.meaning,
       to: "/teacher",
-      teacherQuestion: [
-        `${grammar.pattern} 문법을 알려줘.`,
-        `예문 「${grammar.example}」처럼 쓰는 거 맞아?`,
-        "어떤 상황에서 쓰는지, 비슷한 표현과 뭐가 다른지도 알려줘.",
-      ].join("\n"),
+      teacherQuestion: grammarLessonQuestion(grammar),
     });
   }
 

@@ -15,7 +15,13 @@ interface CurriculumState {
    * 지웠을 때 진도만 남아 둘이 어긋난다.
    */
   manualUnits: string[];
+  /**
+   * 선생님에게 배운 문형(`grammarStepKey` — `"N5-1:〜は〜です"`). 오늘의 수업이 다음 문형을 고르는 데만 쓴다.
+   * 단원 완료 계산에는 넣지 않는다 — 버튼을 눌렀다고 익힌 것은 아니고, 익혔는지는 단원 점검이 본다.
+   */
+  taughtGrammar: string[];
   setStartLevel: (level: CurriculumLevelId) => void;
+  markGrammarTaught: (key: string) => void;
   toggleManualUnit: (key: string) => void;
   isManual: (key: string) => boolean;
 }
@@ -25,7 +31,10 @@ export const useCurriculumStore = create<CurriculumState>()(
     (set, get) => ({
       startLevel: null,
       manualUnits: [],
+      taughtGrammar: [],
       setStartLevel: (startLevel) => set({ startLevel }),
+      markGrammarTaught: (key) =>
+        set((state) => (state.taughtGrammar.includes(key) ? state : { taughtGrammar: [...state.taughtGrammar, key] })),
       toggleManualUnit: (key) =>
         set((state) => ({
           manualUnits: state.manualUnits.includes(key)

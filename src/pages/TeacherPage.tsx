@@ -13,7 +13,7 @@ import { useCurriculumPlan } from "../hooks/useCurriculumPlan";
 import { useStickToBottom } from "../hooks/useStickToBottom";
 import { useScriptInput, type InputScript } from "../hooks/useScriptInput";
 import { useWordSuggestions } from "../hooks/useWordSuggestions";
-import { TEACHER_SAMPLE_QUESTIONS } from "../lib/teacherPrompts";
+import { TEACHER_ERROR_ANSWER, TEACHER_REFUSAL_ANSWER, TEACHER_SAMPLE_QUESTIONS } from "../lib/teacherPrompts";
 import { buildTeacherGreeting } from "../lib/dailyPlan";
 import { levelLabel } from "../lib/curriculum";
 import { useDebugMode, useInputScriptPrefs, useTeacherGreeting } from "../stores/pageStateStore";
@@ -42,7 +42,9 @@ import TeacherCommandList from "../components/TeacherCommandList";
 import TodayPlanCard from "../components/TodayPlanCard";
 import { answerPracticeTarget, isPracticeWorthy, type PracticeTarget } from "../lib/teacherPractice";
 import { useTeacherCommands } from "../hooks/useTeacherCommands";
-import type { UnitCheckTarget } from "../lib/unitCheck";
+import { unitCheckTargetFromPlan, type UnitCheckTarget } from "../lib/unitCheck";
+import LessonCard from "../components/LessonCard";
+import { buildLessonSteps, taughtStepFromExchange } from "../lib/lessonPlan";
 
 // 단원 점검(`/test`)은 문제 은행·한자 데이터를 끌어오므로 열 때만 받는다.
 const UnitCheckSheet = lazy(() => import("../components/UnitCheckSheet"));
@@ -186,6 +188,30 @@ function TeacherPage() {
       levelTestCount,
       startLevel,
     });
+
+  // 오늘의 수업 — 지금 단원이 있고 오늘 대화를 보는 중일 때. 진도를 다 끝냈으면 낼 수업이 없다.
+  const showLesson = viewingToday && historyLoaded && !!curriculum?.plan.current && !!curriculum.currentUnit;
+
+  function startUnitCheck() {
+    const target = unitCheckTargetFromPlan(curriculum?.plan ?? null);
+    if (target) setUnitCheck(target);
+  }
+
+  // 문형 수업의 답변이 끝나면 배운 것으로 표시한다. 실패·거절이면 표시하지 않아 같은 수업을 다시 권한다.
+  const taughtGrammar = useCurriculumStore((s) => s.taughtGrammar);
+  const markGrammarTaught = useCurriculumStore((s) => s.markGrammarTaught);
+  useEffect(() => {
+    const current = curriculum?.plan.current;
+    const unit = curriculum?.currentUnit;
+    if (isAnswering || !viewingToday || !current || !unit || messages.length < 2) return;
+    const [question, answer] = messages.slice(-2);
+    if (question.role !== "user" || answer.role !== "assistant") return;
+    const step = taughtStepFromExchange(buildLessonSteps(current, unit, taughtGrammar), question.text, answer.text, [
+      TEACHER_ERROR_ANSWER,
+      TEACHER_REFUSAL_ANSWER,
+    ]);
+    if (step && !step.done) markGrammarTaught(step.key);
+  }, [isAnswering, viewingToday, messages, curriculum, taughtGrammar, markGrammarTaught]);
 
   useEffect(() => {
     if (greetingClaimedRef.current) return;
@@ -442,7 +468,8 @@ function TeacherPage() {
           {/* 오늘 첫 방문에만 뜨는 인사. 모델이 아니라 앱이 한다 — 프롬프트에 맡기면 매 답변마다
               인사로 시작하고, "하루에 한 번만"은 모델이 지킬 수 있는 규칙이 아니다(이전 답변을
               셀 수 없다). 날짜로 판단할 수 있는 건 코드가 한다. */}
-          {viewingToday && greeting && (
+          {/* 오늘의 수업이 있으면 카드가 인사를 대신한다 — 수업을 시작한 뒤에 "이어서 해볼까요?"가 위에 뜨면 어색하다. */}
+          {viewingToday && greeting && !showLesson && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -457,8 +484,11 @@ function TeacherPage() {
           {historyLoaded && messages.length === 0 && viewingToday && (
             <div className={`${isNewLearner ? "mt-2" : "mt-6"} flex flex-col items-center gap-3`}>
               {isNewLearner && <TeacherWelcomeCard />}
+              {showLesson && curriculum && (
+                <LessonCard plan={curriculum} variant="full" onAsk={handleAsk} onCheck={startUnitCheck} />
+              )}
               <p className="text-center text-sm text-gray-400">
-                {isNewLearner
+                {isNewLearner || showLesson
                   ? "궁금한 게 있으면 바로 물어봐도 좋아요."
                   : "일본어에 대해 궁금한 걸 한국어로 물어보세요! 🗻"}
               </p>
@@ -549,6 +579,11 @@ function TeacherPage() {
               );
             })}
           </div>
+
+          {/* 답변이 끝나면 선생님이 다음 단계를 먼저 잇는다. 기록에는 남지 않는다. */}
+          {showLesson && curriculum && messages.length > 0 && !isAnswering && !command.showToday && (
+            <LessonCard plan={curriculum} variant="next" onAsk={handleAsk} onCheck={startUnitCheck} />
+          )}
 
           {/* `/today`. 대화 끝에 붙이되 기록에는 남기지 않는다 — 다음 질문을 하면 사라진다. */}
           {command.showToday && viewingToday && (

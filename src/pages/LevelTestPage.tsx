@@ -274,12 +274,17 @@ function StartFromHere({ overall }: { overall: LevelTestRecord["overall"] }) {
 
   if (step === "done" || (step === "idle" && startLevel === overall)) {
     return (
-      <p className="rounded-2xl bg-primary/10 px-4 py-3 text-center text-sm text-primary">
-        ✅ {levelName(overall)} 단계부터 공부해요 ·{" "}
-        <Link to="/curriculum" className="text-info underline underline-offset-2">
-          로드맵 보기
+      <div className="flex flex-col gap-2">
+        <Link to="/teacher" className={`${PRIMARY_BUTTON} block text-center`} style={PRIMARY_SHADOW}>
+          ▶ 첫 수업 시작하기
         </Link>
-      </p>
+        <p className="rounded-2xl bg-primary/10 px-4 py-3 text-center text-sm text-primary">
+          ✅ {levelName(overall)} 단계부터 공부해요 ·{" "}
+          <Link to="/curriculum" className="text-info underline underline-offset-2">
+            로드맵 보기
+          </Link>
+        </p>
+      </div>
     );
   }
   if (step === "confirm") {

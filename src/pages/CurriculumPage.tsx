@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import ProgressBar from "../components/ProgressBar";
 import { useCurriculumPlan } from "../hooks/useCurriculumPlan";
 import { levelLabel } from "../lib/curriculum";
 import type { UnitProgress } from "../lib/curriculumProgress";
+import { grammarLessonQuestion } from "../lib/lessonPlan";
 import { useCurriculumStore } from "../stores/curriculumStore";
+import { useTeacherChatStore } from "../stores/teacherChatStore";
 import { CURRICULUM_LEVELS, type CurriculumLevel, type CurriculumLevelId } from "../types/curriculum";
 
 /** 유닛 한 줄. 펼치면 학습 목표와 문법 포인트, "이미 아는 내용이에요" 버튼이 나온다. */
@@ -17,8 +19,11 @@ function UnitRow({
   level: CurriculumLevel;
   isCurrent: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  // 지금 단원은 펼쳐 둔다 — 무엇을 배우는지 보려고 한 번 더 누르게 하지 않는다.
+  const [open, setOpen] = useState(isCurrent);
   const toggleManual = useCurriculumStore((s) => s.toggleManualUnit);
+  const requestQuestion = useTeacherChatStore((s) => s.requestQuestion);
+  const navigate = useNavigate();
   const unit = level.units.find((u) => u.unitNumber === progress.unitNumber);
 
   return (
@@ -105,6 +110,15 @@ function UnitRow({
                   </p>
                   <p className="mt-0.5 font-ja text-sm text-gray-600">{g.example}</p>
                   <p className="text-xs text-gray-400">{g.exampleTranslation}</p>
+                  <button
+                    onClick={() => {
+                      requestQuestion(grammarLessonQuestion(g));
+                      navigate("/teacher");
+                    }}
+                    className="mt-1.5 text-xs text-info hover:underline"
+                  >
+                    🧑‍🏫 선생님에게 배우기 →
+                  </button>
                 </li>
               ))}
             </ul>
@@ -184,6 +198,23 @@ function CurriculumPage() {
           active={false}
         />
       </div>
+
+      {/* 진단을 마치고 여기 온 사람이 다음에 뭘 할지 찾지 않게, 수업으로 가는 길을 맨 위에 둔다. */}
+      {plan.current && (
+        <section className="mt-4 rounded-2xl border-2 border-primary/30 bg-primary/5 p-4">
+          <p className="text-xs text-gray-500">📍 지금 배울 단원</p>
+          <p className="mt-0.5 text-lg text-gray-800">
+            {plan.current.level} · {plan.current.unitNumber}단원 {plan.current.title}
+          </p>
+          <Link
+            to="/teacher"
+            className="btn-press mt-3 block rounded-2xl bg-primary py-3 text-center font-bold text-white"
+            style={{ ["--btn-shadow" as string]: "#3d9401" }}
+          >
+            ▶ 수업 시작하기
+          </Link>
+        </section>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span className="text-xs text-gray-400">시작 단계</span>
