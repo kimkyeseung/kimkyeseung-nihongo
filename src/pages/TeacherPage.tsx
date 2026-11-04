@@ -26,6 +26,8 @@ import {
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
+import { useLevelTestStore } from "../stores/levelTestStore";
+import { isNewTeacherLearner } from "../lib/onboarding";
 import { useTeacherSessionStore } from "../stores/teacherSessionStore";
 import {
   useActiveMessages,
@@ -35,6 +37,7 @@ import {
 import { formatDayLabel, localDateKey } from "../lib/localDate";
 import TeacherHistorySidebar from "../components/TeacherHistorySidebar";
 import TeacherPracticeSheet from "../components/TeacherPracticeSheet";
+import TeacherWelcomeCard from "../components/TeacherWelcomeCard";
 import TeacherCommandList from "../components/TeacherCommandList";
 import TodayPlanCard from "../components/TodayPlanCard";
 import { answerPracticeTarget, isPracticeWorthy, type PracticeTarget } from "../lib/teacherPractice";
@@ -171,12 +174,28 @@ function TeacherPage() {
   const [greeting, setGreeting] = useState<string | null>(null);
   const greetingClaimedRef = useRef(false);
 
+  // 처음 온 사람에게는 인사 대신 실력 진단을 권한다. 지난 대화를 읽기 전에는 처음인지 알 수 없다.
+  const chatDates = useTeacherChatStore((s) => s.dates);
+  const levelTestCount = useLevelTestStore((s) => s.records.length);
+  const isNewLearner =
+    historyLoaded &&
+    isNewTeacherLearner({
+      dates: chatDates,
+      todayKey: localDateKey(),
+      todayMessageCount: viewingToday ? messages.length : 0,
+      levelTestCount,
+      startLevel,
+    });
+
   useEffect(() => {
     if (greetingClaimedRef.current) return;
+    if (!historyLoaded) return;
     // 진도를 아직 못 읽었으면 기다린다 — 커리큘럼은 동적 import라 한 박자 늦게 온다.
     // 시작 단계를 아예 안 골랐으면 영영 안 오므로 기다리지 않는다.
     if (startLevel && !curriculum) return;
     greetingClaimedRef.current = true;
+    // 오늘 몫을 쓰지 않고 넘어간다 — 진단을 보고 돌아오면 그때 지금 단원을 말해주며 인사한다.
+    if (isNewLearner) return;
     if (!claimGreeting()) return;
 
     const current = curriculum?.plan.current;
@@ -191,7 +210,7 @@ function TeacherPage() {
         unitTitle: current?.title ?? null,
       })
     );
-  }, [claimGreeting, curriculum, startLevel, streak]);
+  }, [claimGreeting, curriculum, startLevel, streak, historyLoaded, isNewLearner]);
 
   /**
    * 화면에 들어올 때 기억 스냅샷을 새로 만든다 — 그 사이에 진도가 나갔거나 시작 단계를
@@ -300,6 +319,11 @@ function TeacherPage() {
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">🧑‍🏫 선생님</h2>
         <GemmaEngineNotice reason={modelStatus} feature="선생님에게 질문하기" />
+        {isNewLearner && (
+          <div className="p-4 sm:p-6">
+            <TeacherWelcomeCard />
+          </div>
+        )}
       </div>
     );
   }
@@ -311,6 +335,11 @@ function TeacherPage() {
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">🧑‍🏫 선생님</h2>
         <PromptApiUnsupportedNotice feature="선생님에게 질문하기" />
+        {isNewLearner && (
+          <div className="p-4 sm:p-6">
+            <TeacherWelcomeCard />
+          </div>
+        )}
       </div>
     );
   }
@@ -424,10 +453,14 @@ function TeacherPage() {
             </motion.div>
           )}
 
-          {messages.length === 0 && viewingToday && (
-            <div className="mt-6 flex flex-col items-center gap-3">
+          {/* 지난 대화를 읽기 전에는 그리지 않는다 — 처음 온 사람인지 몰라 예전 문구가 번쩍인다. */}
+          {historyLoaded && messages.length === 0 && viewingToday && (
+            <div className={`${isNewLearner ? "mt-2" : "mt-6"} flex flex-col items-center gap-3`}>
+              {isNewLearner && <TeacherWelcomeCard />}
               <p className="text-center text-sm text-gray-400">
-                일본어에 대해 궁금한 걸 한국어로 물어보세요! 🗻
+                {isNewLearner
+                  ? "궁금한 게 있으면 바로 물어봐도 좋아요."
+                  : "일본어에 대해 궁금한 걸 한국어로 물어보세요! 🗻"}
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 {TEACHER_SAMPLE_QUESTIONS.map((question) => (

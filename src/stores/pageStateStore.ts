@@ -326,6 +326,32 @@ export const useTeacherGreeting = create<TeacherGreeting>()(
 );
 
 /**
+ * 앱 둘러보기(`GuidedTour`). 끝냈다는 표시(`done`)만 저장한다 — 지금 몇 번째 칸인지까지 남기면
+ * 새로고침했을 때 앞뒤 설명 없이 중간 칸이 뜬다. 끝내기 전에 새로고침하면 처음부터 다시 권한다.
+ *
+ * 기기를 옮겨도 처음 온 사람이 아니라는 건 XP가 말해주므로(`shouldOfferTour`) 백업에는 담지 않는다.
+ */
+interface GuidedTourState {
+  done: boolean;
+  /** 지금 보여주는 단계(`onboarding.ts`). null이면 둘러보는 중이 아니다. */
+  step: number | null;
+  goTo: (step: number) => void;
+  finish: () => void;
+}
+
+export const useGuidedTour = create<GuidedTourState>()(
+  persist(
+    (set) => ({
+      done: false,
+      step: null,
+      goTo: (step) => set({ step }),
+      finish: () => set({ done: true, step: null }),
+    }),
+    { name: "guided-tour", partialize: (s) => ({ done: s.done }) }
+  )
+);
+
+/**
  * 선생님 답변별 "연습해보기" 문제. **메모리 전용**이다 — 방금 만든 LLM 결과라 새로고침하면
  * 사라지는 편이 자연스럽다(단어 예문과 같은 기준).
  *

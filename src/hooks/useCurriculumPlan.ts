@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { findUnit, loadCurriculum } from "../lib/curriculum";
 import { buildCurriculumPlan, type CurriculumPlan } from "../lib/curriculumProgress";
+import { buildDailyPlan, type PlanAction } from "../lib/dailyPlan";
 import type { Curriculum, CurriculumUnit } from "../types/curriculum";
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
@@ -56,4 +57,17 @@ export function useCurriculumPlan(): CurriculumPlanResult | null {
       currentUnit: current ? findUnit(curriculum, current.level, current.unitNumber) : undefined,
     };
   }, [curriculum, memoryLoaded, events, learnedKanji, manualUnits, startLevel]);
+}
+
+/**
+ * 오늘의 추천 목록. 대문의 시작 버튼과 "오늘의 학습" 카드가 같은 목록을 봐야 해서 한 곳에 뒀다.
+ * 진도가 아직 없으면 null이다.
+ */
+export function useTodayActions(): PlanAction[] | null {
+  const result = useCurriculumPlan();
+  const profile = useLearnerMemoryStore((s) => s.profile);
+  return useMemo(
+    () => (result ? buildDailyPlan(result.plan.current, result.currentUnit, profile) : null),
+    [result, profile]
+  );
 }

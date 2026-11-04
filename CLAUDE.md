@@ -118,6 +118,9 @@ WebGPU에서 돌리는 Gemma 4. Chrome 전용 앱이 아니다("AI 안내 흐름
     진단이 조용히 높게 나온다. 실제 사전·한자 데이터로 급수마다 300번씩 돌린다. 원본 뜻풀이의
     「어간의 하나」 같은 문법 설명 줄도 여기서 거른다(`NOT_A_MEANING`).
 
+  - 처음 온 사람 판단(`onboarding`의 `shouldOfferTour`/`isNewTeacherLearner`) — 틀리면 몇 달 쓴 사람이
+    업데이트 뒤에 튜토리얼에 막히거나, 진단까지 끝낸 사람이 "처음 오셨군요"를 듣는다.
+
   같은 성격의 코드를 만들면 여기에 테스트를 추가할 것.
   (`scriptPreference`, `kanjiQuiz`가 다음 후보다.)
 - React 컴포넌트 테스트는 아직 없다(jsdom·testing-library를 들이지 않았다).
@@ -197,7 +200,8 @@ src/components/    Layout(AnimatedOutlet로 페이지 전환, 상단바에 Gamif
                      Layout에 상주하는 것들: BadgeWatcher(뱃지 신규 획득 감지) · Confetti ·
                        ConversationSessionController(회화 세션 — 페이지 밖에 둬야 탭 이동에도
                        스트리밍이 안 끊긴다) · TeacherSessionController(선생님 수업 세션 — 같은 이유) ·
-                       PromptApiOnboardingDialog(첫 접속 1회 안내 모달)
+                       PromptApiOnboardingDialog(첫 접속 1회 안내 모달) ·
+                       GuidedTour(처음 온 사람의 페이지별 둘러보기)
                      학습 UI: KanjiStrokeOrder, KanjiWritingPad(한자 따라 쓰기), KanjiDetailSheet, KanjiQuizSheet, WordbookCard,
                        ClickableSentence(후리가나·단어 탭 — 일본어 문장은 전부 이걸로 그린다),
                        WritingDiff, BadgeSheet(🔥를 누르면 — 학습 달력 + 뱃지), StudyCalendar,
@@ -478,6 +482,22 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 상단바(`Layout.tsx`)의 `GamificationBar`를 탭하면 `BadgeSheet`가 열린다 — 스펙의 "상단바에
   표시"를 스트릭/XP 숫자로, 뱃지는 탭해서 보는 상세 뷰로 구현했다.
 
+## 처음 온 사람 안내 (`GuidedTour` / `TeacherWelcomeCard` / `onboarding.ts`) 구현 노트
+- **앱 둘러보기**(`GuidedTour`, Layout 상주): 처음 하단 네비 탭에 들어오면 "둘러볼까요?"를 묻고, 수락하면
+  일곱 페이지로 **실제로 옮겨 가며**(replace — 뒤로가기가 일곱 칸을 거슬러 오르지 않게) 탭을 뚫어 보여주고 카드로
+  설명한다. 문구는 `TOUR_STOPS` 한 곳이다. **탭 기능을 바꾸면 여기 문구도 볼 것.** 하이라이트는 `data-tour` =
+  `NAV_ITEMS`의 `to`로 찾으니 경로를 바꾸면 같이 바꿀 것(안 맞으면 콘솔은 조용하고 칸만 안 뚫린다).
+- **권하는 조건은 `shouldOfferTour`** — 완료 표시(`guided-tour`, 백업에 안 담는다)가 없고, **XP가 0이고**(이게
+  없으면 기존 사용자 전원이 업데이트 뒤에 만난다), 하단 네비 탭일 때. 레벨 진단을 먼저 끝내고 XP가 생긴 사람에게도
+  안 뜬다 — /about의 "페이지별 안내 다시 보기"가 있다.
+- 떠 있는 동안 뒤쪽은 막는다(`data-modal` + `useScrollLock`). z-35라 `PromptApiOnboardingDialog`(z-40)가 위에 뜬다.
+  **닫을 때 `AnimatePresence`로 사라지게 하지 말 것 (실제로 겪었다)** — "진단 시작"처럼 닫으면서 페이지를 옮기면
+  투명해진 막이 DOM에 남아 화면 전체의 클릭을 막았다. 콘솔은 조용하다.
+- **선생님 첫 방문**(`TeacherWelcomeCard`): 지난 대화·오늘 대화·진단 기록·시작 단계가 모두 없으면
+  (`isNewTeacherLearner`) 일일 인사 대신 실력 진단을 권한다. `dates`에는 말을 안 했어도 오늘이 들어 있으니 오늘은
+  빼고 볼 것. 이때 **`claimGreeting`을 쓰지 않는다** — 진단 뒤 돌아오면 지금 단원을 말해주는 인사를 받는다.
+  진단은 AI 없이 돌아가므로 AI 불가 안내 화면 아래에도 띄운다.
+
 ## 대문 페이지(`/`) 구현 노트
 - `/`는 예전엔 `/gojuon`으로 리다이렉트했지만 지금은 `HomePage`(대문)다. 헤더·하단 네비게이션이
   없는 전체 화면이라 **Layout 밖**에 두고, 나머지 라우트는 path 없는 레이아웃 라우트로 감쌌다
@@ -495,6 +515,10 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
   따로 표시). 대문 그림은 학습 데이터가 아니므로 이 목록에 넣지 않는다.
 - 로딩이 안 끝나도 CTA를 눌러 앱으로 넘어갈 수 있다 — 못 받은 데이터는 그 페이지에서 평소대로
   다시 받으므로 막을 이유가 없다.
+- **큰 시작 버튼의 목적지는 `planHomeStart`가 정한다.** 예전엔 항상 `/gojuon`이라, 대문 카드가 N3 단원을 보여주는
+  바로 위에서 버튼을 누르면 히라가나 표에 도착했다. 지금은 오늘의 첫 할 일(`buildDailyPlan`의 첫 항목)로 가고,
+  시작 단계를 고르기 전의 처음 온 사람에게는 버튼이 없다(단계 고르기가 곧 시작이다). 한자 항목은 `/kanji?k=글자`라
+  그 글자의 급수로 바로 열린다.
 
 ## Gemma 4 엔진 구현 노트
 - **전제**: Chrome Prompt API는 모델을 고를 수 없다. `LanguageModel.create()`에 모델 선택

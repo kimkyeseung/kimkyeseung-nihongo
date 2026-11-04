@@ -6,7 +6,11 @@ import AssetLoadingBar from "../components/AssetLoadingBar";
 import GemmaModelCard from "../components/GemmaModelCard";
 import TodayPlanCard from "../components/TodayPlanCard";
 import { useAssetPreload } from "../hooks/useAssetPreload";
+import { useTodayActions } from "../hooks/useCurriculumPlan";
+import { planHomeStart } from "../lib/dailyPlan";
+import { useCurriculumStore } from "../stores/curriculumStore";
 import { useGamificationStore } from "../stores/gamificationStore";
+import { useTeacherChatStore } from "../stores/teacherChatStore";
 
 const HERO_IMAGE_SRC = `${import.meta.env.BASE_URL}hero.png`;
 
@@ -89,6 +93,10 @@ function HomePage() {
   const streak = useGamificationStore((s) => s.streak);
   const xp = useGamificationStore((s) => s.xp);
   const returning = xp > 0;
+  const hasStartLevel = useCurriculumStore((s) => s.startLevel) !== null;
+  const actions = useTodayActions();
+  const requestQuestion = useTeacherChatStore((s) => s.requestQuestion);
+  const start = planHomeStart({ hasStartLevel, returning, actions });
 
   return (
     // 대문은 다크 모드에서도 밝게 둔다(force-light) — 그림의 크림색 배경이 페이지 배경과 같아야
@@ -125,20 +133,23 @@ function HomePage() {
         <section className="flex flex-col gap-3">
           <AssetLoadingBar {...preload} />
 
-          {/* 로딩이 끝나지 않아도 넘어갈 수 있게 둔다 — 못 받은 데이터는 그 페이지에서 다시 받는다. */}
-          <Link
-            to="/gojuon"
-            className={`btn-press flex items-center justify-center rounded-2xl px-6 py-4 text-xl text-white ${
-              preload.finished ? "animate-pop bg-primary" : "bg-primary/60"
-            }`}
-            style={{ ["--btn-shadow" as string]: "rgb(0 0 0 / 0.25)" }}
-          >
-            {preload.finished
-              ? returning
-                ? "이어서 학습하기"
-                : "학습 시작하기"
-              : "먼저 시작하기 (계속 받는 중)"}
-          </Link>
+          {/* 로딩이 끝나지 않아도 넘어갈 수 있게 둔다 — 못 받은 데이터는 그 페이지에서 다시 받는다.
+              시작 단계를 고르기 전의 처음 온 사람에게는 버튼이 없다 — 바로 아래 단계 고르기가 시작이다(planHomeStart). */}
+          {start && (
+            <Link
+              to={start.to}
+              onClick={() => {
+                if (start.teacherQuestion) requestQuestion(start.teacherQuestion);
+              }}
+              className={`btn-press flex flex-col items-center justify-center rounded-2xl px-6 py-4 text-xl text-white ${
+                preload.finished ? "animate-pop bg-primary" : "bg-primary/60"
+              }`}
+              style={{ ["--btn-shadow" as string]: "rgb(0 0 0 / 0.25)" }}
+            >
+              <span>{preload.finished ? start.label : "먼저 시작하기 (계속 받는 중)"}</span>
+              {start.hint && <span className="mt-0.5 font-mixed text-sm">{start.hint}</span>}
+            </Link>
+          )}
         </section>
 
         {/* 다시 온 사람에게는 "오늘 뭘 할지"가 가장 먼저 보여야 한다. 처음 온 사람에게는
