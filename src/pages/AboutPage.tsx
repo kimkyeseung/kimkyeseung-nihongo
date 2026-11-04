@@ -3,7 +3,8 @@ import AdSlot from "../components/AdSlot";
 import { AD_SLOTS } from "../lib/ads";
 import BackupCard from "../components/BackupCard";
 import SegmentedTabs from "../components/SegmentedTabs";
-import { useAppearance } from "../stores/pageStateStore";
+import { TOUR_FIRST_STOP_STEP } from "../lib/onboarding";
+import { useAppearance, useGuidedTour } from "../stores/pageStateStore";
 
 const SOURCES = [
   {
@@ -47,6 +48,7 @@ const SOURCES = [
 function AboutPage() {
   const theme = useAppearance((s) => s.theme);
   const setTheme = useAppearance((s) => s.setTheme);
+  const goToTourStep = useGuidedTour((s) => s.goTo);
   return (
     <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
       <Link to="/gojuon" className="text-info">
@@ -91,6 +93,14 @@ function AboutPage() {
         value={theme}
         onChange={setTheme}
       />
+
+      <h3 className="mt-6 text-sm font-bold text-gray-500">앱 둘러보기</h3>
+      <button
+        onClick={() => goToTourStep(TOUR_FIRST_STOP_STEP)}
+        className="mt-2 w-full rounded-2xl border-2 border-gray-100 bg-white px-4 py-3 text-left text-gray-700"
+      >
+        🧭 페이지별 안내 다시 보기
+      </button>
 
       <h3 id="backup" className="mt-6 text-sm font-bold text-gray-500">내 학습 데이터 백업</h3>
       <BackupCard />

@@ -9,6 +9,7 @@ import BadgeWatcher from "./BadgeWatcher";
 import ConversationSessionController from "./ConversationSessionController";
 import TeacherSessionController from "./TeacherSessionController";
 import GemmaDownloadBar from "./GemmaDownloadBar";
+import GuidedTour from "./GuidedTour";
 import LoadingMascot from "./LoadingMascot";
 import PromptApiOnboardingDialog from "./PromptApiOnboardingDialog";
 
@@ -108,6 +109,7 @@ function BottomNav() {
             key={item.to}
             to={to}
             aria-current={isActive ? "page" : undefined}
+            data-tour={item.to}
             onClick={(e) => {
               // 이미 그 자리를 보고 있는데 또 눌렀다 = "목록으로 내려가고 싶다"는 뜻이다.
               if (isDictionary && pathname === to && to !== item.to) {
@@ -231,6 +233,7 @@ function Layout() {
       <Confetti />
       <BadgeWatcher />
       <PromptApiOnboardingDialog />
+      <GuidedTour />
       <ConversationSessionController />
       {/* 선생님 답변도 탭을 옮겨도 끊기지 않게 페이지 밖에 둔다(회화와 같은 이유). */}
       <TeacherSessionController />
