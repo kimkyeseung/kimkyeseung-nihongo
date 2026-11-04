@@ -115,7 +115,9 @@ export function buildDailyPlan(
       emoji: "漢",
       title: `한자 ${progress.kanjiTodo.length}자 익히기`,
       detail: `${progress.kanjiTodo.join(" ")} — 이번 단원의 한자예요.`,
-      to: "/kanji",
+      // 그 글자를 바로 연다 — 그냥 /kanji로 보내면 마지막에 보던 급수(처음이면 N5)가 떠서, N3 학습자가
+      // 엉뚱한 목록에서 글자를 찾아야 한다. 한자 페이지가 주소의 글자에 맞춰 급수도 옮긴다.
+      to: `/kanji?k=${encodeURIComponent(progress.kanjiTodo[0])}`,
     });
   }
 
@@ -160,4 +162,35 @@ export function buildDailyPlan(
   }
 
   return actions.slice(0, MAX_ACTIONS);
+}
+
+export interface HomeStart {
+  to: string;
+  label: string;
+  /** 버튼 아래 작은 줄 — 누르면 무엇을 하게 되는지. */
+  hint?: string;
+  teacherQuestion?: string;
+}
+
+/**
+ * 대문의 큰 시작 버튼이 어디로 갈까.
+ *
+ * - **시작 단계를 고르기 전의 처음 온 사람에게는 버튼이 없다(null).** 그 자리에서는 단계 고르기가 곧
+ *   시작이다 — 버튼이 있으면 N3 학습자도 고르기 전에 눌러 히라가나 표에 도착한다.
+ * - 단계를 골랐으면 오늘의 첫 할 일로 간다. 대문 카드가 N3 단원을 보여주는 바로 위에서 버튼이 오십음도로
+ *   가던 것이 이 함수가 생긴 이유다.
+ * - 추천을 아직 못 읽었으면(`actions: null`) 지금 단원이 보이는 로드맵으로 보낸다.
+ * - 예전부터 쓰던 사람은 단계를 안 골랐어도 막지 않는다.
+ */
+export function planHomeStart(opts: {
+  hasStartLevel: boolean;
+  returning: boolean;
+  actions: readonly PlanAction[] | null;
+}): HomeStart | null {
+  const label = opts.returning ? "이어서 학습하기" : "학습 시작하기";
+  if (!opts.hasStartLevel) return opts.returning ? { to: "/gojuon", label } : null;
+
+  const first = opts.actions?.[0];
+  if (!first) return { to: "/curriculum", label };
+  return { to: first.to, label, hint: first.title, teacherQuestion: first.teacherQuestion };
 }

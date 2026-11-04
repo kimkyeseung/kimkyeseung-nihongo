@@ -2,10 +2,9 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import ProgressBar from "./ProgressBar";
-import { useCurriculumPlan } from "../hooks/useCurriculumPlan";
-import { buildDailyPlan, type PlanAction } from "../lib/dailyPlan";
+import { useCurriculumPlan, useTodayActions } from "../hooks/useCurriculumPlan";
+import type { PlanAction } from "../lib/dailyPlan";
 import { useCurriculumStore } from "../stores/curriculumStore";
-import { useLearnerMemoryStore } from "../stores/learnerMemoryStore";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
 import { useLevelTestStore } from "../stores/levelTestStore";
 import { latestRecord, shouldSuggestRetest } from "../lib/levelTest/history";
@@ -102,7 +101,7 @@ function ActionRow({ action }: { action: PlanAction }) {
 function TodayPlanCard() {
   const startLevel = useCurriculumStore((s) => s.startLevel);
   const result = useCurriculumPlan();
-  const profile = useLearnerMemoryStore((s) => s.profile);
+  const actions = useTodayActions() ?? [];
   const lastDiagnosis = useLevelTestStore((s) => latestRecord(s.records));
   // "다시 진단해볼까요?"는 90일 단위라 렌더마다 시계를 읽을 이유가 없다 — 카드가 뜰 때 한 번.
   const [now] = useState(() => Date.now());
@@ -118,9 +117,8 @@ function TodayPlanCard() {
     );
   }
 
-  const { plan, currentUnit } = result;
+  const { plan } = result;
   const current = plan.current;
-  const actions = buildDailyPlan(current, currentUnit, profile);
   const levelData = result.curriculum.levels.find((l) => l.level === current?.level);
 
   return (

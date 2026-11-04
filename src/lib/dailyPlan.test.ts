@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WEAK_REVIEW_PATH, buildDailyPlan, buildTeacherGreeting } from "./dailyPlan";
+import { WEAK_REVIEW_PATH, buildDailyPlan, buildTeacherGreeting, planHomeStart } from "./dailyPlan";
 import { EMPTY_PROFILE, type LearnerProfile } from "./learnerProfile";
 import type { UnitProgress } from "./curriculumProgress";
 import type { CurriculumUnit } from "../types/curriculum";
@@ -134,6 +134,48 @@ describe("buildDailyPlan", () => {
       profileWithWeakKanji(["薔", "鬱"])
     );
     expect(actions.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("planHomeStart", () => {
+  const kanjiAction = { id: "kanji", emoji: "漢", title: "한자 4자 익히기", detail: "", to: "/kanji?k=%E5%91%BD" };
+
+  it("단계를 고르기 전의 처음 온 사람에게는 버튼을 주지 않는다", () => {
+    // 버튼이 있으면 N3 학습자도 고르기 전에 눌러 히라가나 표에 도착한다.
+    expect(planHomeStart({ hasStartLevel: false, returning: false, actions: null })).toBeNull();
+  });
+
+  it("예전부터 쓰던 사람은 단계를 안 골랐어도 막지 않는다", () => {
+    expect(planHomeStart({ hasStartLevel: false, returning: true, actions: null })).toEqual({
+      to: "/gojuon",
+      label: "이어서 학습하기",
+    });
+  });
+
+  it("단계를 골랐으면 오늘의 첫 할 일로 간다", () => {
+    const start = planHomeStart({ hasStartLevel: true, returning: false, actions: [kanjiAction] });
+    expect(start).toMatchObject({ to: kanjiAction.to, label: "학습 시작하기", hint: "한자 4자 익히기" });
+  });
+
+  it("문법이 첫 할 일이면 대신 물어볼 질문도 같이 넘긴다", () => {
+    const grammar = { ...kanjiAction, id: "grammar", to: "/teacher", teacherQuestion: "〜たら 알려줘" };
+    expect(planHomeStart({ hasStartLevel: true, returning: true, actions: [grammar] })?.teacherQuestion).toBe(
+      "〜たら 알려줘"
+    );
+  });
+
+  it("추천을 아직 못 읽었으면 오십음도가 아니라 로드맵으로 보낸다", () => {
+    expect(planHomeStart({ hasStartLevel: true, returning: false, actions: null })?.to).toBe("/curriculum");
+    expect(planHomeStart({ hasStartLevel: true, returning: false, actions: [] })?.to).toBe("/curriculum");
+  });
+});
+
+describe("buildDailyPlan의 한자 목적지", () => {
+  it("남은 첫 글자를 주소에 실어 그 급수로 바로 연다", () => {
+    const actions = buildDailyPlan(progress({ kanjiTodo: ["命", "令"] }), unit(), EMPTY_PROFILE);
+    const kanji = actions.find((a) => a.id === "kanji");
+    expect(new URLSearchParams(kanji?.to.split("?")[1]).get("k")).toBe("命");
+    expect(kanji?.to.startsWith("/kanji?")).toBe(true);
   });
 });
 
