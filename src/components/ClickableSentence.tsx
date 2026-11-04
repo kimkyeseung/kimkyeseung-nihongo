@@ -72,7 +72,20 @@ function ClickableSentence({
           );
         }
 
-        return <Fragment key={i}>{seg.text}</Fragment>;
+        // 사전 단어는 아니지만 읽기는 아는 조각(숫자+단위·성씨).
+        const plainRuby = showFurigana ? rubyFor(seg) : null;
+        return (
+          <Fragment key={i}>
+            {plainRuby
+              ? plainRuby.map((f, j) => (
+                  <ruby key={j}>
+                    {f.ruby}
+                    <rt>{f.rt}</rt>
+                  </ruby>
+                ))
+              : seg.text}
+          </Fragment>
+        );
       })}
     </>
   );

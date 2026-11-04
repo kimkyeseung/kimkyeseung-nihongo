@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import curriculum from "../data/curriculum.json";
+import levelTestBank from "../data/level-test-bank.json";
 import { rubyFor, segmentSentenceIntoWords } from "./sentenceWords";
 
 // 문장을 단어로 쪼개는 일은 조용히 틀린다 — 엉뚱한 단어가 붙어도 콘솔은 멀쩡하고, 눌러본
@@ -135,6 +137,125 @@ describe("rubyFor", () => {
     // 화면에 보고된 증상 그대로 — 「今日は天気が良いです」의 今日 위에 こんにち가 떴다.
     const ruby = rubyFor(segOf("今日は天気が良いです。", "今日"));
     expect(ruby!.map((f) => f.rt).join("")).toBe("きょう");
+  });
+
+  /** 그 조각 위에 달리는 읽기. 없으면 null. */
+  const rtOf = (sentence: string, text: string) => {
+    const ruby = rubyFor(segOf(sentence, text));
+    return ruby ? ruby.map((f) => f.rt ?? "").join("") : null;
+  };
+
+  it("활용형의 어간에 사전형의 읽기를 단다 (실제로 보고받았다)", () => {
+    // 食이 名詞 食(しょく)로 잡혀 「食べます」 위에 しょく가 떴다.
+    expect(rtOf("朝ごはんを食べます。", "食べ")).toBe("た");
+    expect(rtOf("子供に野菜を食べさせます。", "食べ")).toBe("た");
+    expect(rtOf("日本へ行って、友だちに会いました。", "行")).toBe("い");
+    expect(rtOf("日本へ行って、友だちに会いました。", "会")).toBe("あ");
+    expect(rtOf("大きい声で話してください。", "話")).toBe("はな");
+    expect(rtOf("試験は難しかったです。", "難し")).toBe("むずか");
+    expect(rtOf("彼はもう着いているはずです。", "着")).toBe("つ");
+    expect(rtOf("試合は行われる。", "行")).toBe("おこな");
+  });
+
+  it("활용형의 어간을 누르면 사전형으로 간다", () => {
+    expect(segOf("朝ごはんを食べます。", "食べ").word?.word).toBe("食べる");
+    expect(segOf("日本へ行って、", "行").word?.word).toBe("行く");
+  });
+
+  it("来る의 읽기는 뒤 글자에 따라 갈린다", () => {
+    expect(rtOf("バスが来なかったんです。", "来")).toBe("こ");
+    expect(rtOf("会社に来た。", "来")).toBe("き");
+    expect(rtOf("友だちが来ます。", "来")).toBe("き");
+  });
+
+  it("조사 앞의 명사를 동사 어간으로 잡지 않는다", () => {
+    expect(rtOf("雨で行けません。", "雨")).toBe("あめ");
+    expect(rtOf("彼の話は面白いです。", "話")).toBe("はなし");
+    expect(segOf("彼の話は面白いです。", "話").word?.pos).toContain("n");
+  });
+
+  it("혼자 쓰인 글자는 접미사 읽기로 읽지 않는다", () => {
+    // 첫 common을 집어서 店이 てん, 人이 じん, 上이 かみ로 읽혔다(문제 은행 전수로 확인).
+    expect(rtOf("この店は安いです。", "店")).toBe("みせ");
+    expect(rtOf("たくさんの人が来ました。", "人")).toBe("ひと");
+    expect(rtOf("本はテーブルの上にあります。", "上")).toBe("うえ");
+    expect(rtOf("空が暗くなってきた。", "空")).toBe("そら");
+  });
+
+  it("한자 뒤의 人은 접미사로 읽는다", () => {
+    expect(rtOf("韓国人です。", "人")).toBe("じん");
+  });
+
+  it("숫자+단위를 글자별로 쪼개 읽지 않는다 (실제로 보고받았다)", () => {
+    // 四(し)+時(とき)로 「しとき」가 떴다.
+    expect(rtOf("わたしは四時に行きます。", "四時")).toBe("よじ");
+    expect(rtOf("パーティーは六時からです。", "六時")).toBe("ろくじ");
+    expect(rtOf("この寺は六百年前に建てられた。", "六百年")).toBe("ろっぴゃくねん");
+  });
+
+  it("사전 표제어가 있으면 숫자 계산보다 표제어를 쓴다", () => {
+    expect(rtOf("一人だけです。", "一人")).toBe("ひとり");
+  });
+
+  it("보통 가나로 쓰는 항목을 한자 자리에 읽지 않는다", () => {
+    // 彼가 あれ로, 彼の가 あの로, 何時가 いつ로 읽혔다.
+    expect(rtOf("彼は学生です。", "彼")).toBe("かれ");
+    expect(rtOf("彼の話は面白いです。", "彼")).toBe("かれ");
+    expect(rtOf("今何時ですか。", "何時")).toBe("なんじ");
+  });
+
+  it("명사와 동사의 읽기가 다르면 동사를 쓴다", () => {
+    // 入り(いり)가 먼저 잡혀 「入ります」가 いります로, 越し(ごし)가 잡혀 「お越し」가 おごし로 읽혔다.
+    expect(rtOf("部屋に入ります。", "入")).toBe("はい");
+    expect(rtOf("お越しください。", "越")).toBe("こ");
+  });
+
+  it("方은 비교의 が 앞에서만 ほう로 읽는다", () => {
+    expect(rtOf("電車よりバスの方が安いです。", "方")).toBe("ほう");
+    expect(rtOf("方は先生です。", "方")).toBeNull();
+  });
+
+  it("빈칸 앞의 동사 어간에는 읽기를 달지 않는다", () => {
+    expect(rtOf("日本に来＿＿、一度も帰っていない。", "来")).toBeNull();
+  });
+
+  it("복합 명사의 読み를 동사로 바꾸지 않는다", () => {
+    expect(rtOf("入り口はあちらです。", "入り口")).toBe("いりぐち");
+  });
+
+  it("흔한 동사 둘로 갈리면 읽기를 달지 않는다", () => {
+    // 開か는 あく도 ひらく도 된다 — 「朝市が開かれて」에 あ가 달렸다.
+    expect(rtOf("朝市が開かれています。", "開")).toBeNull();
+  });
+
+  it("숫자·성씨 뒤의 글자를 그 읽기 아래로 넣지 않는다", () => {
+    const segments = segmentSentenceIntoWords("田中さんは四時に来ます。");
+    expect(segments.find((s) => s.ruby?.[0]?.ruby === "田中")?.text).toBe("田中");
+    expect(segments.map((s) => s.text).join("")).toBe("田中さんは四時に来ます。");
+  });
+
+  it("흔한 성씨를 글자별로 쪼개 읽지 않는다 (실제로 보고받았다)", () => {
+    expect(rtOf("田中さんは飲みます。", "田中")).toBe("たなか");
+    expect(rtOf("鈴木さんです。", "鈴木")).toBe("すずき");
+  });
+
+  it("사전에 없는 복합어는 틀리게 읽느니 읽기를 달지 않는다", () => {
+    // 金閣寺가 金(かね)+閣+寺(てら)가 됐다.
+    expect(rtOf("金閣寺へ行きました。", "金")).toBeNull();
+    expect(rtOf("金閣寺へ行きました。", "寺")).toBeNull();
+  });
+
+  it("문제 은행·커리큘럼 전체에서 조각 읽기가 원문을 바꾸지 않는다", () => {
+    const strings = (v: unknown): string[] =>
+      typeof v === "string" ? [v] : v && typeof v === "object" ? Object.values(v).flatMap(strings) : [];
+    for (const text of new Set([...strings(levelTestBank), ...strings(curriculum)])) {
+      const segments = segmentSentenceIntoWords(text);
+      expect(segments.map((s) => s.text).join("")).toBe(text);
+      for (const seg of segments) {
+        const ruby = rubyFor(seg);
+        if (ruby) expect(ruby.map((f) => f.ruby).join("")).toBe(seg.text);
+      }
+    }
   });
 
   it("후리가나가 원문과 다른 글자를 만들지 않는다", () => {

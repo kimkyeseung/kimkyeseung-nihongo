@@ -1,5 +1,6 @@
 import { dictionary } from "./dictionary";
 import { getKanjiEntry } from "./kanji";
+import { readNumberPrefix } from "./numberReading";
 import type { Furigana, WordEntry } from "../types/dictionary";
 import type { KanjiEntry } from "../types/kanji";
 
@@ -8,6 +9,138 @@ export interface SentenceSegment {
   word: WordEntry | null;
   /** word가 없을 때만: 활용형이라 사전 단어로는 안 잡히지만 그 글자 자체는 한자.json에 있는 경우. */
   kanji: KanjiEntry | null;
+  /** 표제어 표기와 달라 따로 계산한 읽기(활용형의 어간·숫자+단위·성씨). 있으면 `rubyFor`가 이걸 쓴다. */
+  ruby?: Furigana[];
+  /** 읽기를 믿을 수 없는 자리 — 틀린 읽기를 다느니 달지 않는다(`rubyFor`). */
+  noRuby?: boolean;
+}
+
+const KANJI_CHAR = /[㐀-鿿々]/;
+
+/**
+ * 사전에 없거나 사전 읽기가 문맥과 다른 복합어. 글자별로 쪼개면 田中가 田(た)+中(ちゅう)가 된다(실제로 보고받았다).
+ * 문제 은행·커리큘럼에 나오는 성씨와, 사전의 何時가 いつ뿐이라 「今何時」가 いま·いつ로 읽히던 것을 담았다.
+ * 새 이름이 나오면 여기에 더할 것(없으면 읽기가 안 달릴 뿐 틀리지는 않는다).
+ */
+const FIXED_READINGS: Record<string, string> = {
+  田中: "たなか",
+  山田: "やまだ",
+  山本: "やまもと",
+  鈴木: "すずき",
+  中村: "なかむら",
+  何時: "なんじ",
+  入り口: "いりぐち",
+  夜ふかし: "よふかし",
+  手放: "てばな",
+};
+
+/** 옆에 다른 한자가 붙어도 혼자 읽히는 글자(今何時 → いま·なんじ). */
+const READS_ALONE = new Set(["今", "何"]);
+
+/** 앞말에 붙어 읽기가 바뀌는 품사(人 → じん, 店 → てん). */
+const AFFIX_POS = new Set(["suf", "n-suf", "ctr", "pref"]);
+const LEVEL_RANK: Record<string, number> = { N5: 0, N4: 1, N3: 2, N2: 3, N1: 4 };
+
+/** 활용형의 어간 → 그 동사·형용사. 「食べ」→ 食べる, 「行」→ 行く·行う. */
+type StemCandidate = { entry: WordEntry; next: ReadonlySet<string> | null; priority: number };
+let stemIndex: Map<string, StemCandidate[]> | null = null;
+let maxStemLength = 1;
+
+const chars = (s: string) => new Set(s);
+/** 5단 동사 끝 글자별로 어간 뒤에 올 수 있는 글자(음편 포함). */
+const GODAN_NEXT: Record<string, ReadonlySet<string>> = {
+  う: chars("わいうえおっ"),
+  く: chars("かきくけこい"),
+  ぐ: chars("がぎぐげごい"),
+  す: chars("さしすせそ"),
+  つ: chars("たちつてとっ"),
+  ぬ: chars("なにぬねのん"),
+  ぶ: chars("ばびぶべぼん"),
+  む: chars("まみむめもん"),
+  る: chars("らりるれろっ"),
+};
+/** 한자로 끝나는 1단 어간(見·出·着) 뒤. 이것 없이 아무 글자나 받으면 「出が」의 出가 동사가 된다. */
+const ICHIDAN_NEXT = chars("またてならよろれさず");
+const ADJECTIVE_NEXT = chars("かくけさそいすめ");
+const IKU_NEXT = chars("かきくけこっ");
+
+function addStemCandidates(index: Map<string, StemCandidate[]>, entry: WordEntry) {
+  const { word, pos } = entry;
+  // 읽기를 어간에 맞춰 잘라야 해서 furigana가 있어야 하고, 드문 동사가 낱말을 가로채지 못하게 흔한 것만 넣는다.
+  // 가나로 쓰는 동사(有る·為る)는 한자로 나올 일이 거의 없다.
+  if (!entry.furigana || entry.usuallyKana || !KANJI_CHAR.test(word[0])) return;
+  if (!entry.common && !entry.jlptLevel) return;
+
+  const last = word[word.length - 1];
+  const stem = word.slice(0, -1);
+  if (!stem) return;
+  const add = (next: ReadonlySet<string> | null, priority = 0) => {
+    const list = index.get(stem);
+    const candidate = { entry, next, priority };
+    if (list) list.push(candidate);
+    else index.set(stem, [candidate]);
+    maxStemLength = Math.max(maxStemLength, stem.length);
+  };
+
+  if (pos.includes("v5k-s")) add(IKU_NEXT, 1);
+  else if (pos.some((p) => p.startsWith("v5")) && GODAN_NEXT[last]) add(GODAN_NEXT[last]);
+  else if (last === "る" && pos.some((p) => p === "v1" || p === "v1-s")) {
+    // 어간이 가나로 끝나면(食べ) 활용이 확실하니 뒤 글자를 따지지 않는다.
+    add(KANJI_CHAR.test(stem[stem.length - 1]) ? ICHIDAN_NEXT : null);
+  } else if (last === "い" && pos.some((p) => p === "adj-i" || p === "adj-ix")) add(ADJECTIVE_NEXT);
+}
+
+function stemRank(c: StemCandidate): number {
+  return -c.priority * 100 + (c.entry.common ? 0 : 10) + (c.entry.jlptLevel ? LEVEL_RANK[c.entry.jlptLevel] : 5);
+}
+
+/** 어간의 후리가나 — 표제어의 것을 어간 길이에 맞춰 자른다(食べる → 食(た)·べ). */
+function clipFurigana(furigana: readonly Furigana[], length: number): Furigana[] {
+  const out: Furigana[] = [];
+  let left = length;
+  for (const piece of furigana) {
+    if (left <= 0) break;
+    if (piece.ruby.length <= left) out.push(piece);
+    else out.push({ ...piece, ruby: piece.ruby.slice(0, left) });
+    left -= piece.ruby.length;
+  }
+  return out;
+}
+
+/** 来る는 어간 표기가 来 하나인데 읽기가 뒤 글자에 따라 갈린다(来ない こ / 来た き). */
+function kuruReading(next: string): string | null {
+  if ("ないよらさず".includes(next)) return "こ";
+  if ("たてま".includes(next)) return "き";
+  return null;
+}
+
+const rubyReading = (ruby: readonly Furigana[]) => ruby.map((f) => f.rt ?? "").join("");
+
+function findInflected(
+  text: string,
+  at: number
+): { length: number; entry: WordEntry; ruby: Furigana[]; ambiguous: boolean } | null {
+  if (!KANJI_CHAR.test(text[at])) return null;
+  const upper = Math.min(maxStemLength, text.length - at - 1);
+  for (let len = upper; len >= 1; len--) {
+    const stem = text.slice(at, at + len);
+    const next = text[at + len];
+    const fits = stemIndex!.get(stem)?.filter((c) => (c.next ? c.next.has(next) : !KANJI_CHAR.test(next)));
+    if (fits?.length) {
+      const [best, ...others] = [...fits].sort((a, b) => stemRank(a) - stemRank(b));
+      const ruby = clipFurigana(best.entry.furigana!, len);
+      // 開か는 あく(N5)일 수도 ひらく(N4)일 수도 있다(「開かれる」는 ひら다). 표기가 같은 동사의 급수가 붙어 있거나
+      // 한쪽 급수를 모르면(抱く だく/いだく) 고를 근거가 없다. 入る(はいる N5 / いる N1)처럼 멀면 낮은 급수가 맞다.
+      const ambiguous = others.some((o) => {
+        if (o.entry.word !== best.entry.word) return false;
+        if (rubyReading(clipFurigana(o.entry.furigana!, len)) === rubyReading(ruby)) return false;
+        const [a, b] = [o.entry.jlptLevel, best.entry.jlptLevel];
+        return !a || !b || Math.abs(LEVEL_RANK[a] - LEVEL_RANK[b]) <= 1;
+      });
+      return { length: len, entry: best.entry, ruby, ambiguous };
+    }
+  }
+  return null;
 }
 
 /** 표기(`word`)로 찾는 색인. 한자로 쓰인 자리는 여기서 잡힌다. */
@@ -65,7 +198,8 @@ const NOT_A_STANDALONE_READING = new Set(["まし", "まれ"]);
  * `ねた`(이야깃거리)는 사전을 흔한 단어까지 넓히며 들어왔는데, 가나로만 쓴 「ねたほうがいい」의
  * 寝た(잤다)를 가로챘다(커리큘럼 예문 전수 비교에서 나온 유일한 새 오탐).
  */
-const NOT_A_STANDALONE_SPELLING = new Set(["今日は", "今晩は", "ねた"]);
+// `彼の`은 あの(uk)로만 실려 있어서 「彼の話」의 彼가 あ로 읽혔다 — 한자로 쓴 彼の는 거의 언제나 かれの다.
+const NOT_A_STANDALONE_SPELLING = new Set(["今日は", "今晩は", "ねた", "彼の"]);
 
 function addTo(index: Map<string, WordEntry[]>, key: string, entry: WordEntry) {
   const list = index.get(key);
@@ -76,7 +210,9 @@ function addTo(index: Map<string, WordEntry[]>, key: string, entry: WordEntry) {
 function buildIndexes() {
   const words = new Map<string, WordEntry[]>();
   const readings = new Map<string, WordEntry[]>();
+  const stems = new Map<string, StemCandidate[]>();
   for (const entry of dictionary) {
+    addStemCandidates(stems, entry);
     if (!NOT_A_STANDALONE_SPELLING.has(entry.word)) {
       addTo(words, entry.word, entry);
       maxWordLength = Math.max(maxWordLength, entry.word.length);
@@ -98,6 +234,7 @@ function buildIndexes() {
   }
   wordIndex = words;
   readingIndex = readings;
+  stemIndex = stems;
 }
 
 /**
@@ -109,8 +246,41 @@ export function lookupWord(text: string): readonly WordEntry[] {
   return [...(wordIndex!.get(text) ?? []), ...(readingIndex!.get(text) ?? [])];
 }
 
-function pickEntry(candidates: WordEntry[]): WordEntry {
-  return candidates.find((c) => c.common) ?? candidates[0];
+/**
+ * 표기가 같은 후보 중 하나를 고른다. **사전 순서를 믿으면 안 된다** — 예전엔 "첫 common"을 집어서 店이
+ * てん(접미사), 人이 じん, 上이 かみ로 읽혔다(문제 은행 전수로 확인).
+ *
+ * 혼자 쓰인 글자면 접사가 아닌 쪽, 한자 바로 뒤면 접사 쪽(韓国人의 人)을 먼저 보고, 그다음 흔한 것 → 낮은 급수.
+ */
+function pickEntry(candidates: WordEntry[], afterKanji: boolean): WordEntry {
+  const score = (c: WordEntry) => {
+    const isAffix = c.pos.some((p) => AFFIX_POS.has(p));
+    const onlyAffix = c.pos.length > 0 && c.pos.every((p) => AFFIX_POS.has(p));
+    const affixScore = afterKanji ? (isAffix ? 0 : 100) : onlyAffix ? 100 : 0;
+    // 보통 가나로 쓰는 항목은 한자로 쓴 자리의 답이 아니다 — 彼가 あれ(N5)로 읽혔다. 정답 かれ는 다른 항목이다.
+    const kanaWordPenalty = c.usuallyKana ? 50 : 0;
+    return affixScore + kanaWordPenalty + (c.common ? 0 : 10) + (c.jlptLevel ? LEVEL_RANK[c.jlptLevel] : 5);
+  };
+  // sort는 안정 정렬이라 점수가 같으면 사전 순서대로다.
+  return [...candidates].sort((a, b) => score(a) - score(b))[0];
+}
+
+/** 한자 바로 뒤의 한 글자인데 접사 후보도 없고 읽기가 갈린다 — 今日中의 中처럼 무엇으로 읽을지 모른다. */
+function isUnknownAfterKanji(candidates: readonly WordEntry[]): boolean {
+  if (candidates.some((c) => c.pos.some((p) => AFFIX_POS.has(p)))) return false;
+  return new Set(candidates.map((c) => c.reading)).size > 1;
+}
+
+/**
+ * 사전에 없는 복합어의 조각(金閣寺의 金·寺, 月火水木의 火)은 글자별 읽기가 거의 틀리다(金 → かね).
+ * 한 글자 조각이 다른 한 글자 조각과 붙어 있으면 읽기를 달지 않는다.
+ */
+function markUnreliableCompounds(segments: SentenceSegment[]) {
+  const isBareSingle = (s: SentenceSegment | undefined) =>
+    !!s && s.text.length === 1 && KANJI_CHAR.test(s.text) && !s.ruby && !READS_ALONE.has(s.text);
+  segments.forEach((s, i) => {
+    if (isBareSingle(s) && (isBareSingle(segments[i - 1]) || isBareSingle(segments[i + 1]))) s.noRuby = true;
+  });
 }
 
 /**
@@ -130,8 +300,18 @@ export function segmentSentenceIntoWords(text: string): SentenceSegment[] {
   const segments: SentenceSegment[] = [];
   let i = 0;
   while (i < text.length) {
+    const fixed = Object.keys(FIXED_READINGS).find((name) => text.startsWith(name, i));
+    if (fixed) {
+      segments.push({ text: fixed, word: null, kanji: null, ruby: [{ ruby: fixed, rt: FIXED_READINGS[fixed] }] });
+      i += fixed.length;
+      continue;
+    }
+
     let matchedLen = 0;
     let matchedEntry: WordEntry | null = null;
+    let matchedList: WordEntry[] = [];
+    const previous = segments[segments.length - 1];
+    const afterKanji = !!previous && KANJI_CHAR.test(previous.text[previous.text.length - 1]);
     const upper = Math.min(maxWordLength, text.length - i);
     for (let len = upper; len >= 1; len--) {
       const candidate = text.slice(i, i + len);
@@ -139,13 +319,74 @@ export function segmentSentenceIntoWords(text: string): SentenceSegment[] {
       // (읽기가 우연히 겹치는 다른 단어가 있을 수 있다). 길이는 언제나 긴 쪽이 이긴다.
       const list = wordIndex!.get(candidate) ?? readingIndex!.get(candidate);
       if (list) {
-        matchedEntry = pickEntry(list);
+        matchedEntry = pickEntry(list, afterKanji);
+        matchedList = list;
         matchedLen = len;
         break;
       }
     }
+
+    // 숫자+단위는 사전에 없는 조합이 대부분이다(四時). 사전 표제어(一人·十分)가 같거나 길면 그쪽이 맞다.
+    // 앞에 한자가 붙으면 숫자가 아닐 수 있다(再三).
+    const number = afterKanji ? null : readNumberPrefix(text.slice(i, i + 12));
+    if (number && number.text.length > matchedLen) {
+      segments.push({ text: number.text, word: null, kanji: null, ruby: [{ ruby: number.text, rt: number.reading }] });
+      i += number.text.length;
+      continue;
+    }
+
+    // 활용형. 사전 표제어가 한 글자뿐이거나 없으면 어간을 먼저 본다 — 「食べます」의 食이 名詞 食(しょく)로 잡혔다.
+    if (matchedLen <= 1) {
+      const next = text[i + 1];
+      if (text[i] === "来" && next && kuruReading(next)) {
+        const kuru = wordIndex!.get("来る")?.[0] ?? null;
+        segments.push({ text: "来", word: kuru, kanji: null, ruby: [{ ruby: "来", rt: kuruReading(next)! }] });
+        i += 1;
+        continue;
+      }
+    }
+    const inflected = findInflected(text, i);
+    if (inflected) {
+      // 「読みました」처럼 표제어(読み)가 길게 잡히면 읽기가 같으니 그대로 둔다. 다만 入り(いり)·越し(ごし)처럼
+      // 명사의 읽기가 동사와 다르면 동사를 쓴다 — 「入ります」가 いります로, 「お越し」가 おごし로 읽혔다.
+      const matchedRuby = matchedEntry?.word === text.slice(i, i + matchedLen) ? matchedEntry.furigana : null;
+      const differs =
+        matchedLen > inflected.length &&
+        !KANJI_CHAR.test(text[i + matchedLen] ?? "") && // 뒤에 한자가 이어지면 복합 명사다
+        !!matchedRuby?.[0]?.rt &&
+        matchedRuby[0].rt !== inflected.ruby[0]?.rt;
+      if ((matchedLen <= 1 && inflected.length >= matchedLen) || differs) {
+        segments.push({
+          text: text.slice(i, i + inflected.length),
+          word: inflected.entry,
+          kanji: null,
+          ruby: inflected.ruby,
+          noRuby: inflected.ambiguous,
+        });
+        i += inflected.length;
+        continue;
+      }
+    }
+
     if (matchedLen > 0) {
-      segments.push({ text: text.slice(i, i + matchedLen), word: matchedEntry, kanji: null });
+      const matched = text.slice(i, i + matchedLen);
+      const segment: SentenceSegment = { text: matched, word: matchedEntry, kanji: null };
+      if (afterKanji && matchedLen === 1 && KANJI_CHAR.test(matched) && isUnknownAfterKanji(matchedList)) {
+        segment.noRuby = true;
+      }
+      // 빈칸 바로 앞의 동사 어간(「日本に来＿＿」「行＿＿」)은 뒤 글자를 몰라 읽기를 정할 수 없다.
+      if (text[i + 1] === "＿" && (matched === "来" || stemIndex!.has(matched))) segment.noRuby = true;
+      // 方은 「〜の方が」(ほう)와 「あの方」(かた)로 갈린다. 비교의 が 앞만 확실하다.
+      if (matched === "方") {
+        const hou = matchedList.find((c) => c.reading === "ほう");
+        if (text[i + 1] === "が" && hou) {
+          segment.word = hou;
+          segment.ruby = [{ ruby: "方", rt: "ほう" }];
+        } else {
+          segment.noRuby = true;
+        }
+      }
+      segments.push(segment);
       i += matchedLen;
       continue;
     }
@@ -158,10 +399,12 @@ export function segmentSentenceIntoWords(text: string): SentenceSegment[] {
     }
 
     const last = segments[segments.length - 1];
-    if (last && last.word === null && last.kanji === null) last.text += text[i];
+    // 읽기가 붙은 조각(숫자·성씨)에 이어 붙이면 뒤 글자까지 그 읽기 아래로 들어간다.
+    if (last && last.word === null && last.kanji === null && !last.ruby) last.text += text[i];
     else segments.push({ text: text[i], word: null, kanji: null });
     i += 1;
   }
+  markUnreliableCompounds(segments);
   return segments;
 }
 
@@ -175,6 +418,8 @@ export function segmentSentenceIntoWords(text: string): SentenceSegment[] {
  * 아니다.
  */
 export function rubyFor(segment: SentenceSegment): Furigana[] | null {
+  if (segment.noRuby) return null;
+  if (segment.ruby) return segment.ruby;
   if (!segment.word?.furigana) return null;
   return segment.text === segment.word.word ? segment.word.furigana : null;
 }
