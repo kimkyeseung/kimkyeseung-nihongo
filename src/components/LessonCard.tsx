@@ -22,9 +22,12 @@ function LessonCard({
   aiAvailable = true,
   onAsk,
   onCheck,
+  onPractice,
 }: {
   plan: CurriculumPlanResult;
   variant: "full" | "next";
+  /** 방금 배운 문형을 연습할 수 있으면 — 있으면 다음 단계보다 앞에 둔다(설명 → 연습 → 다음). */
+  onPractice?: () => void;
   /**
    * false면 문형 수업은 내용만 보여 주고 누를 수 없다. 문자·한자·단어·점검은 AI 없이 되므로 수업이 멈추지 않는다.
    * 예전엔 AI를 못 쓰는 브라우저에서 "첫 수업 시작하기"를 눌러도 안내 화면만 나왔다.
@@ -68,10 +71,23 @@ function LessonCard({
         <p className="text-xs text-gray-500">
           📍 {current.unitNumber}단원 수업 · {doneCount}/{steps.length}
         </p>
+        {onPractice && (
+          <button
+            onClick={onPractice}
+            className="btn-press mt-2 w-full rounded-2xl bg-primary px-4 py-2.5 text-left font-bold text-white"
+            style={PRIMARY_SHADOW}
+          >
+            ✏️ 방금 배운 것 연습하기
+          </button>
+        )}
         <button
           onClick={() => start(next)}
-          className="btn-press mt-2 flex w-full items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-left font-mixed font-bold text-white"
-          style={PRIMARY_SHADOW}
+          className={
+            onPractice
+              ? "mt-2 flex w-full items-center gap-2 rounded-2xl border-2 border-gray-100 bg-white px-4 py-2 text-left font-mixed text-sm text-gray-600"
+              : "btn-press mt-2 flex w-full items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-left font-mixed font-bold text-white"
+          }
+          style={onPractice ? undefined : PRIMARY_SHADOW}
         >
           <span aria-hidden>▶</span>
           <span className="min-w-0 flex-1">다음: {next.title}</span>

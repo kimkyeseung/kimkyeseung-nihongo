@@ -16,7 +16,7 @@ import { useWordSuggestions } from "../hooks/useWordSuggestions";
 import { TEACHER_ERROR_ANSWER, TEACHER_REFUSAL_ANSWER, TEACHER_SAMPLE_QUESTIONS } from "../lib/teacherPrompts";
 import { buildTeacherGreeting } from "../lib/dailyPlan";
 import { levelLabel } from "../lib/curriculum";
-import { useDebugMode, useInputScriptPrefs, useTeacherGreeting } from "../stores/pageStateStore";
+import { useDebugMode, useInputScriptPrefs, useTeacherGreeting, useTeacherPractice } from "../stores/pageStateStore";
 import { loadMessagesForDate } from "../lib/learnerMemoryDb";
 import {
   buildTeacherChatExport,
@@ -44,7 +44,7 @@ import { answerPracticeTarget, isPracticeWorthy, type PracticeTarget } from "../
 import { useTeacherCommands } from "../hooks/useTeacherCommands";
 import { unitCheckTargetFromPlan, type UnitCheckTarget } from "../lib/unitCheck";
 import LessonCard from "../components/LessonCard";
-import { buildLessonSteps, taughtStepFromExchange } from "../lib/lessonPlan";
+import { buildLessonSteps, isLessonQuestion, taughtStepFromExchange } from "../lib/lessonPlan";
 
 // 단원 점검(`/test`)은 문제 은행·한자 데이터를 끌어오므로 열 때만 받는다.
 const UnitCheckSheet = lazy(() => import("../components/UnitCheckSheet"));
@@ -196,6 +196,20 @@ function TeacherPage() {
     const target = unitCheckTargetFromPlan(curriculum?.plan ?? null);
     if (target) setUnitCheck(target);
   }
+
+  // 방금 끝난 답이 문형 수업이면 연습을 다음 단계보다 앞에 권한다(설명 → 연습 → 다음). 한 번 풀면 다음 단계가 앞으로 온다.
+  const lastAnswer = messages.at(-1);
+  const lastQuestion = messages.at(-2);
+  const lessonPracticeId =
+    lastAnswer?.role === "assistant" &&
+    lastQuestion?.role === "user" &&
+    isLessonQuestion(lastQuestion.text) &&
+    isPracticeWorthy(lastAnswer.text)
+      ? lastAnswer.id
+      : null;
+  const lessonPracticed = useTeacherPractice((s) =>
+    lessonPracticeId ? !!s.byMessageId[lessonPracticeId]?.xpAwarded : false
+  );
 
   // 문형 수업의 답변이 끝나면 배운 것으로 표시한다. 실패·거절이면 표시하지 않아 같은 수업을 다시 권한다.
   const taughtGrammar = useCurriculumStore((s) => s.taughtGrammar);
@@ -527,8 +541,12 @@ function TeacherPage() {
               // (MarkdownAnswer의 isStreaming 주석 참고).
               const isStreaming = isAnswering && i === messages.length - 1 && m.role === "assistant";
               const isLong = m.role === "assistant" && m.text.length >= LONG_ANSWER_LENGTH;
+              // 수업 답변의 연습 버튼은 아래 수업 카드가 맡는다 — 바로 위아래에 같은 버튼이 두 개 뜨지 않게.
               const canPractice =
-                m.role === "assistant" && isPracticeWorthy(m.text) && messages[i - 1]?.role === "user";
+                m.role === "assistant" &&
+                isPracticeWorthy(m.text) &&
+                messages[i - 1]?.role === "user" &&
+                m.id !== lessonPracticeId;
               return (
                 <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <motion.div
@@ -593,7 +611,17 @@ function TeacherPage() {
 
           {/* 답변이 끝나면 선생님이 다음 단계를 먼저 잇는다. 기록에는 남지 않는다. */}
           {showLesson && curriculum && messages.length > 0 && !isAnswering && !command.showToday && (
-            <LessonCard plan={curriculum} variant="next" onAsk={handleAsk} onCheck={startUnitCheck} />
+            <LessonCard
+              plan={curriculum}
+              variant="next"
+              onAsk={handleAsk}
+              onCheck={startUnitCheck}
+              onPractice={
+                lessonPracticeId && lastQuestion && lastAnswer && !lessonPracticed
+                  ? () => setPracticeTarget(answerPracticeTarget(lessonPracticeId, lastQuestion.text, lastAnswer.text))
+                  : undefined
+              }
+            />
           )}
 
           {/* `/today`. 대화 끝에 붙이되 기록에는 남기지 않는다 — 다음 질문을 하면 사라진다. */}

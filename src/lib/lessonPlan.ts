@@ -5,7 +5,7 @@
 // 그런지 모른다. 그래서 순수 함수로 두고 lessonPlan.test.ts가 고정한다.
 
 import type { UnitProgress } from "./curriculumProgress";
-import type { CurriculumUnit, GrammarPoint } from "../types/curriculum";
+import type { Curriculum, CurriculumUnit, GrammarPoint } from "../types/curriculum";
 
 export type LessonStep = {
   /** 저장에도 쓰는 키. 문형은 `단원키:문형`이다. */
@@ -22,12 +22,54 @@ export type LessonStep = {
     | { kind: "check" };
 };
 
-/** 문형을 배우는 질문. 학습자 말풍선으로 보이고 그대로 선생님에게 간다. */
+const LESSON_SUFFIX = " 수업해 주세요";
+
+/**
+ * 문형 수업을 여는 말. 학습자 말풍선으로 보이는 글이라 짧게 둔다 — 수업 지시와 사실은 앱이 따로 붙인다(`buildLessonBrief`).
+ * 예전엔 "문법을 알려줘. 예문처럼 쓰는 거 맞아?"로 보통 질문처럼 보내서, 답도 질문에 답하는 모양으로 나왔다.
+ */
 export function grammarLessonQuestion(grammar: GrammarPoint): string {
+  return `${grammar.pattern}${LESSON_SUFFIX}`;
+}
+
+/** 이 말이 문형 수업을 여는 말인가(문형이 실제로 커리큘럼에 있는지는 `findLessonGrammar`가 본다). */
+export function isLessonQuestion(question: string): boolean {
+  return question.endsWith(LESSON_SUFFIX);
+}
+
+/**
+ * 수업을 여는 말이면 그 문형을 커리큘럼에서 찾는다. **학습자가 똑같이 쳐도 괜찮다** — 지시문에 들어가는 글자는 입력창이 아니라
+ * 커리큘럼에서 오므로(`buildLessonBrief`), 없는 문형이면 그냥 평범한 질문이 되고 인젝션 통로가 되지 않는다.
+ */
+export function findLessonGrammar(question: string, curriculum: Curriculum | null): GrammarPoint | null {
+  if (!curriculum || !isLessonQuestion(question)) return null;
+  const pattern = question.slice(0, -LESSON_SUFFIX.length);
+  for (const level of curriculum.levels) {
+    for (const unit of level.units) {
+      const found = unit.grammarPoints.find((g) => g.pattern === pattern);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * 수업 지시. 질문 앞에 붙는 앱 데이터다(사전 참고와 같은 자리). 시스템 프롬프트에 넣지 않는 이유는 평범한 질문의 "짧게 답하라"와
+ * 부딪히기 때문이고, 유출 기준에 넣지 않는 이유는 모델이 시키는 대로 소제목을 따라 쓰는 게 정상이기 때문이다.
+ * 뜻과 예문을 주는 건 커리큘럼이 맞는 사실을 들고 있어서다 — 작은 모델은 설명보다 사실을 자주 틀린다.
+ */
+export function buildLessonBrief(grammar: GrammarPoint): string {
   return [
-    `${grammar.pattern} 문법을 알려줘.`,
-    `예문 「${grammar.example}」처럼 쓰는 거 맞아?`,
-    "어떤 상황에서 쓰는지, 비슷한 표현과 뭐가 다른지도 알려줘.",
+    "[오늘의 수업] 앱이 정한 수업입니다. 아래 문형을 처음 배우는 학습자에게 가르치세요.",
+    `문형: ${grammar.pattern}`,
+    `뜻: ${grammar.meaning}`,
+    `예문: \`${grammar.example}\` *(${grammar.exampleTranslation})*`,
+    "뜻과 예문은 이 정보를 따르세요. 이번 답변만 아래 순서로 쓰세요:",
+    "## 1. 핵심 — 무슨 뜻이고 언제 쓰는지 한두 문장",
+    "## 2. 만드는 법 — 어떤 말 뒤에 어떻게 붙는지",
+    "## 3. 예문 — 위 예문과 새 예문 하나, 각각 다음 줄에 한국어 번역",
+    "## 4. 자주 하는 실수 — 한 가지만",
+    "마지막 줄에는 이 문형으로 문장을 직접 만들어 보라는 질문을 하나만 쓰세요. 정답은 쓰지 마세요.",
   ].join("\n");
 }
 

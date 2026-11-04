@@ -21,6 +21,7 @@ import {
   teacherHistoryTurns,
 } from "../lib/teacherPrompts";
 import { loadCurriculum } from "../lib/curriculum";
+import { buildLessonBrief, findLessonGrammar, isLessonQuestion } from "../lib/lessonPlan";
 import { XP_REWARDS } from "../lib/xpRewards";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { recordStudyEvent, useLearnerMemoryStore } from "../stores/learnerMemoryStore";
@@ -170,8 +171,16 @@ function TeacherSessionController() {
         let derailed = false;
         // 질문에 든 일본어의 읽기·뜻·활용·문형을 앱 사전으로 미리 풀어 같이 보낸다 — 작은 모델이 사실을
         // 지어내지 않고 설명만 하게(teacherGrounding.ts 머리 주석).
-        const grounding = await loadTeacherGrounding(groundingSources(question, context));
-        for await (const chunk of model.promptStreaming(buildTeacherUserPrompt(question, context, grounding))) {
+        // 문형 수업이면 앱이 수업 지시와 커리큘럼 사실을 앞에 붙인다(lessonPlan.ts). 새 주제라 앞 대화 맥락은 싣지 않고,
+        // 사전 참고는 커리큘럼 예문으로 찾는다.
+        const lesson = isLessonQuestion(question)
+          ? findLessonGrammar(question, await loadCurriculum().catch(() => null))
+          : null;
+        const grounding = await loadTeacherGrounding(lesson ? [lesson.example] : groundingSources(question, context));
+        const prefix = lesson ? [grounding, buildLessonBrief(lesson)].filter(Boolean).join("\n\n") : grounding;
+        for await (const chunk of model.promptStreaming(
+          buildTeacherUserPrompt(question, lesson ? null : context, prefix)
+        )) {
           acc += chunk;
           // 지시문을 읊기 시작하거나(유출 가드) 역할을 벗어나면(중국어 레시피·영어 답 — looksOffRole)
           // 거기서 끊는다. 프롬프트로 "하지 말라"고 시키는 것만으로는 막히지 않는다(promptSafety.ts 주석).

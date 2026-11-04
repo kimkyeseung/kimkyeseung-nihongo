@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { WEAK_REVIEW_PATH, buildDailyPlan, buildTeacherGreeting, homeStage, planHomeStart } from "./dailyPlan";
 import { EMPTY_PROFILE, type LearnerProfile } from "./learnerProfile";
+import { grammarLessonQuestion } from "./lessonPlan";
 import type { UnitProgress } from "./curriculumProgress";
 import type { CurriculumUnit } from "../types/curriculum";
 
@@ -102,8 +103,8 @@ describe("buildDailyPlan", () => {
     const actions = buildDailyPlan(progress(), unit({ grammarPoints: [grammar] }), EMPTY_PROFILE);
     const item = actions.find((a) => a.id === "grammar");
     expect(item?.to).toBe("/teacher");
-    expect(item?.teacherQuestion).toContain("〜は〜です");
-    expect(item?.teacherQuestion).toContain("私は学生です。");
+    // 수업 카드와 같은 말이어야 답이 끝날 때 "배운 문형"으로 잡힌다(taughtStepFromExchange).
+    expect(item?.teacherQuestion).toBe(grammarLessonQuestion(grammar));
   });
 
   it("유닛을 다 채웠으면 써보기를 권한다", () => {
