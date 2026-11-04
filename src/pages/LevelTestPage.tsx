@@ -16,7 +16,7 @@ import {
   type ExamTiming,
   type LevelTestProfile,
 } from "../lib/levelTest/profile";
-import { lowConfidenceSections, overallLevel, SECTION_ORDER } from "../lib/levelTest/result";
+import { lowConfidenceSections, overallLevel, overallRange, SECTION_ORDER } from "../lib/levelTest/result";
 import {
   SECTION_LABEL,
   answerRun,
@@ -236,20 +236,30 @@ function ProfileQuestions({ profile, onChange, onDone }: {
 
 // ───────────────────────────── 결과 ─────────────────────────────
 
-/** 영역 하나의 계단 — 입문부터 N1까지 여섯 칸, 추정 급수까지 칠한다(무채색은 gray만 — 다크 모드 규칙). */
+/**
+ * 영역 하나의 계단 — 입문부터 N1까지 여섯 칸. **점수가 아니라 급수다**(5/7이 N5면 두 칸이다 — 낮아 보인다는 보고를
+ * 받아 위에 범례를 뒀다). 추정 급수까지 칠하고, 더 높을 수도 있는 범위는 옅게 칠한다(무채색은 gray만 — 다크 모드 규칙).
+ */
 function LevelSteps({ result }: { result: SectionResult }) {
   const reached = result.estimate === null ? -1 : CURRICULUM_LEVELS.indexOf(result.estimate);
+  const possible = result.high ? CURRICULUM_LEVELS.indexOf(result.high) : reached;
   return (
     <div className="flex h-6 items-end gap-0.5" aria-hidden>
       {CURRICULUM_LEVELS.map((level, i) => (
         <span
           key={level}
-          className={`w-3 rounded-sm ${i <= reached ? "bg-primary" : "bg-gray-100"}`}
+          className={`w-3 rounded-sm ${i <= reached ? "bg-primary" : i <= possible ? "bg-primary/30" : "bg-gray-100"}`}
           style={{ height: `${30 + i * 14}%` }}
         />
       ))}
     </div>
   );
+}
+
+/** 추정이 한 급수로 좁혀지지 않았으면 범위를 적는다. */
+function rangeText(low: EstimatedLevel | undefined, high: EstimatedLevel | undefined): string | null {
+  if (!low || !high || low === high) return null;
+  return `${low === "Pre-N5" ? "입문" : low}~${high === "Pre-N5" ? "입문" : high} 사이`;
 }
 
 /**
@@ -321,6 +331,7 @@ function ResultView({ run, onRestart }: { run: LevelTestRun; onRestart: () => vo
   const sections = runSections(run);
   const record = recordFromSections(sections, run.finishedAt ?? run.startedAt);
   const overall = overallLevel(sections);
+  const overallSpan = overallRange(sections);
   const unsure = lowConfidenceSections(sections);
   const missed = run.history.filter((h) => !h.correct);
   const minutes = run.finishedAt ? Math.max(1, Math.round((run.finishedAt - run.startedAt) / 60000)) : null;
@@ -336,8 +347,16 @@ function ResultView({ run, onRestart }: { run: LevelTestRun; onRestart: () => vo
             {overall === "Pre-N5" ? "가나부터 차근차근 시작해요." : `${overall} 단계부터 시작하면 알맞아요.`}
           </p>
         )}
+        {overallSpan && (
+          <p className="text-xs text-gray-400">
+            {rangeText(overallSpan.low, overallSpan.high)}일 가능성이 높아요. 종합은 문법·독해를 더 크게 봐요.
+          </p>
+        )}
       </div>
 
+      <p className="-mb-3 text-xs text-gray-400">
+        막대는 점수가 아니라 급수예요: 입문 · N5 · N4 · N3 · N2 · N1 (옅은 칸은 그럴 수도 있는 범위)
+      </p>
       <ul className="flex flex-col gap-2">
         {SECTION_ORDER.map((section) => {
           const r = sections[section];
@@ -357,6 +376,7 @@ function ResultView({ run, onRestart }: { run: LevelTestRun; onRestart: () => vo
                 {r.total > 0 && (
                   <span className="block text-xs text-gray-400">
                     {r.correct}/{r.total} 정답
+                    {rangeText(r.low, r.high) && ` · ${rangeText(r.low, r.high)}`}
                   </span>
                 )}
               </span>

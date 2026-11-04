@@ -98,25 +98,41 @@ describe("한 판의 흐름", () => {
     }
   });
 
-  it("계단식 영역은 시작 급수에서 첫 문제를 낸다", () => {
-    const { run } = play(() => "right", { startLevel: "N2" });
-    const first = run.history.find((h) => h.section === "grammar")!;
-    expect(first.question.level).toBe("N2");
+  it("낸 문제의 급수와 기록된 답의 급수가 어긋나지 않는다", () => {
+    // 은행이 모자라 다른 급수에서 낼 때 상태를 안 고치면 판정이 조용히 틀린다.
+    const { run } = play((r) => (r.history.length % 2 === 0 ? "right" : "wrong"), { listening: true });
+    for (const section of ["vocab", "kanji", "grammar", "reading", "listening"] as const) {
+      const fromHistory = run.history.filter((h) => h.section === section).map((h) => h.question.level);
+      const fromState = run.states[section]!.answers.map((a) => a.level);
+      expect(fromHistory).toEqual(fromState);
+    }
+  });
+
+  it("독해는 여러 판을 돌려도 문제가 모자라 끊기지 않는다", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { run } = play(() => "right", { seed });
+      expect(run.history.filter((h) => h.section === "reading").length).toBeGreaterThanOrEqual(3);
+    }
   });
 });
 
-describe("독해의 시작 급수", () => {
-  it("문법·어휘 추정치 중 낮은 쪽에서 시작한다", () => {
-    // 어휘는 다 틀리고(→ Pre-N5 → N5 취급) 문법은 다 맞히면, 독해는 N5에서 시작한다.
-    const { run } = play((r) => (currentSection(r) === "vocab" ? "wrong" : "right"));
-    const firstReading = run.history.find((h) => h.section === "reading")!;
-    expect(firstReading.question.level).toBe("N5");
+describe("영역의 시작 급수", () => {
+  it("앞 영역을 잘 풀었으면 다음 영역은 높은 급수에서 시작한다", () => {
+    const { run } = play(() => "right");
+    const first = run.history.find((h) => h.section === "reading")!;
+    expect(["N3", "N2", "N1"]).toContain(first.question.level);
   });
 
-  it("둘 다 높으면 높은 급수에서 시작한다", () => {
-    const { run } = play(() => "right");
-    const firstReading = run.history.find((h) => h.section === "reading")!;
-    expect(firstReading.question.level).toBe("N1");
+  it("앞 영역을 못 풀었으면 낮은 급수에서 시작한다", () => {
+    const { run } = play(() => "wrong");
+    const first = run.history.find((h) => h.section === "reading")!;
+    expect(["N5", "N4"]).toContain(first.question.level);
+  });
+
+  it("독해를 다 맞히면 시작 급수 바로 위에서 멈추지 않는다", () => {
+    const { run } = play((r) => (currentSection(r) === "reading" ? "right" : "wrong"));
+    expect(run.history.filter((h) => h.section === "reading").length).toBeGreaterThan(2);
+    expect(["N3", "N2", "N1"]).toContain(runSections(run).reading?.estimate);
   });
 });
 

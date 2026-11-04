@@ -9,6 +9,7 @@ import { localDateKey } from "../lib/localDate";
 import { THEME_STORAGE_KEY, type ThemePreference } from "../lib/theme";
 import { DEBUG_STORAGE_KEY } from "../lib/debugMode";
 import type { LevelTestRun } from "../lib/levelTest/run";
+import { LEVEL_TEST_RUN_VERSION } from "../types/levelTest";
 import type { LevelTestProfile } from "../lib/levelTest/profile";
 
 /**
@@ -454,6 +455,8 @@ function restorableRun(value: unknown, now: number): LevelTestRun | null {
   if (!value || typeof value !== "object") return null;
   const run = value as Partial<LevelTestRun>;
   if (typeof run.phase !== "string" || typeof run.startedAt !== "number" || !Array.isArray(run.history)) return null;
+  // 판정 방식이 바뀌기 전에 풀던 진단은 상태 모양이 달라 이어 풀 수 없다. 결과 요약은 `level-test`에 남아 있다.
+  if (run.version !== LEVEL_TEST_RUN_VERSION) return null;
   if (run.phase !== "result" && now - run.startedAt > LEVEL_TEST_RESUME_MS) return null;
   return value as LevelTestRun;
 }

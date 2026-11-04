@@ -1,39 +1,35 @@
 import type { JlptLevel } from "./jlpt";
 import type { CurriculumLevelId } from "./curriculum";
 
+/**
+ * 진행 상태의 모양 버전. 저장된 진행(`level-test-session`)이 옛 모양이면 이어 풀 수 없다 — 불러올 때 버린다
+ * (`restorableRun`). 모양을 바꾸면 올릴 것. 스토어가 진입 청크에 있어 문제 생성 코드와 떼어 여기 둔다.
+ */
+export const LEVEL_TEST_RUN_VERSION = 2;
+
 /** 진단 영역. 가나(`kana`)는 어휘 결과를 보고 조건부로 붙는다. */
 export type LevelTestSection = "kana" | "vocab" | "kanji" | "grammar" | "reading" | "listening";
 
-/** 계단식으로 도는 영역 — 문항이 많아 급수를 오르내리며 좁혀 간다. */
-export type StaircaseSection = "vocab" | "kanji" | "grammar";
-
-/** 문항이 2~3개뿐이라 계단을 못 만드는 영역 — 맞히면 한 급수 위, 틀리면 한 급수 아래 하나 더. */
-export type ShortSection = "reading" | "listening";
+/** 급수를 재는 영역(가나 말고 전부). 답마다 믿음을 갱신하며 다음 문제의 급수를 고른다(`inference.ts`). */
+export type MeasuredSection = "vocab" | "kanji" | "grammar" | "reading" | "listening";
 
 /** 추정 급수. JLPT 급수 아래로 떨어지면 `"Pre-N5"`(커리큘럼의 문자 단계)다. */
 export type EstimatedLevel = CurriculumLevelId;
 
 /** 왜 그 영역이 끝났는가 */
 export type SectionEndReason =
-  | "reversals" // 방향이 3번 바뀌었다 — 경계를 찾았다
-  | "limit" // 상한까지 갔다 — 경계를 못 찾았을 수 있다
-  | "floor"; // N5에서 2개 연속 틀렸다 — 문자 영역이 필요하다
+  | "settled" // 충분히 확실해졌다
+  | "limit"; // 상한까지 갔다 — 아직 범위가 넓을 수 있다
 
 export type AdaptiveAnswer = { level: JlptLevel; correct: boolean };
 
-/** 한 영역의 적응형 진행 상태. 직렬화 가능한 순수 값이다(메모리 스토어에 그대로 둔다). */
+/** 한 영역의 적응형 진행 상태. 직렬화 가능한 순수 값이다(persist 스토어에 그대로 둔다). */
 export type AdaptiveState = {
-  section: StaircaseSection | ShortSection;
+  section: MeasuredSection;
+  /** 이 영역을 시작할 때의 믿음(입문~N1 여섯 칸의 가능성) */
+  prior: number[];
   /** 다음 문제를 낼 급수 */
   level: JlptLevel;
-  /** 연속 정답 수(계단식) — 2가 되면 한 급수 올라간다 */
-  streak: number;
-  /** 마지막으로 움직인 방향. 1 = 위(어려운 쪽), -1 = 아래, 0 = 아직 안 움직임 */
-  lastDirection: -1 | 0 | 1;
-  /** 방향이 바뀐 횟수 */
-  reversals: number;
-  /** N5에서 연달아 틀린 수 */
-  floorMisses: number;
   answers: AdaptiveAnswer[];
   /** 끝났으면 이유, 아니면 null */
   done: SectionEndReason | null;
@@ -45,8 +41,13 @@ export type SectionResult = {
   estimate: EstimatedLevel | null;
   correct: number;
   total: number;
-  /** 상한까지 가고도 경계를 못 찾았으면 false — "조금 더 풀어봐야 정확해요" */
+  /** 범위가 두 급수 안으로 좁혀졌거나 충분히 확실하면 true. 아니면 "조금 더 풀어봐야 정확해요" */
   confident: boolean;
+  /** 가능성이 80%를 넘는 범위. 한 급수로 좁혀졌으면 둘이 같다. 가나·측정 안 함에는 없다. */
+  low?: EstimatedLevel;
+  high?: EstimatedLevel;
+  /** 시작 힌트를 뺀 답만의 근거(여섯 칸). 종합 판정이 영역별 무게로 합친다. */
+  evidence?: number[];
 };
 
 /**
