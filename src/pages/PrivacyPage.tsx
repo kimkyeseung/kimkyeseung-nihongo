@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 // 이 문서는 **밖으로 나가는 요청을 전부** 적는 자리다. 외부 스크립트·API를 새로 붙이면
 // (index.html의 <script>, fetch 대상 도메인, 새 브라우저 API) 여기와 /about 소개문, README
 // 첫 문단을 같이 고칠 것 — 셋이 어긋나면 "기기를 벗어나지 않는다"가 거짓말이 된다.
-const EFFECTIVE_DATE = "2026년 10월 10일";
+const EFFECTIVE_DATE = "2026년 11월 4일";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -89,7 +89,8 @@ function PrivacyPage() {
         <p>
           <b className="font-normal text-gray-700">오십음도 발음 게임</b> — 발음 판정은 기기 안에서 하고 목소리는
           어디로도 보내지 않습니다. 이를 위해 사이트를 열면 잠시 뒤 발음 판정 모델(약 190MB)을 Hugging Face에서
-          백그라운드로 한 번 내려받아 브라우저 저장소에 둡니다(데이터 절약 모드나 모바일 데이터 연결로 알려진 경우는
+          백그라운드로 한 번 내려받아 브라우저 저장소에 둡니다. iPhone·iPad에서는 연결 종류를 알 수 없어 발음 게임을
+          처음 열 때 받고, 받는 동안 알려 드리며 멈출 수 있습니다(그 밖의 기기에서 데이터 절약 모드나 모바일 데이터 연결로 알려진 경우는
           받지 않습니다). 실행 엔진(ONNX Runtime)은 jsDelivr에서 받습니다. 모델을 아직 받지 못했으면 브라우저의 음성
           인식을 쓰는데, Chrome은 이를 기기에서 처리하지 않고 목소리를 Google 서버로 보냅니다. 게임을 시작하지
           않으면 마이크를 쓰지 않습니다.

@@ -3,8 +3,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import SpeakButton from "./SpeakButton";
 import { toKatakana } from "wanakana";
 import { GOJUON_SECTIONS } from "../data/gojuon";
-import { getCachedKanaModel } from "../lib/kanaModel";
-import { ensureKanaModelChecked } from "../lib/kanaModelController";
+import { KANA_MODEL, getCachedKanaModel } from "../lib/kanaModel";
+import {
+  cancelKanaModelDownload,
+  downloadsOnGameOpen,
+  ensureKanaModelChecked,
+  startKanaModelDownloadOnGameOpen,
+} from "../lib/kanaModelController";
 import { judgeByAlignment, speakableKanaPhonemes } from "../lib/kanaPhonemes";
 import { judgeKana, pickRounds } from "../lib/kanaPronunciation";
 import { loadPhonemeModel, type PhonemeModel } from "../lib/phonemeRecognizer";
@@ -173,7 +178,11 @@ function GameContent({
 
   const supported = getSpeechRecognition() !== null;
   const modelStatus = useKanaModelStore((s) => s.status);
-  useEffect(() => void ensureKanaModelChecked(), []);
+  const modelReceived = useKanaModelStore((s) => s.receivedBytes);
+  useEffect(() => {
+    void ensureKanaModelChecked();
+    startKanaModelDownloadOnGameOpen();
+  }, []);
   // 판을 시작할 때 정한다 — 게임 도중 모델 받기가 끝나도 엔진을 바꾸지 않는다.
   const engineRef = useRef<"model" | "browser">("browser");
   const phonemeModelRef = useRef<PhonemeModel | null>(null);
@@ -582,6 +591,18 @@ function GameContent({
                 ? "발음 판정은 이 기기 안에서 해요. 목소리는 어디로도 보내지지 않아요."
                 : "음성 인식은 브라우저 기능을 써요. Chrome에서는 목소리가 구글 서버로 보내져 인식돼요."}
             </p>
+            {/* iOS는 연결 종류를 몰라 조용히 받을 수 없다. 받는 동안 알리고 멈출 길을 준다(kanaModelController 주석). */}
+            {modelStatus === "downloading" && downloadsOnGameOpen() && (
+              <div className="mt-2 flex items-center gap-2 rounded-xl bg-warning/10 px-3 py-2 text-xs text-gray-600">
+                <span className="min-w-0 flex-1">
+                  기기 안 발음 판정 모델을 받는 중이에요 ({Math.round(modelReceived / 1_000_000)}/
+                  {Math.round(KANA_MODEL.bytes / 1_000_000)}MB). Wi-Fi가 아니면 데이터 요금이 나갈 수 있어요.
+                </span>
+                <button onClick={cancelKanaModelDownload} className="shrink-0 rounded-full bg-white px-2.5 py-1 text-gray-600">
+                  그만 받기
+                </button>
+              </div>
+            )}
             {supported || modelStatus === "installed" ? (
               <button
                 onClick={() => void startGame()}

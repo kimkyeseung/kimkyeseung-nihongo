@@ -35,6 +35,15 @@ export function isKanaModelAvailable(): boolean {
   return KANA_MODEL.url !== "" && isOpfsSupported();
 }
 
+/**
+ * iPhone·iPad인가. iOS는 브라우저와 상관없이 연결 종류(Wi-Fi/모바일 데이터)를 알려 주지 않아서, 백그라운드로 받으면 모르는
+ * 사이 요금제에서 189MB가 나갈 수 있다. iPadOS는 UA가 Mac처럼 보여 터치 지점 수로 가려낸다(`aiCapability`와 같은 방법).
+ */
+export function isIosDevice(userAgent: string, maxTouchPoints: number): boolean {
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return true;
+  return /Macintosh/.test(userAgent) && maxTouchPoints > 1;
+}
+
 /** 받아 둔 모델. 없거나 크기가 안 맞으면 null(맞지 않는 파일은 지운다). */
 export async function getCachedKanaModel(): Promise<File | null> {
   if (!isOpfsSupported()) return null;

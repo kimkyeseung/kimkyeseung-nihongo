@@ -11,8 +11,8 @@ export type KanaModelStatus =
   | "error";
 
 /**
- * 발음 판정 모델 상태. 받기는 **React 밖**의 모듈(`kanaModelController.ts`)이 앱 시작 뒤 백그라운드에서 하고,
- * 게임은 `installed`인지만 본다(받는 중이라는 사실은 화면에 알리지 않는다). persist하지 않는다(파일은 OPFS에 있다).
+ * 발음 판정 모델 상태. 받기는 **React 밖**의 모듈(`kanaModelController.ts`)이 하고, 게임은 `installed`인지를 본다.
+ * 받는 중이라는 사실은 게임을 열 때 받는 기기(iOS)에서만 화면에 알린다. persist하지 않는다(파일은 OPFS에 있다).
  */
 export const useKanaModelStore = create<{
   status: KanaModelStatus;
