@@ -19,11 +19,17 @@ const PRIMARY_SHADOW = { ["--btn-shadow" as string]: "#3d9401" };
 function LessonCard({
   plan,
   variant,
+  aiAvailable = true,
   onAsk,
   onCheck,
 }: {
   plan: CurriculumPlanResult;
   variant: "full" | "next";
+  /**
+   * false면 문형 수업은 내용만 보여 주고 누를 수 없다. 문자·한자·단어·점검은 AI 없이 되므로 수업이 멈추지 않는다.
+   * 예전엔 AI를 못 쓰는 브라우저에서 "첫 수업 시작하기"를 눌러도 안내 화면만 나왔다.
+   */
+  aiAvailable?: boolean;
   onAsk: (question: string) => void;
   onCheck: () => void;
 }) {
@@ -36,7 +42,7 @@ function LessonCard({
   if (!current || !unit) return null;
 
   const steps = buildLessonSteps(current, unit, taught);
-  const next = nextLessonStep(steps);
+  const next = nextLessonStep(steps, aiAvailable);
   const level = plan.curriculum.levels.find((l) => l.level === current.level);
   const doneCount = steps.filter((s) => s.done).length;
 
@@ -106,26 +112,43 @@ function LessonCard({
       <ol className="mt-3 flex flex-col gap-1.5">
         {steps.map((step) => (
           <li key={step.key}>
-            <button
-              onClick={() => start(step)}
-              className={`flex w-full items-start gap-2.5 rounded-xl px-3 py-2 text-left ${
-                step === next ? "bg-primary/10" : "bg-gray-50"
-              }`}
-            >
-              <span aria-hidden className="w-6 shrink-0 text-center font-ja">
-                {step.done ? "✅" : step.emoji}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className={`block font-mixed text-sm ${step.done ? "text-gray-400" : "text-gray-800"}`}>
-                  {step.title}
+            {!aiAvailable && step.action.kind === "ask" ? (
+              // 설명은 못 들어도 무엇을 배우는지는 커리큘럼에 적혀 있다. 줄을 지우지 않고 내용을 보여 준다.
+              <div className="flex items-start gap-2.5 rounded-xl bg-gray-50 px-3 py-2">
+                <span aria-hidden className="w-6 shrink-0 text-center">
+                  📘
                 </span>
-                <span className="block font-mixed text-xs text-gray-400">{step.detail}</span>
-              </span>
-            </button>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-mixed text-sm text-gray-800">{step.title.replace(/ 배우기$/, "")}</span>
+                  <span className="block font-mixed text-xs text-gray-400">{step.detail}</span>
+                  {step.example && <span className="mt-0.5 block font-ja text-sm text-gray-600">{step.example}</span>}
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={() => start(step)}
+                className={`flex w-full items-start gap-2.5 rounded-xl px-3 py-2 text-left ${
+                  step === next ? "bg-primary/10" : "bg-gray-50"
+                }`}
+              >
+                <span aria-hidden className="w-6 shrink-0 text-center font-ja">
+                  {step.done ? "✅" : step.emoji}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block font-mixed text-sm ${step.done ? "text-gray-400" : "text-gray-800"}`}>
+                    {step.title}
+                  </span>
+                  <span className="block font-mixed text-xs text-gray-400">{step.detail}</span>
+                </span>
+              </button>
+            )}
           </li>
         ))}
       </ol>
 
+      {!aiAvailable && (
+        <p className="mt-3 text-xs text-gray-400">문형 설명은 AI가 필요해요. 아래 안내를 보면 이 브라우저에서 쓰는 방법이 있어요.</p>
+      )}
       <Link to="/curriculum" className="mt-3 block text-center text-xs text-info hover:underline">
         전체 로드맵 보기
       </Link>

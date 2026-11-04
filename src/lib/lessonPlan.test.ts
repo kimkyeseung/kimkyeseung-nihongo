@@ -3,6 +3,7 @@ import {
   buildLessonSteps,
   grammarLessonQuestion,
   grammarStepKey,
+  lessonStepPath,
   nextLessonStep,
   taughtStepFromExchange,
 } from "./lessonPlan";
@@ -103,6 +104,44 @@ describe("nextLessonStep", () => {
     const done = progress({ kanjiTodo: [], wordsDone: 15 });
     const steps = buildLessonSteps(done, unit(["〜も"]), [grammarStepKey("N5-1", "〜も")]);
     expect(nextLessonStep(steps)?.action).toEqual({ kind: "check" });
+  });
+});
+
+describe("AI를 못 쓰는 브라우저", () => {
+  it("문형 수업을 건너뛰고 AI 없이 되는 단계를 권한다", () => {
+    const steps = buildLessonSteps(progress(), unit(), []);
+    expect(nextLessonStep(steps)?.key).toBe(grammarStepKey("N5-1", "〜は〜です"));
+    expect(nextLessonStep(steps, false)?.key).toBe("N5-1:kanji");
+  });
+
+  it("다 끝내면 단원 점검으로 간다 — 점검은 AI가 필요 없다", () => {
+    const steps = buildLessonSteps(progress({ kanjiTodo: [], wordsDone: 15 }), unit(), []);
+    expect(nextLessonStep(steps, false)?.action).toEqual({ kind: "check" });
+  });
+
+  it("문형 단계에는 커리큘럼의 예문이 붙는다", () => {
+    expect(buildLessonSteps(progress(), unit(), [])[0].example).toBe("私は学生です。");
+  });
+});
+
+describe("lessonStepPath", () => {
+  const steps = (p: Partial<UnitProgress>) => buildLessonSteps(progress(p), unit(), []);
+
+  it("입문자의 가나 단계는 오십음도로 바로 간다", () => {
+    expect(lessonStepPath(nextLessonStep(steps({ kanaTodo: ["あ"] })))).toBe("/gojuon");
+  });
+
+  it("문형 수업은 선생님 화면으로 간다", () => {
+    expect(lessonStepPath(nextLessonStep(steps({})))).toBe("/teacher");
+  });
+
+  it("단원 점검도 선생님 화면에서 연다", () => {
+    const all = buildLessonSteps(progress({ kanjiTodo: [], wordsDone: 15 }), unit([]), []);
+    expect(lessonStepPath(nextLessonStep(all))).toBe("/teacher");
+  });
+
+  it("단계를 모르면 선생님 화면이다", () => {
+    expect(lessonStepPath(null)).toBe("/teacher");
   });
 });
 

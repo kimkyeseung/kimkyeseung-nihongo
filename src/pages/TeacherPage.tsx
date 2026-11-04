@@ -336,6 +336,23 @@ function TeacherPage() {
     }
   }
 
+  // 단원 점검은 AI가 필요 없어서 AI 안내 화면에서도 열린다.
+  const unitCheckSheet = unitCheck && (
+    <Suspense fallback={null}>
+      <UnitCheckSheet key={unitCheck.key} target={unitCheck} onClose={() => setUnitCheck(null)} />
+    </Suspense>
+  );
+  /** AI를 못 쓰는 화면의 위쪽 — 처음 온 사람에게는 진단을, 진도가 있으면 AI 없이 되는 수업을 보여 준다. */
+  const withoutAi = (isNewLearner || (showLesson && curriculum)) && (
+    <div className="p-4 pb-0 sm:p-6 sm:pb-0">
+      {isNewLearner ? (
+        <TeacherWelcomeCard />
+      ) : (
+        <LessonCard plan={curriculum!} variant="full" aiAvailable={false} onAsk={handleAsk} onCheck={startUnitCheck} />
+      )}
+    </div>
+  );
+
   if (modelStatus === "checking") {
     return <p className="p-6 text-gray-400">AI 준비 상태 확인 중...</p>;
   }
@@ -344,12 +361,9 @@ function TeacherPage() {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">🧑‍🏫 선생님</h2>
+        {withoutAi}
         <GemmaEngineNotice reason={modelStatus} feature="선생님에게 질문하기" />
-        {isNewLearner && (
-          <div className="p-4 sm:p-6">
-            <TeacherWelcomeCard />
-          </div>
-        )}
+        {unitCheckSheet}
       </div>
     );
   }
@@ -360,12 +374,9 @@ function TeacherPage() {
     return (
       <div>
         <h2 className="p-4 pb-0 text-xl text-primary sm:p-6 sm:pb-0">🧑‍🏫 선생님</h2>
+        {withoutAi}
         <PromptApiUnsupportedNotice feature="선생님에게 질문하기" />
-        {isNewLearner && (
-          <div className="p-4 sm:p-6">
-            <TeacherWelcomeCard />
-          </div>
-        )}
+        {unitCheckSheet}
       </div>
     );
   }
@@ -676,11 +687,7 @@ function TeacherPage() {
         )}
 
         <TeacherPracticeSheet target={practiceTarget} onClose={() => setPracticeTarget(null)} />
-        {unitCheck && (
-          <Suspense fallback={null}>
-            <UnitCheckSheet key={unitCheck.key} target={unitCheck} onClose={() => setUnitCheck(null)} />
-          </Suspense>
-        )}
+        {unitCheckSheet}
       </div>
     </div>
   );

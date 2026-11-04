@@ -4,6 +4,7 @@ import ChoiceQuestion from "../components/ChoiceQuestion";
 import LevelTestComment from "../components/LevelTestComment";
 import QuestionPrompt from "../components/QuestionPrompt";
 import { choiceFont } from "../lib/levelTest/questions";
+import { useLessonEntry } from "../hooks/useCurriculumPlan";
 import { useJapaneseVoiceStatus } from "../hooks/useJapaneseSpeech";
 import LoadingMascot from "../components/LoadingMascot";
 import ProgressBar from "../components/ProgressBar";
@@ -269,14 +270,16 @@ function rangeText(low: EstimatedLevel | undefined, high: EstimatedLevel | undef
 function StartFromHere({ overall }: { overall: LevelTestRecord["overall"] }) {
   const startLevel = useCurriculumStore((s) => s.startLevel);
   const setStartLevel = useCurriculumStore((s) => s.setStartLevel);
+  const lesson = useLessonEntry();
   const [step, setStep] = useState<"idle" | "confirm" | "done">("idle");
   if (!overall) return null;
 
   if (step === "done" || (step === "idle" && startLevel === overall)) {
     return (
       <div className="flex flex-col gap-2">
-        <Link to="/teacher" className={`${PRIMARY_BUTTON} block text-center`} style={PRIMARY_SHADOW}>
+        <Link to={lesson?.to ?? "/teacher"} className={`${PRIMARY_BUTTON} block text-center`} style={PRIMARY_SHADOW}>
           ▶ 첫 수업 시작하기
+          {lesson && <span className="block font-mixed text-sm font-normal">{lesson.title}</span>}
         </Link>
         <p className="rounded-2xl bg-primary/10 px-4 py-3 text-center text-sm text-primary">
           ✅ {levelName(overall)} 단계부터 공부해요 ·{" "}

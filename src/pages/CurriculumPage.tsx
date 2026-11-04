@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ProgressBar from "../components/ProgressBar";
-import { useCurriculumPlan } from "../hooks/useCurriculumPlan";
+import { useCurriculumPlan, useLessonEntry } from "../hooks/useCurriculumPlan";
 import { levelLabel } from "../lib/curriculum";
 import type { UnitProgress } from "../lib/curriculumProgress";
 import { grammarLessonQuestion } from "../lib/lessonPlan";
@@ -142,6 +142,7 @@ function UnitRow({
  */
 function CurriculumPage() {
   const result = useCurriculumPlan();
+  const lesson = useLessonEntry();
   const startLevel = useCurriculumStore((s) => s.startLevel);
   const setStartLevel = useCurriculumStore((s) => s.setStartLevel);
 
@@ -207,11 +208,12 @@ function CurriculumPage() {
             {plan.current.level} · {plan.current.unitNumber}단원 {plan.current.title}
           </p>
           <Link
-            to="/teacher"
+            to={lesson?.to ?? "/teacher"}
             className="btn-press mt-3 block rounded-2xl bg-primary py-3 text-center font-bold text-white"
             style={{ ["--btn-shadow" as string]: "#3d9401" }}
           >
             ▶ 수업 시작하기
+            {lesson && <span className="block font-mixed text-sm font-normal">{lesson.title}</span>}
           </Link>
         </section>
       )}

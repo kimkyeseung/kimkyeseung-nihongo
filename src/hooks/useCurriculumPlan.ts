@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { findUnit, loadCurriculum } from "../lib/curriculum";
 import { buildCurriculumPlan, type CurriculumPlan } from "../lib/curriculumProgress";
 import { buildDailyPlan, type PlanAction } from "../lib/dailyPlan";
+import { buildLessonSteps, lessonStepPath, nextLessonStep } from "../lib/lessonPlan";
 import type { Curriculum, CurriculumUnit } from "../types/curriculum";
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useKanjiProgressStore } from "../stores/kanjiProgressStore";
@@ -57,6 +58,21 @@ export function useCurriculumPlan(): CurriculumPlanResult | null {
       currentUnit: current ? findUnit(curriculum, current.level, current.unitNumber) : undefined,
     };
   }, [curriculum, memoryLoaded, events, learnedKanji, manualUnits, startLevel]);
+}
+
+/**
+ * 지금 수업의 다음 단계 — "수업 시작" 버튼들(대문·로드맵·진단 결과)이 같은 곳을 가리키게 한 곳에서 계산한다.
+ * 진도를 아직 못 읽었거나 커리큘럼을 다 끝냈으면 null.
+ */
+export function useLessonEntry(): { to: string; title: string } | null {
+  const result = useCurriculumPlan();
+  const taught = useCurriculumStore((s) => s.taughtGrammar);
+  return useMemo(() => {
+    const current = result?.plan.current;
+    if (!current || !result?.currentUnit) return null;
+    const next = nextLessonStep(buildLessonSteps(current, result.currentUnit, taught));
+    return next ? { to: lessonStepPath(next), title: next.title } : null;
+  }, [result, taught]);
 }
 
 /**

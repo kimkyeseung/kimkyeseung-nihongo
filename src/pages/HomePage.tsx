@@ -6,7 +6,7 @@ import AssetLoadingBar from "../components/AssetLoadingBar";
 import GemmaModelCard from "../components/GemmaModelCard";
 import TodayPlanCard from "../components/TodayPlanCard";
 import { useAssetPreload } from "../hooks/useAssetPreload";
-import { useTodayActions } from "../hooks/useCurriculumPlan";
+import { useLessonEntry, useTodayActions } from "../hooks/useCurriculumPlan";
 import { planHomeStart } from "../lib/dailyPlan";
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useGamificationStore } from "../stores/gamificationStore";
@@ -95,8 +95,9 @@ function HomePage() {
   const returning = xp > 0;
   const hasStartLevel = useCurriculumStore((s) => s.startLevel) !== null;
   const actions = useTodayActions();
+  const lesson = useLessonEntry();
   const requestQuestion = useTeacherChatStore((s) => s.requestQuestion);
-  const start = planHomeStart({ hasStartLevel, returning, actions });
+  const start = planHomeStart({ hasStartLevel, returning, actions, lesson });
 
   return (
     // 대문은 다크 모드에서도 밝게 둔다(force-light) — 그림의 크림색 배경이 페이지 배경과 같아야

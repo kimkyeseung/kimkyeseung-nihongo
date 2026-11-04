@@ -164,6 +164,23 @@ describe("planHomeStart", () => {
     );
   });
 
+  it("수업이 있으면 수업의 다음 단계로 간다 — 로드맵·진단 결과와 같은 곳이다", () => {
+    const lesson = { to: "/teacher", title: "〜は〜です 배우기" };
+    const start = planHomeStart({ hasStartLevel: true, returning: false, actions: [kanjiAction], lesson });
+    expect(start).toMatchObject({ to: "/teacher", hint: "〜は〜です 배우기" });
+  });
+
+  it("약한 것이 쌓였으면 수업보다 복습이 먼저다", () => {
+    const review = { ...kanjiAction, id: "review-weak", title: "약한 것 3개 모아 풀기", to: WEAK_REVIEW_PATH };
+    const lesson = { to: "/teacher", title: "〜は〜です 배우기" };
+    expect(planHomeStart({ hasStartLevel: true, returning: true, actions: [review], lesson })?.to).toBe(WEAK_REVIEW_PATH);
+  });
+
+  it("커리큘럼을 다 끝내 수업이 없으면 오늘의 첫 할 일로 간다", () => {
+    const practice = { ...kanjiAction, id: "free-practice", to: "/conversation" };
+    expect(planHomeStart({ hasStartLevel: true, returning: true, actions: [practice], lesson: null })?.to).toBe("/conversation");
+  });
+
   it("추천을 아직 못 읽었으면 오십음도가 아니라 로드맵으로 보낸다", () => {
     expect(planHomeStart({ hasStartLevel: true, returning: false, actions: null })?.to).toBe("/curriculum");
     expect(planHomeStart({ hasStartLevel: true, returning: false, actions: [] })?.to).toBe("/curriculum");

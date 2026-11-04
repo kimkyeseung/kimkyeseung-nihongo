@@ -13,6 +13,8 @@ export type LessonStep = {
   emoji: string;
   title: string;
   detail: string;
+  /** 문형의 예문 — 커리큘럼에 적힌 것이라 AI 없이도 보여 줄 수 있다. */
+  example?: string;
   done: boolean;
   action:
     | { kind: "ask"; question: string }
@@ -64,6 +66,7 @@ export function buildLessonSteps(
       emoji: "🧑‍🏫",
       title: `${grammar.pattern} 배우기`,
       detail: grammar.meaning,
+      example: grammar.example,
       done: taught.includes(key),
       action: { kind: "ask", question: grammarLessonQuestion(grammar) },
     });
@@ -125,7 +128,18 @@ export function taughtStepFromExchange(
   return steps.find((s) => s.action.kind === "ask" && s.action.question === question) ?? null;
 }
 
-/** 지금 할 단계 — 아직 안 끝낸 첫 단계. 점검이 항상 남아 있어서 null이 되지 않지만, 빈 목록이면 null. */
-export function nextLessonStep(steps: readonly LessonStep[]): LessonStep | null {
-  return steps.find((s) => !s.done) ?? null;
+/**
+ * 지금 할 단계 — 아직 안 끝낸 첫 단계. 점검이 항상 남아 있어서 null이 되지 않지만, 빈 목록이면 null.
+ * AI를 못 쓰는 브라우저에서는 문형 수업을 건너뛴다 — 눌러도 답을 못 받는다. 문자·한자·단어·점검은 AI 없이 된다.
+ */
+export function nextLessonStep(steps: readonly LessonStep[], aiAvailable = true): LessonStep | null {
+  return steps.find((s) => !s.done && (aiAvailable || s.action.kind !== "ask")) ?? null;
+}
+
+/**
+ * 이 단계를 시작하러 어디로 갈까 — "수업 시작" 버튼들의 목적지. 선생님이 할 일(문형·점검)이면 선생님 화면, 다른 화면에서
+ * 하는 일이면 그 화면으로 바로 보낸다. 입문자를 선생님 화면에 들렀다가 다시 오십음도로 돌려보내지 않으려는 것이다.
+ */
+export function lessonStepPath(step: LessonStep | null): string {
+  return step?.action.kind === "go" ? step.action.to : "/teacher";
 }

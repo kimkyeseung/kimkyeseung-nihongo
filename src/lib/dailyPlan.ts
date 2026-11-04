@@ -174,20 +174,25 @@ export interface HomeStart {
  *
  * - **시작 단계를 고르기 전의 처음 온 사람에게는 버튼이 없다(null).** 그 자리에서는 단계 고르기가 곧
  *   시작이다 — 버튼이 있으면 N3 학습자도 고르기 전에 눌러 히라가나 표에 도착한다.
- * - 단계를 골랐으면 오늘의 첫 할 일로 간다. 대문 카드가 N3 단원을 보여주는 바로 위에서 버튼이 오십음도로
- *   가던 것이 이 함수가 생긴 이유다.
- * - 추천을 아직 못 읽었으면(`actions: null`) 지금 단원이 보이는 로드맵으로 보낸다.
+ * - 단계를 골랐으면 **지금 수업의 다음 단계**로 간다 — 로드맵·진단 결과의 "수업 시작"과 같은 곳이다. 대문 카드가 N3
+ *   단원을 보여주는 바로 위에서 버튼이 오십음도로 가던 것이 이 함수가 생긴 이유다.
+ * - 다만 약한 것이 쌓였으면 복습이 먼저다(오늘의 추천과 같은 순서).
+ * - 수업이 없으면(커리큘럼을 다 끝냄) 오늘의 첫 할 일, 그것도 못 읽었으면 지금 단원이 보이는 로드맵으로 보낸다.
  * - 예전부터 쓰던 사람은 단계를 안 골랐어도 막지 않는다.
  */
 export function planHomeStart(opts: {
   hasStartLevel: boolean;
   returning: boolean;
   actions: readonly PlanAction[] | null;
+  lesson?: { to: string; title: string } | null;
 }): HomeStart | null {
   const label = opts.returning ? "이어서 학습하기" : "학습 시작하기";
   if (!opts.hasStartLevel) return opts.returning ? { to: "/gojuon", label } : null;
 
   const first = opts.actions?.[0];
+  if (opts.lesson && first?.id !== "review-weak") {
+    return { to: opts.lesson.to, label, hint: opts.lesson.title };
+  }
   if (!first) return { to: "/curriculum", label };
   return { to: first.to, label, hint: first.title, teacherQuestion: first.teacherQuestion };
 }
