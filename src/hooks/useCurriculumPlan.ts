@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { findUnit, loadCurriculum } from "../lib/curriculum";
+import { findUnit, levelLabel, loadCurriculum } from "../lib/curriculum";
 import { buildCurriculumPlan, type CurriculumPlan } from "../lib/curriculumProgress";
 import { buildDailyPlan, type PlanAction } from "../lib/dailyPlan";
 import { buildLessonSteps, lessonStepPath, nextLessonStep } from "../lib/lessonPlan";
@@ -64,14 +64,28 @@ export function useCurriculumPlan(): CurriculumPlanResult | null {
  * 지금 수업의 다음 단계 — "수업 시작" 버튼들(대문·로드맵·진단 결과)이 같은 곳을 가리키게 한 곳에서 계산한다.
  * 진도를 아직 못 읽었거나 커리큘럼을 다 끝냈으면 null.
  */
-export function useLessonEntry(): { to: string; title: string } | null {
+export function useLessonEntry(): {
+  to: string;
+  /** "N5 · 1단원 인사와 자기소개" — 버튼에는 단계가 아니라 단원을 적는다(`planHomeStart` 주석). */
+  unitLabel: string;
+  /** 이번 단원 목표 첫 줄 */
+  goal: string | null;
+  startsWithKana: boolean;
+} | null {
   const result = useCurriculumPlan();
   const taught = useCurriculumStore((s) => s.taughtGrammar);
   return useMemo(() => {
     const current = result?.plan.current;
     if (!current || !result?.currentUnit) return null;
     const next = nextLessonStep(buildLessonSteps(current, result.currentUnit, taught));
-    return next ? { to: lessonStepPath(next), title: next.title } : null;
+    if (!next) return null;
+    const level = result.curriculum.levels.find((l) => l.level === current.level);
+    return {
+      to: lessonStepPath(next),
+      unitLabel: `${level ? levelLabel(level) : current.level} · ${current.unitNumber}단원 ${current.title}`,
+      goal: current.canDoGoals[0] ?? null,
+      startsWithKana: next.key.endsWith(":kana"),
+    };
   }, [result, taught]);
 }
 

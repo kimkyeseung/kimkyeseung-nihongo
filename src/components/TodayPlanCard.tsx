@@ -34,8 +34,23 @@ function LevelPicker() {
     <section className="rounded-2xl border-4 border-white bg-white p-4">
       <h2 className="text-lg text-gray-800">어디부터 시작할까요?</h2>
       <p className="mt-0.5 text-sm text-gray-500">
-        고른 단계에 맞춰 오늘 할 공부를 정해드려요. 나중에 언제든 바꿀 수 있어요.
+        고른 단계에 맞춰 오늘 수업을 준비해요. 나중에 언제든 바꿀 수 있어요.
       </p>
+      {/* 처음 온 사람은 자기 급수를 모르는 경우가 많다 — 아무거나 찍지 않게 진단을 맨 앞에 크게 둔다.
+          코드가 내는 진단(LLM 없음)이라 AI가 안 되는 브라우저에서도 된다. */}
+      <Link
+        to="/level"
+        className="btn-press mt-3 flex items-center justify-between rounded-2xl border-2 border-primary/40 bg-primary/5 px-3 py-3 text-gray-700"
+        style={{ ["--btn-shadow" as string]: "rgb(0 0 0 / 0.08)" }}
+      >
+        <span>
+          <span className="block">🎯 잘 모르겠어요 — 10분 레벨 진단</span>
+          <span className="mt-0.5 block text-xs text-gray-400">문제를 풀면 알맞은 단계를 찾아 드려요</span>
+        </span>
+        <span aria-hidden className="text-gray-300">
+          ›
+        </span>
+      </Link>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {LEVEL_CHOICES.map((choice) => (
           <button
@@ -49,16 +64,6 @@ function LevelPicker() {
           </button>
         ))}
       </div>
-      {/* 어느 단계인지 모르는 사람이 아무거나 찍지 않게 — 코드가 내는 진단(LLM 없음)이라 AI가 안 되는 브라우저에서도 된다. */}
-      <Link
-        to="/level"
-        className="mt-3 flex items-center justify-between rounded-2xl bg-gray-50 px-3 py-2.5 text-sm text-gray-600 hover:bg-primary/10"
-      >
-        <span>🤔 잘 모르겠어요 → 10분 레벨 진단 받기</span>
-        <span aria-hidden className="text-gray-300">
-          ›
-        </span>
-      </Link>
     </section>
   );
 }

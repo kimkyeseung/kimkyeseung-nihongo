@@ -1,76 +1,30 @@
-import { ASSET_STEPS, type AssetStatuses } from "../lib/preloadAssets";
-import ProgressBar from "./ProgressBar";
-
-const STATUS_ICON: Record<string, string> = {
-  pending: "⬜",
-  loading: "⏳",
-  done: "✅",
-  error: "⚠️",
-};
-
-function formatMb(bytes: number): string {
-  return `${(bytes / 1_000_000).toFixed(1)}MB`;
-}
-
 interface Props {
-  statuses: AssetStatuses;
   /** 0~1 */
   ratio: number;
-  currentLabel: string | null;
   finished: boolean;
   hasError: boolean;
 }
 
-/** 큰 정적 데이터(사전·한자·획순)를 미리 받는 동안 보여주는 진행률 바 + 항목 체크리스트. */
-function AssetLoadingBar({ statuses, ratio, currentLabel, finished, hasError }: Props) {
+/**
+ * 큰 정적 데이터(사전·한자·획순)를 미리 받는 동안의 얇은 띠. 끝나면 사라진다.
+ *
+ * 예전엔 항목별 체크리스트("한자 획순 데이터 1.9MB")가 시작 버튼 바로 위를 차지해, 처음 온 사람이 첫 화면에서 가장 크게 보는
+ * 것이 다운로드 현황이었다. 받는 동안에도 시작할 수 있으니 알려 주기만 하면 된다. 실패는 그 페이지에서 다시 받으므로 한 줄이면 된다.
+ */
+function AssetLoadingBar({ ratio, finished, hasError }: Props) {
+  if (hasError && finished) {
+    return <p className="text-center text-xs text-gray-400">⚠️ 일부 데이터는 해당 페이지에 들어갈 때 다시 받아요.</p>;
+  }
+  if (finished) return null;
+
   const percent = Math.round(ratio * 100);
-
   return (
-    <div className="rounded-3xl border-4 border-primary/20 bg-white p-4 sm:p-5">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm text-gray-500">
-          {finished ? "학습 데이터 준비 완료!" : (currentLabel ?? "학습 데이터 준비 중...")}
-        </span>
-        <span className="text-lg text-primary tabular-nums">{percent}%</span>
-      </div>
-
-      <ProgressBar
-        className="mt-2"
-        percent={percent}
-        label="학습 데이터 내려받는 중"
-        active={!finished}
-      />
-
-      <ul className="mt-3 flex flex-col gap-1.5">
-        {ASSET_STEPS.map((step) => {
-          const status = statuses[step.id] ?? "pending";
-          return (
-            <li
-              key={step.id}
-              className={`flex items-center gap-2 text-sm ${
-                status === "done"
-                  ? "text-gray-600"
-                  : status === "loading"
-                    ? "text-primary"
-                    : status === "error"
-                      ? "text-danger"
-                      : "text-gray-300"
-              }`}
-            >
-              <span aria-hidden>{STATUS_ICON[status]}</span>
-              <span className="flex-1 truncate">{step.label}</span>
-              <span className="text-xs text-gray-300 tabular-nums">{formatMb(step.bytes)}</span>
-            </li>
-          );
-        })}
-      </ul>
-
-      {hasError && (
-        <p className="mt-3 rounded-2xl bg-danger/10 p-2 text-xs text-danger">
-          일부 데이터를 미리 받지 못했어요. 그대로 시작해도 되고, 해당 페이지에 들어갈 때 다시
-          받아옵니다.
-        </p>
-      )}
+    <div role="status" aria-label={`학습 데이터 준비 중 ${percent}%`} className="flex items-center gap-2 text-xs text-gray-400">
+      <span className="shrink-0">학습 데이터 준비 중</span>
+      <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-gray-200">
+        <span className="block h-full rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
+      </span>
+      <span className="shrink-0 tabular-nums">{percent}%</span>
     </div>
   );
 }

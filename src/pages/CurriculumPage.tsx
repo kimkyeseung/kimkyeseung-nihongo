@@ -213,7 +213,6 @@ function CurriculumPage() {
             style={{ ["--btn-shadow" as string]: "#3d9401" }}
           >
             ▶ 수업 시작하기
-            {lesson && <span className="block font-mixed text-sm font-normal">{lesson.title}</span>}
           </Link>
         </section>
       )}

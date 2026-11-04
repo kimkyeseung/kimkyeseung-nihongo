@@ -169,14 +169,24 @@ export interface HomeStart {
   teacherQuestion?: string;
 }
 
+/** 대문이 누구에게 무엇을 먼저 보여 줄까 — 처음 온 사람 / 단계만 고른 사람 / 공부한 적 있는 사람. */
+export type HomeStage = "new" | "chosen" | "returning";
+
+export function homeStage(opts: { returning: boolean; hasStartLevel: boolean }): HomeStage {
+  if (opts.returning) return "returning";
+  return opts.hasStartLevel ? "chosen" : "new";
+}
+
 /**
- * 대문의 큰 시작 버튼이 어디로 갈까.
+ * 대문의 큰 시작 버튼이 어디로 갈까, 뭐라고 쓸까.
  *
  * - **시작 단계를 고르기 전의 처음 온 사람에게는 버튼이 없다(null).** 그 자리에서는 단계 고르기가 곧
  *   시작이다 — 버튼이 있으면 N3 학습자도 고르기 전에 눌러 히라가나 표에 도착한다.
- * - 단계를 골랐으면 **지금 수업의 다음 단계**로 간다 — 로드맵·진단 결과의 "수업 시작"과 같은 곳이다. 대문 카드가 N3
- *   단원을 보여주는 바로 위에서 버튼이 오십음도로 가던 것이 이 함수가 생긴 이유다.
- * - 다만 약한 것이 쌓였으면 복습이 먼저다(오늘의 추천과 같은 순서).
+ * - 단계를 골랐으면 **지금 수업의 다음 단계**로 간다 — 로드맵·진단 결과의 "수업 시작"과 같은 곳이다.
+ * - **버튼에는 단계가 아니라 단원을 적는다.** 「〜は〜です 배우기」는 처음 온 사람이 아직 못 읽고, AI를 못 쓰는 브라우저에서는
+ *   눌러 보면 한자를 권해 말이 어긋났다. 단원은 브라우저와 상관없이 같다.
+ * - 첫 단계가 문자면 목적지를 그대로 말한다("히라가나부터").
+ * - 약한 것이 쌓였으면 복습이 먼저다(오늘의 추천과 같은 순서).
  * - 수업이 없으면(커리큘럼을 다 끝냄) 오늘의 첫 할 일, 그것도 못 읽었으면 지금 단원이 보이는 로드맵으로 보낸다.
  * - 예전부터 쓰던 사람은 단계를 안 골랐어도 막지 않는다.
  */
@@ -184,14 +194,20 @@ export function planHomeStart(opts: {
   hasStartLevel: boolean;
   returning: boolean;
   actions: readonly PlanAction[] | null;
-  lesson?: { to: string; title: string } | null;
+  lesson?: { to: string; unitLabel: string; startsWithKana: boolean } | null;
 }): HomeStart | null {
   const label = opts.returning ? "이어서 학습하기" : "학습 시작하기";
   if (!opts.hasStartLevel) return opts.returning ? { to: "/gojuon", label } : null;
 
   const first = opts.actions?.[0];
-  if (opts.lesson && first?.id !== "review-weak") {
-    return { to: opts.lesson.to, label, hint: opts.lesson.title };
+  if (first?.id === "review-weak") return { to: first.to, label: "오늘의 복습", hint: first.title };
+  if (opts.lesson) {
+    if (opts.lesson.startsWithKana) return { to: opts.lesson.to, label: "히라가나부터 시작", hint: "오십음도" };
+    return {
+      to: opts.lesson.to,
+      label: opts.returning ? "오늘의 수업 이어가기" : "오늘의 수업 시작",
+      hint: opts.lesson.unitLabel,
+    };
   }
   if (!first) return { to: "/curriculum", label };
   return { to: first.to, label, hint: first.title, teacherQuestion: first.teacherQuestion };

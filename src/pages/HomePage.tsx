@@ -6,8 +6,10 @@ import AssetLoadingBar from "../components/AssetLoadingBar";
 import GemmaModelCard from "../components/GemmaModelCard";
 import TodayPlanCard from "../components/TodayPlanCard";
 import { useAssetPreload } from "../hooks/useAssetPreload";
+import { useAiCapability } from "../hooks/useAiCapability";
 import { useLessonEntry, useTodayActions } from "../hooks/useCurriculumPlan";
-import { planHomeStart } from "../lib/dailyPlan";
+import { useGemmaModel } from "../hooks/useGemmaModel";
+import { homeStage, planHomeStart } from "../lib/dailyPlan";
 import { useCurriculumStore } from "../stores/curriculumStore";
 import { useGamificationStore } from "../stores/gamificationStore";
 import { useTeacherChatStore } from "../stores/teacherChatStore";
@@ -88,12 +90,38 @@ const POINTS = [
   },
 ] as const;
 
+/**
+ * 이 브라우저에서 AI 기능이 왜 안 되는지 시작 영역 근처에서 한 줄로 알린다. 모델 받기 카드는 기능 소개 아래로 내려갔으니,
+ * 이 줄이 없으면 AI를 못 쓰는 사람은 회화에 들어가 봐야 안다. 확정 전(null)에는 아무것도 단정하지 않는다.
+ */
+function HomeAiNotice() {
+  const capability = useAiCapability();
+  const { status } = useGemmaModel();
+  if (!capability || capability.path === "builtin-ready" || status === "installed") return null;
+  return (
+    <p className="rounded-2xl bg-white/70 px-4 py-2.5 text-center text-sm text-gray-500">
+      💡 {capability.path === "gemma-required" ? "회화·작문·선생님 설명은 AI 모델을 받으면 쓸 수 있어요." : "이 브라우저에서는 회화·작문·선생님 설명을 쓸 수 없어요."}{" "}
+      나머지는 바로 쓸 수 있어요.{" "}
+      <a href="#ai-model" className="whitespace-nowrap text-info underline underline-offset-2">
+        자세히 ↓
+      </a>
+    </p>
+  );
+}
+
+/**
+ * 대문. **누가 왔느냐에 따라 먼저 보여 주는 것이 다르다**(`homeStage`).
+ * - 처음 옴: 그림·소개 → 단계 고르기(버튼이 없다 — 고르는 것이 시작이다).
+ * - 단계만 고름: 오늘의 수업 버튼과 단원 목표.
+ * - 공부한 적 있음: 작은 그림·연속 기록 → 오늘의 수업 버튼 → 오늘의 학습. 소개는 뺀다.
+ */
 function HomePage() {
   const preload = useAssetPreload();
   const streak = useGamificationStore((s) => s.streak);
   const xp = useGamificationStore((s) => s.xp);
   const returning = xp > 0;
   const hasStartLevel = useCurriculumStore((s) => s.startLevel) !== null;
+  const stage = homeStage({ returning, hasStartLevel });
   const actions = useTodayActions();
   const lesson = useLessonEntry();
   const requestQuestion = useTeacherChatStore((s) => s.requestQuestion);
@@ -110,7 +138,8 @@ function HomePage() {
         alt="김계승 일본어 — 마네키네코와 후지산, 히라가나 말풍선이 그려진 대문 그림"
         width={1536}
         height={1024}
-        className="mx-auto block w-full max-w-3xl"
+        // 다시 온 사람은 이미 아는 그림이다 — 375px에서 첫 화면의 약 30%를 차지해 할 일을 밀어냈다.
+        className={`mx-auto block w-full ${stage === "returning" ? "max-w-56" : "max-w-3xl"}`}
         initial={{ opacity: 0, y: -8, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
@@ -118,22 +147,24 @@ function HomePage() {
 
       <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 pb-6 sm:px-6 sm:pb-10">
         <section className="text-center">
-          <h1 className="text-3xl text-primary sm:text-4xl">혼자서, 매일 조금씩 일본어</h1>
-          <p className="mt-2 text-gray-600">
-            오십음도부터 한자 획순, 회화·작문 첨삭과 선생님에게 질문까지.
-            <br className="hidden sm:inline" /> 설치도 로그인도 없이 브라우저 하나로 하는 일본어
-            학습.
-          </p>
-          {returning && (
-            <p className="mt-3 inline-block rounded-full bg-white px-4 py-1.5 text-sm text-gray-500">
+          {stage === "returning" ? (
+            <p className="inline-block rounded-full bg-white px-4 py-1.5 text-sm text-gray-500">
               🔥 {streak}일 연속 · ⭐ {xp} XP — 다시 오셨네요!
             </p>
+          ) : (
+            <>
+              <h1 className="text-3xl text-primary sm:text-4xl">혼자서, 매일 조금씩 일본어</h1>
+              {stage === "new" && (
+                <p className="mt-2 text-gray-600">
+                  오십음도부터 한자 획순, 회화·작문 첨삭과 선생님에게 질문까지.
+                  <br className="hidden sm:inline" /> 설치도 로그인도 없이 브라우저 하나로 하는 일본어 학습.
+                </p>
+              )}
+            </>
           )}
         </section>
 
-        <section className="flex flex-col gap-3">
-          <AssetLoadingBar {...preload} />
-
+        <section className="flex flex-col gap-3 empty:hidden">
           {/* 로딩이 끝나지 않아도 넘어갈 수 있게 둔다 — 못 받은 데이터는 그 페이지에서 다시 받는다.
               시작 단계를 고르기 전의 처음 온 사람에게는 버튼이 없다 — 바로 아래 단계 고르기가 시작이다(planHomeStart). */}
           {start && (
@@ -142,22 +173,29 @@ function HomePage() {
               onClick={() => {
                 if (start.teacherQuestion) requestQuestion(start.teacherQuestion);
               }}
-              className={`btn-press flex flex-col items-center justify-center rounded-2xl px-6 py-4 text-xl text-white ${
-                preload.finished ? "animate-pop bg-primary" : "bg-primary/60"
-              }`}
+              className="btn-press animate-pop flex flex-col items-center justify-center rounded-2xl bg-primary px-6 py-4 text-xl text-white"
               style={{ ["--btn-shadow" as string]: "rgb(0 0 0 / 0.25)" }}
             >
-              <span>{preload.finished ? start.label : "먼저 시작하기 (계속 받는 중)"}</span>
+              <span>▶ {start.label}</span>
               {start.hint && <span className="mt-0.5 font-mixed text-sm">{start.hint}</span>}
             </Link>
           )}
+          {stage === "chosen" && lesson?.goal && (
+            <p className="text-center font-mixed text-sm text-gray-600">이번 단원 목표: {lesson.goal}</p>
+          )}
+          {stage === "chosen" && (
+            <Link to="/curriculum" className="text-center text-xs text-info hover:underline">
+              전체 로드맵 · 단계 바꾸기
+            </Link>
+          )}
+          <HomeAiNotice />
         </section>
 
-        {/* 다시 온 사람에게는 "오늘 뭘 할지"가 가장 먼저 보여야 한다. 처음 온 사람에게는
-            아래 소개를 먼저 읽히고, 시작 단계를 고르는 카드가 이 자리에 뜬다. */}
-        <TodayPlanCard />
+        {/* 처음 온 사람은 여기서 단계를 고른다. 다시 온 사람은 오늘 할 일을 본다. 단계만 고른 사람은 위 버튼 하나면 된다 —
+            같은 단원 이야기를 카드로 또 하면 할 일이 흐려진다. */}
+        {stage !== "chosen" && <TodayPlanCard />}
 
-        <GemmaModelCard />
+        <AssetLoadingBar ratio={preload.ratio} finished={preload.finished} hasError={preload.hasError} />
 
         <section>
           <h2 className="text-lg text-gray-700">무엇을 할 수 있나요</h2>
@@ -208,20 +246,28 @@ function HomePage() {
           </ul>
         </section>
 
-        <section>
-          <h2 className="text-lg text-gray-700">이런 점이 다릅니다</h2>
-          <ul className="mt-3 flex flex-col gap-3">
-            {POINTS.map((p) => (
-              <li key={p.title} className="flex gap-3 rounded-2xl bg-white/70 p-4">
-                <span className="text-2xl leading-none">{p.icon}</span>
-                <div>
-                  <p className="text-gray-800">{p.title}</p>
-                  <p className="mt-0.5 text-sm text-gray-500">{p.desc}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {/* 큰 다운로드 권유는 할 일 뒤에 둔다. AI를 못 쓰는 사람은 위의 한 줄(HomeAiNotice)이 여기로 데려온다. */}
+        <div id="ai-model" className="scroll-mt-4">
+          <GemmaModelCard />
+        </div>
+
+        {/* 소개는 처음 보는 사람 몫이다. */}
+        {stage !== "returning" && (
+          <section>
+            <h2 className="text-lg text-gray-700">이런 점이 다릅니다</h2>
+            <ul className="mt-3 flex flex-col gap-3">
+              {POINTS.map((p) => (
+                <li key={p.title} className="flex gap-3 rounded-2xl bg-white/70 p-4">
+                  <span className="text-2xl leading-none">{p.icon}</span>
+                  <div>
+                    <p className="text-gray-800">{p.title}</p>
+                    <p className="mt-0.5 text-sm text-gray-500">{p.desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* 광고는 소개를 다 읽은 뒤, 푸터 바로 위에만 둔다 — CTA·오늘의 학습 근처에 두면
             "시작하기"를 누르려던 손이 광고를 누른다. */}

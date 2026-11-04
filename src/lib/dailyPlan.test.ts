@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WEAK_REVIEW_PATH, buildDailyPlan, buildTeacherGreeting, planHomeStart } from "./dailyPlan";
+import { WEAK_REVIEW_PATH, buildDailyPlan, buildTeacherGreeting, homeStage, planHomeStart } from "./dailyPlan";
 import { EMPTY_PROFILE, type LearnerProfile } from "./learnerProfile";
 import type { UnitProgress } from "./curriculumProgress";
 import type { CurriculumUnit } from "../types/curriculum";
@@ -137,6 +137,18 @@ describe("buildDailyPlan", () => {
   });
 });
 
+describe("homeStage", () => {
+  it("공부한 적이 있으면 단계를 안 골랐어도 다시 온 사람이다", () => {
+    expect(homeStage({ returning: true, hasStartLevel: false })).toBe("returning");
+    expect(homeStage({ returning: true, hasStartLevel: true })).toBe("returning");
+  });
+
+  it("단계만 골랐으면 수업을 권하고, 아무것도 없으면 처음 온 사람이다", () => {
+    expect(homeStage({ returning: false, hasStartLevel: true })).toBe("chosen");
+    expect(homeStage({ returning: false, hasStartLevel: false })).toBe("new");
+  });
+});
+
 describe("planHomeStart", () => {
   const kanjiAction = { id: "kanji", emoji: "漢", title: "한자 4자 익히기", detail: "", to: "/kanji?k=%E5%91%BD" };
 
@@ -164,16 +176,36 @@ describe("planHomeStart", () => {
     );
   });
 
-  it("수업이 있으면 수업의 다음 단계로 간다 — 로드맵·진단 결과와 같은 곳이다", () => {
-    const lesson = { to: "/teacher", title: "〜は〜です 배우기" };
+  const lesson = { to: "/teacher", unitLabel: "N5 · 1단원 인사와 자기소개", startsWithKana: false };
+
+  it("수업이 있으면 버튼에 단계가 아니라 단원을 적는다", () => {
+    // 「〜は〜です 배우기」는 처음 온 사람이 못 읽고, AI를 못 쓰면 눌러 보니 한자를 권해 말이 어긋났다.
     const start = planHomeStart({ hasStartLevel: true, returning: false, actions: [kanjiAction], lesson });
-    expect(start).toMatchObject({ to: "/teacher", hint: "〜は〜です 배우기" });
+    expect(start).toMatchObject({ to: "/teacher", label: "오늘의 수업 시작", hint: "N5 · 1단원 인사와 자기소개" });
+  });
+
+  it("다시 온 사람에게는 이어간다고 말한다", () => {
+    expect(planHomeStart({ hasStartLevel: true, returning: true, actions: [kanjiAction], lesson })?.label).toBe(
+      "오늘의 수업 이어가기"
+    );
+  });
+
+  it("문자부터 배우는 사람에게는 목적지를 그대로 말한다", () => {
+    const kana = { to: "/gojuon", unitLabel: "입문 · 1단원", startsWithKana: true };
+    expect(planHomeStart({ hasStartLevel: true, returning: false, actions: [kanjiAction], lesson: kana })).toMatchObject({
+      to: "/gojuon",
+      label: "히라가나부터 시작",
+      hint: "오십음도",
+    });
   });
 
   it("약한 것이 쌓였으면 수업보다 복습이 먼저다", () => {
     const review = { ...kanjiAction, id: "review-weak", title: "약한 것 3개 모아 풀기", to: WEAK_REVIEW_PATH };
-    const lesson = { to: "/teacher", title: "〜は〜です 배우기" };
-    expect(planHomeStart({ hasStartLevel: true, returning: true, actions: [review], lesson })?.to).toBe(WEAK_REVIEW_PATH);
+    expect(planHomeStart({ hasStartLevel: true, returning: true, actions: [review], lesson })).toMatchObject({
+      to: WEAK_REVIEW_PATH,
+      label: "오늘의 복습",
+      hint: "약한 것 3개 모아 풀기",
+    });
   });
 
   it("커리큘럼을 다 끝내 수업이 없으면 오늘의 첫 할 일로 간다", () => {
