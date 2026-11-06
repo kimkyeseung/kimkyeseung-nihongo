@@ -427,7 +427,8 @@ scripts/data/      src/data/*.json을 만드는 다운로드·가공 스크립�
 - 서버가 없어서 단어장·스트릭(localStorage)과 기록·기억·선생님 대화(IndexedDB)가 **이
   브라우저에만** 있다. 브라우저 데이터를 지우거나 기기를 바꾸면 끝이고, Safari는 한동안 안
   들른 사이트의 저장소를 비운다. 그래서 JSON 파일로 내려받고 되돌리는 카드를 `/about`에 뒀다
-  (출처 목록보다 위). `/memory`의 "전부 지우기" 옆에도 링크가 있다.
+  (출처 목록보다 위). `/memory`의 "전부 지우기" 옆에도 링크가 있다. 공부 기록이 없는 사람에게는 대문에도
+  "백업에서 되돌리기" 링크(`/about#backup`)가 뜬다 — 다른 브라우저에서 옮겨 오는 사람이 찾을 길이 없었다.
 - 파일 모양: `{ format, version, exportedAt, local: {키: persist 원문}, memory: {events, facts,
   messages} | null }`. **`memory: null`은 "백업할 때 못 읽었다"**(사생활 보호 모드 등)라 빈
   배열과 다르다 — 되돌릴 때 지금 기록을 지우지 않는다.

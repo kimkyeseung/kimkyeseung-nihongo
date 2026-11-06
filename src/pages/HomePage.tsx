@@ -195,6 +195,17 @@ function HomePage() {
             같은 단원 이야기를 카드로 또 하면 할 일이 흐려진다. */}
         {stage !== "chosen" && <TodayPlanCard />}
 
+        {/* 다른 브라우저의 백업을 가져오려는 사람은 공부를 시작하기 전에 찾는다. 복원은 /about에만 있어서, 이 줄이
+            없으면 대문에서 찾을 길이 없다(실제로 보고받았다). 공부 기록이 생기면 뺀다 — 되돌리면 그 기록이 덮인다. */}
+        {stage !== "returning" && (
+          <p className="text-center text-sm text-gray-500">
+            다른 브라우저에서 쓰던 기록이 있나요?{" "}
+            <Link to="/about#backup" className="whitespace-nowrap py-2 text-info underline underline-offset-2">
+              백업에서 되돌리기 →
+            </Link>
+          </p>
+        )}
+
         <AssetLoadingBar ratio={preload.ratio} finished={preload.finished} hasError={preload.hasError} />
 
         <section>

@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import AdSlot from "../components/AdSlot";
 import { AD_SLOTS } from "../lib/ads";
 import BackupCard from "../components/BackupCard";
@@ -49,6 +50,13 @@ function AboutPage() {
   const theme = useAppearance((s) => s.theme);
   const setTheme = useAppearance((s) => s.setTheme);
   const goToTourStep = useGuidedTour((s) => s.goTo);
+  const { hash } = useLocation();
+
+  // react-router는 #주소로 스크롤해 주지 않는다. 375px에서 백업 카드는 첫 화면 아래에 있다.
+  useEffect(() => {
+    if (hash === "#backup") document.getElementById("backup")?.scrollIntoView({ block: "start" });
+  }, [hash]);
+
   return (
     <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
       <Link to="/gojuon" className="text-info">
@@ -102,7 +110,7 @@ function AboutPage() {
         🧭 페이지별 안내 다시 보기
       </button>
 
-      <h3 id="backup" className="mt-6 text-sm font-bold text-gray-500">내 학습 데이터 백업</h3>
+      <h3 id="backup" className="mt-6 scroll-mt-4 text-sm font-bold text-gray-500">내 학습 데이터 백업</h3>
       <BackupCard />
 
       <h3 className="mt-6 text-sm font-bold text-gray-500">데이터 출처</h3>
