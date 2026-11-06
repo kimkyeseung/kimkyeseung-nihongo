@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   backLabel,
+  dictionaryPath,
   originForPath,
   originFromState,
   planDictionaryTabMemory,
@@ -9,6 +10,18 @@ import {
 
 // 여기서 틀려도 콘솔은 조용하다 — 돌아가기 버튼이 엉뚱한 화면으로 보내거나, 조사가 깨진
 // 문구("한자으로")가 그대로 화면에 나갈 뿐이다. 그래서 고정해둔다.
+
+describe("dictionaryPath", () => {
+  it("검색어를 되읽을 수 있게 적는다 — 기호가 든 검색어가 주소를 깨면 뒤로가기가 엉뚱한 검색을 띄운다", () => {
+    const params = new URL(dictionaryPath("〜は&です?", "123"), "http://x").searchParams;
+    expect(params.get("q")).toBe("〜は&です?");
+    expect(params.get("w")).toBe("123");
+  });
+
+  it("단어를 안 고르면 w가 없다", () => {
+    expect(new URL(dictionaryPath("물"), "http://x").searchParams.has("w")).toBe(false);
+  });
+});
 
 describe("originForPath", () => {
   it("단어를 누른 화면으로 돌아간다", () => {

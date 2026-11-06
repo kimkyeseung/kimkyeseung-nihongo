@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useNavigationType, useSearchParams } from "react-router-dom";
 import { bind, unbind } from "wanakana";
 import { searchDictionary, displayMeaning, levelLabel, findWordById } from "../lib/dictionary";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -13,6 +13,7 @@ import { kanjiInText } from "../lib/kanji";
 import AdSlot from "../components/AdSlot";
 import { AD_SLOTS } from "../lib/ads";
 import { useMediaQuery, WIDE_SCREEN_QUERY } from "../hooks/useMediaQuery";
+import { dictionaryPath } from "../lib/wordLink";
 import { WordDetail } from "./WordDetailPage";
 import type { WordEntry } from "../types/dictionary";
 
@@ -137,6 +138,37 @@ function DictionaryPage() {
   const panelWordId = useDictionaryView((s) => s.panelWordId);
   const setPanelWordId = useDictionaryView((s) => s.setPanelWordId);
 
+  // 검색을 주소와 맞춘다 — 예전엔 검색이 방문 기록에 안 남아서, 최근 검색을 누른 뒤 뒤로가기를 하면
+  // 사전을 벗어나 그 전 페이지로 갔다(실제로 보고받았다). `q`가 있으면 그 검색을 띄우고, 뒤로가기로 `q`가
+  // 사라지면 빈 사전으로 돌아간다. 탭 이동·단어 상세에서 돌아와 `q`가 없으면 남아 있던 검색을 주소에 적는다 —
+  // 그래야 다음 검색에서 뒤로가기로 이 검색에 돌아온다.
+  const [searchParams] = useSearchParams();
+  const urlQuery = searchParams.get("q");
+  const urlWordId = searchParams.get("w");
+  const navigationType = useNavigationType();
+  const { pathname } = useLocation();
+  const previousUrlQuery = useRef<string | null>(null);
+  useEffect(() => {
+    // 전환 애니메이션 동안 나가는 이 화면도 새 주소를 본다. 거르지 않으면 단어 상세로 가는 순간 검색어를
+    // 주소에 적으려고 사전으로 도로 끌고 온다(실제로 그랬다).
+    if (pathname !== "/dictionary") return;
+    const previous = previousUrlQuery.current;
+    previousUrlQuery.current = urlQuery;
+    if (urlQuery) {
+      setCommittedQuery(urlQuery);
+      setPanelWordId(urlWordId);
+      // 앞으로 갈 때는 입력창을 건드리지 않는다 — 학습자가 친 글자를 고른 단어로 바꾸지 않게(goToWord 주석).
+      if (navigationType !== "PUSH") setInputValue(urlQuery);
+    } else if (previous && navigationType === "POP") {
+      setCommittedQuery("");
+      setPanelWordId(null);
+      setInputValue("");
+    } else {
+      const remembered = useDictionaryView.getState().committedQuery;
+      if (remembered) navigate(dictionaryPath(remembered), { replace: true });
+    }
+  }, [pathname, urlQuery, urlWordId, navigationType, navigate, setCommittedQuery, setInputValue, setPanelWordId]);
+
   const goToWord = useCallback(
     (entry: WordEntry) => {
       addRecent(entry.word, entry.id);
@@ -145,9 +177,11 @@ function DictionaryPage() {
       // 돌아왔을 때 「たべ」로 찾던 자리에 「食べる」가 들어 있다(실제로 보고받았다). 목록도 그 검색어로
       // 맞춘다 — 자동완성은 같은 검색어의 앞쪽 결과라 고른 단어가 목록에 들어 있고, 옛 검색어의 목록이
       // 남아 있으면 지금 보는 단어가 목록 어디에도 없다.
-      setCommittedQuery(query.trim() || entry.word);
+      const listQuery = query.trim() || entry.word;
+      setCommittedQuery(listQuery);
       if (isWide) {
         setPanelWordId(entry.id);
+        navigate(dictionaryPath(listQuery, entry.id));
         return;
       }
       const { to, state } = wordLink(entry.id);
@@ -164,8 +198,9 @@ function DictionaryPage() {
       // 새로 검색하면 패널은 새 결과의 첫 단어로 간다(넓은 화면).
       setPanelWordId(null);
       setShowSuggestions(false);
+      navigate(dictionaryPath(term.trim()));
     },
-    [addRecent, setCommittedQuery, setPanelWordId]
+    [addRecent, navigate, setCommittedQuery, setPanelWordId]
   );
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {

@@ -111,6 +111,11 @@ function BottomNav() {
             aria-current={isActive ? "page" : undefined}
             data-tour={item.to}
             onClick={(e) => {
+              // 이미 검색 목록이다. 이동하면 같은 검색이 방문 기록에 한 칸 더 쌓여 뒤로가기가 헛돈다.
+              if (isDictionary && pathname === item.to) {
+                e.preventDefault();
+                return;
+              }
               // 이미 그 자리를 보고 있는데 또 눌렀다 = "목록으로 내려가고 싶다"는 뜻이다.
               if (isDictionary && pathname === to && to !== item.to) {
                 e.preventDefault();

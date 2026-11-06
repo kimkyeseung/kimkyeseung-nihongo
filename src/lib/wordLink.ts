@@ -37,6 +37,16 @@ export function wordPath(id: string): string {
   return `/word/${id}`;
 }
 
+/**
+ * 사전의 검색 상태를 담은 주소. 검색을 방문 기록에 남겨야 뒤로가기가 사전을 벗어나지 않고 앞 검색으로
+ * 돌아온다(실제로 보고받았다). `wordId`는 넓은 화면의 패널에 띄울 단어다.
+ */
+export function dictionaryPath(query: string, wordId?: string | null): string {
+  const params = new URLSearchParams({ q: query });
+  if (wordId) params.set("w", wordId);
+  return `/dictionary?${params}`;
+}
+
 /** 이 경로에서 단어를 눌렀다 — 어디로 돌아가야 하는가. 모르는 경로면 사전으로 보낸다. */
 export function originForPath(pathname: string): WordOrigin {
   const found = ORIGIN_LABELS.find(([prefix]) => pathname.startsWith(prefix));
