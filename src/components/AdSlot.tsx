@@ -14,6 +14,28 @@ const FILL_TIMEOUT_MS = 8000;
 type AdState = "pending" | "filled" | "hidden";
 
 /**
+ * 애드센스 반응형 광고는 바깥 요소를 타고 올라가며 `height: auto !important`를 인라인으로 박는다(광고가
+ * 비어도 그렇다). 앱 뿌리까지 풀리면 하단 네비가 화면 밖으로 밀리고 스크롤도 안 되는데, 뿌리는 페이지를
+ * 옮겨도 남아서 새로고침해야 돌아왔다(실제로 보고받았다). 박히는 대로 되돌린다.
+ */
+function keepAncestorHeights(ins: HTMLElement): () => void {
+  const ancestors: HTMLElement[] = [];
+  for (let el = ins.parentElement; el && el !== document.documentElement; el = el.parentElement) ancestors.push(el);
+
+  const restore = (el: HTMLElement) => {
+    if (el.style.height === "auto") el.style.removeProperty("height");
+  };
+  const observer = new MutationObserver((records) => {
+    for (const record of records) restore(record.target as HTMLElement);
+  });
+  for (const el of ancestors) {
+    restore(el);
+    observer.observe(el, { attributes: true, attributeFilter: ["style"] });
+  }
+  return () => observer.disconnect();
+}
+
+/**
  * 수동 광고 단위 하나. **자동 광고는 쓰지 않는다**(CLAUDE.md "배포" 절) — 넣을 자리를 골라
  * 이 컴포넌트를 둔다. 학습 흐름(대화·퀴즈·게임·시트) 안에는 두지 말 것.
  *
@@ -35,6 +57,9 @@ function AdSlot({ slot, className = "" }: { slot: string; className?: string }) 
   useEffect(() => {
     const ins = insRef.current;
     if (!ins || offline) return;
+
+    // push보다 먼저 지켜봐야 광고가 건드리는 순간을 놓치지 않는다.
+    const releaseHeights = keepAncestorHeights(ins);
 
     if (!pushedRef.current) {
       pushedRef.current = true;
@@ -59,6 +84,7 @@ function AdSlot({ slot, className = "" }: { slot: string; className?: string }) 
     }, FILL_TIMEOUT_MS);
 
     return () => {
+      releaseHeights();
       observer.disconnect();
       window.clearTimeout(timer);
     };

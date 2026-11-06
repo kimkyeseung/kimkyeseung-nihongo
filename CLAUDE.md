@@ -2258,6 +2258,10 @@ index.html의 viewport에 `interactive-widget=resizes-content`도 넣었다(Andr
   `unfilled`·차단(8초 안에 상태가 안 붙음)·오프라인이면 접는다. 개발 서버는 `data-adtest="on"`.
   사전 목록의 광고 `<li>`는 **결과와 같은 층의 형제**로 둬야 key가 유지돼 검색할 때마다 광고를
   다시 요청하지 않는다(사용자 동작 없는 광고 새로고침은 정책 위반이다).
+  **반응형 광고는 바깥 요소마다 인라인 `height: auto !important`를 박는다(실제로 겪은 버그, 광고가 비어도 그렇다).**
+  앱 뿌리(`.app-shell`)까지 풀려 하단 네비가 화면 밖으로 밀리고 스크롤이 멈췄다. 뿌리는 페이지를 옮겨도 남아서
+  광고 있는 페이지에 들른 뒤로 새로고침 전까지 계속됐다. `AdSlot`의 `keepAncestorHeights`가 되돌리고, `.app-shell`의
+  `max-height`가 한 번 더 막는다. CSS의 `height`로는 못 이기니 지우지 말 것.
 - `sw.js`·`workbox-*.js`·`manifest.webmanifest`도 실제 파일이라 rewrite에 안 걸린다. 반대로
   **`sw.js`를 rewrite 대상 경로로 옮기거나 이름을 바꾸면** 서비스워커 요청에 index.html이
   돌아가 등록이 조용히 실패한다(스크립트 MIME 오류). 로컬 미리보기에서는 안 보이는 종류다.
