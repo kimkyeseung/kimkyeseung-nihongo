@@ -33,9 +33,13 @@ function KanjiStrokeOrder({ kanji, size = 160 }: { kanji: string; size?: number 
             <motion.path
               key={i}
               d={d}
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{ delay: i * STROKE_DURATION, duration: STROKE_DURATION, ease: "easeInOut" }}
+              // 길이 0인 대시도 둥근 선 끝 때문에 양 끝에 점으로 그려진다. 차례가 올 때까지 숨겨 둔다.
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{
+                pathLength: { delay: i * STROKE_DURATION, duration: STROKE_DURATION, ease: "easeInOut" },
+                opacity: { delay: i * STROKE_DURATION, duration: 0 },
+              }}
             />
           ))}
         </g>
